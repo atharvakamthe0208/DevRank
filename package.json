@@ -1,0 +1,20 @@
+{
+  "name": "devrank",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered technical candidate evaluation and ranking system",
+  "engines": { "node": ">=20.0.0 <25" },
+  "workspaces": ["apps/web", "apps/api", "packages/contracts"],
+  "scripts": {
+    "dev": "concurrently -k -n web,api -c cyan,green \"npm:dev:web\" \"npm:dev:api\"",
+    "dev:web": "npm run dev --workspace @devrank/web",
+    "dev:api": "npm run dev --workspace @devrank/api",
+    "build": "npm run build --workspace @devrank/contracts && npm run build --workspace @devrank/api && npm run build --workspace @devrank/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run build --workspace @devrank/contracts && npm run typecheck --workspace @devrank/api && npm run typecheck --workspace @devrank/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
