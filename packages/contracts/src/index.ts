@@ -1,6 +1,7 @@
 export * from './ai-analysis.js';
 export * from './api-error.js';
 export * from './candidate.js';
+export * from './candidate-api.js';
 export * from './comparison.js';
 export * from './evaluation.js';
 export * from './platform-data.js';
