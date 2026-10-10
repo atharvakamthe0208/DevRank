@@ -26,6 +26,7 @@ export const roleWeightsSchema = z.record(scoringCategorySchema, z.number().fini
   });
 
 export const roleWeightConfigurationSchema = z.object({ schemaVersion: z.literal(schemaVersion), preliminary: z.literal(true), roles: z.record(roleIdSchema, roleWeightsSchema) });
+export type RoleWeightConfiguration = z.infer<typeof roleWeightConfigurationSchema>;
 export const categoryScoreSchema = z.object({
   categoryId: scoringCategorySchema,
   displayName: z.string().min(1),
