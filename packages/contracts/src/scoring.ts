@@ -1,8 +1,42 @@
 import { z } from 'zod';
 
-export const scoringCategorySchema = z.enum(['problem_solving', 'code_quality', 'consistency', 'project_impact']);
-export const roleWeightsSchema = z.record(scoringCategorySchema, z.number().min(0).max(1));
-export const categoryScoreSchema = z.object({ category: scoringCategorySchema, score: z.number().min(0).max(100), rationale: z.string().optional() });
-export const deterministicScoreSchema = z.object({ score: z.number().min(0).max(100), categories: z.array(categoryScoreSchema) });
+export const schemaVersion = '1.0.0' as const;
+export const scoringCategories = [
+  { id: 'technical_skills', displayName: 'Technical Skills', description: 'Demonstrated proficiency in role-relevant languages, tools, and engineering concepts.' },
+  { id: 'problem_solving_dsa', displayName: 'Problem-Solving and DSA', description: 'Ability to reason through problems, select algorithms, and explain trade-offs.' },
+  { id: 'relevant_project_experience', displayName: 'Relevant Project Experience', description: 'Depth, relevance, and verifiable impact of work on related projects.' },
+  { id: 'practical_assessment_performance', displayName: 'Practical Assessment Performance', description: 'Performance on a completed, role-relevant practical assessment.' },
+  { id: 'communication_skills', displayName: 'Communication Skills', description: 'Clarity and structure when explaining technical work and collaborating.' },
+  { id: 'learning_adaptability', displayName: 'Learning Ability and Adaptability', description: 'Evidence of learning new tools or concepts and adapting to changing constraints.' },
+] as const;
+
+export const scoringCategorySchema = z.enum(scoringCategories.map(({ id }) => id) as [string, ...string[]]);
+export type ScoringCategory = z.infer<typeof scoringCategorySchema>;
+export const scoreSchema = z.number().finite().min(0).max(100);
+export const confidenceSchema = z.number().finite().min(0).max(1);
+export const roleIds = ['software_developer', 'ai_ml_engineer', 'data_analyst'] as const;
+export const roleIdSchema = z.enum(roleIds);
+
+export const roleWeightsSchema = z.record(scoringCategorySchema, z.number().finite().min(0).max(100))
+  .superRefine((weights, context) => {
+    const keys = Object.keys(weights);
+    if (keys.length !== scoringCategories.length) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Every role must define exactly six category weights.' });
+    const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
+    if (Math.abs(total - 100) > 1e-8) context.addIssue({ code: z.ZodIssueCode.custom, message: `Role weights must total 100; received ${total}.` });
+  });
+
+export const roleWeightConfigurationSchema = z.object({ schemaVersion: z.literal(schemaVersion), preliminary: z.literal(true), roles: z.record(roleIdSchema, roleWeightsSchema) });
+export const categoryScoreSchema = z.object({
+  categoryId: scoringCategorySchema,
+  displayName: z.string().min(1),
+  score: scoreSchema.optional(),
+  confidence: confidenceSchema.optional(),
+  status: z.enum(['scored', 'insufficient_evidence']),
+  evidenceRefs: z.array(z.string().min(1)),
+  explanation: z.string().min(1),
+}).superRefine((value, context) => {
+  if (value.status === 'scored' && value.score === undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['score'], message: 'A scored category requires a score.' });
+  if (value.status === 'insufficient_evidence' && value.score !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['score'], message: 'Do not assign a score when evidence is insufficient.' });
+});
 export type RoleWeights = z.infer<typeof roleWeightsSchema>;
-export type DeterministicScore = z.infer<typeof deterministicScoreSchema>;
+export type CategoryScore = z.infer<typeof categoryScoreSchema>;
