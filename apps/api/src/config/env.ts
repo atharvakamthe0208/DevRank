@@ -1,13 +1,34 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+const optionalUrl = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().url().optional(),
+);
+const optionalSecret = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().min(1).optional(),
+);
+
 const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(3000),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
-  SUPABASE_URL: z.string().url().optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
-  GITHUB_TOKEN: z.string().optional(),
-  GROQ_API_KEY: z.string().optional(),
+  SUPABASE_URL: optionalUrl,
+  SUPABASE_ANON_KEY: optionalSecret,
 });
 
-export const env = envSchema.parse(process.env);
+export type ApiEnvironment = z.infer<typeof envSchema>;
+
+export function parseEnv(source: NodeJS.ProcessEnv | Record<string, string | undefined>): ApiEnvironment {
+  const result = envSchema.safeParse(source);
+  if (!result.success) {
+    const problems = result.error.issues
+      .map((issue) => `${issue.path.join('.') || 'environment'}: ${issue.message}`)
+      .join('; ');
+    throw new Error(`Invalid API environment configuration (${problems})`);
+  }
+  return result.data;
+}
+
+export const env = parseEnv(process.env);
