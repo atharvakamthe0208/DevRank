@@ -10,6 +10,8 @@ export function AppShell() {
   const location = useLocation();
   const pageTitle = location.pathname.startsWith('/candidates/')
     ? 'Candidate profile'
+    : location.pathname.endsWith('/candidates/new')
+      ? 'Add candidate'
     : location.pathname.includes('candidates')
       ? 'Candidates'
       : location.pathname.includes('reports')

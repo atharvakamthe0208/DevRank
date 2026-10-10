@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { CandidateDetailsPage } from '../features/candidates/CandidateDetailsPage';
+import { AddCandidatePage } from '../features/candidates/AddCandidatePage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { LoginPage } from '../features/auth/LoginPage';
 
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
   { path: '/', element: <AppShell />, children: [
     { index: true, element: <Navigate to="/dashboard" replace /> },
     { path: 'dashboard', element: <DashboardPage /> },
+    { path: 'dashboard/candidates/new', element: <AddCandidatePage /> },
     { path: 'dashboard/candidates', element: <SimplePage title="All candidates" /> },
     { path: 'dashboard/reports', element: <SimplePage title="Reports" /> },
     { path: 'candidates/:id', element: <CandidateDetailsPage /> },
