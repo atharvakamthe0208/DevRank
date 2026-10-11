@@ -1,5 +1,6 @@
 import {
   candidateIdParamsSchema,
+  githubSyncRequestSchema,
   type CandidatePlatformSubmission,
 } from '@devrank/contracts';
 import type { Request } from 'express';
@@ -18,6 +19,11 @@ export function createCandidatePlatformController(repository: CandidatePlatformR
       const { id } = candidateIdParamsSchema.parse(request.params);
       const input = request.body as CandidatePlatformSubmission;
       response.status(201).json(await repository.submit(authContext(request), id, input));
+    }),
+    syncGitHub: asyncHandler(async (request, response) => {
+      const { id } = candidateIdParamsSchema.parse(request.params);
+      const { profile } = githubSyncRequestSchema.parse(request.body);
+      response.status(201).json(await repository.syncGitHub(authContext(request), id, profile));
     }),
   };
 }

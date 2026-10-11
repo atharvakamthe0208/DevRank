@@ -2,7 +2,7 @@ import { once } from 'node:events';
 import type { Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { CandidatePlatformResponse } from '@devrank/contracts';
+import type { CandidatePlatformResponse, GitHubSyncResponse } from '@devrank/contracts';
 import { createCandidatePlatformController } from '../src/controllers/candidate-platform-controller.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
 import { HttpError } from '../src/middleware/http-error.js';
@@ -47,6 +47,18 @@ function createRepository(): CandidatePlatformRepository {
       };
       return response;
     }),
+    syncGitHub: vi.fn(async (auth, id, profile): Promise<GitHubSyncResponse> => {
+      if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+      if (profile === 'missing-profile') throw new HttpError(404, 'GITHUB_USER_NOT_FOUND', 'GitHub user was not found');
+      return {
+        id: 'ea574cd8-8d21-4586-a887-dc2a6fc7ba08', candidateId: id, source: 'github',
+        availability: 'available', provenance: 'github_api', syncedAt: '2026-10-11T12:00:00.000Z',
+        profile: {
+          username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 8,
+          followers: 10, following: 5, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+        },
+      };
+    }),
   };
 }
 
@@ -87,6 +99,38 @@ describe('candidate platform data API', () => {
       body: JSON.stringify(body),
     });
   }
+
+  async function syncGitHub(body: unknown, token?: string) {
+    return fetch(`${origin}/api/candidates/${candidateId}/platform-data/github-sync`, {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('syncs GitHub profile data for an approved recruiter and reports source failures', async () => {
+    const success = await syncGitHub({ profile: 'octocat' }, 'owner-token');
+    expect(success.status).toBe(201);
+    expect(await success.json()).toMatchObject({
+      candidateId, source: 'github', availability: 'available', provenance: 'github_api',
+      profile: { username: 'octocat', publicRepositoryCount: 8 },
+    });
+    expect(repository.syncGitHub).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: ownerId, accessToken: 'owner-token' }), candidateId, 'octocat',
+    );
+
+    const missing = await syncGitHub({ profile: 'missing-profile' }, 'owner-token');
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: 'GITHUB_USER_NOT_FOUND' } });
+  });
+
+  it('requires approval and rejects malformed GitHub sync requests', async () => {
+    expect((await syncGitHub({ profile: 'octocat' })).status).toBe(401);
+    expect((await syncGitHub({ profile: 'octocat' }, 'other-owner-token')).status).toBe(404);
+    const invalid = await syncGitHub({ profile: '' }, 'owner-token');
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+  });
 
   it('accepts candidate-provided LeetCode data and preserves an actual zero', async () => {
     const response = await submit({

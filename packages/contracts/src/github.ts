@@ -39,3 +39,20 @@ export const githubProfileResponseSchema = z.object({
 }).strict();
 
 export type GitHubProfileResponse = z.infer<typeof githubProfileResponseSchema>;
+
+export const githubSyncRequestSchema = z.object({
+  profile: z.string().trim().min(1).max(255),
+}).strict();
+
+export const githubSyncResponseSchema = z.object({
+  id: z.string().uuid(),
+  candidateId: z.string().uuid(),
+  source: z.literal('github'),
+  availability: z.literal('available'),
+  provenance: z.literal('github_api'),
+  syncedAt: z.string().datetime(),
+  profile: githubProfileResponseSchema,
+}).strict();
+
+export type GitHubSyncRequest = z.infer<typeof githubSyncRequestSchema>;
+export type GitHubSyncResponse = z.infer<typeof githubSyncResponseSchema>;
