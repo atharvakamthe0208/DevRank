@@ -167,6 +167,7 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     for (const expectedResult of expected) {
       const input = candidates.find(({ candidateId }) => candidateId === expectedResult.candidateId)!;
       const result = processCandidateEvidence(input);
+      expect(result.evaluation.scoringVersion).toBe(expectedResult.scoringVersion);
       expect(result.evaluation.evaluationStatus).toBe(expectedResult.evaluationStatus);
       expect(result.evaluation.overallScore).toBe(expectedResult.overallScore);
       expect(result.evaluation.missingEvidence).toEqual(expectedResult.missingEvidence ?? []);

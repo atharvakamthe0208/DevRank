@@ -85,7 +85,7 @@ With an explicitly supplied test rule for a five-point rubric, the processed Day
 }
 ```
 
-This transformation is a test example, not an approved project normalization rule. With no supplied rule, the same raw value is preserved without `normalizedValue`, and no category score is fabricated. On the complete synthetic example using explicit test-only rules, the Day 2 scorer returns category scores `80, 75, 78, 82, 80, 72` and overall score `78.1` for Software Developer. Partial inputs preserve available category scores and omit the overall score.
+This transformation is a test example, not an approved project normalization rule. With no supplied rule, the same raw value is preserved without `normalizedValue`, and no category score is fabricated. On the complete synthetic example using explicit test-only rules, the Day 2 scorer returns scoring version `1.0.0`, category scores `80, 75, 78, 82, 80, 72`, and overall score `78.1` for Software Developer. Partial inputs preserve available category scores and omit the overall score.
 
 ## Files created or changed
 

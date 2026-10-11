@@ -6,7 +6,7 @@ The API currently exposes only `GET /health` and a JSON 404 response. There is n
 
 ## Shared source of truth
 
-Use the Zod schemas and inferred TypeScript types exported by `@devrank/contracts`: `candidateInputSchema`, `evidenceSchema`, `roleWeightConfigurationSchema`, and `evaluationResponseSchema`. Version is `1.0.0`. Candidate IDs are opaque strings. Role IDs and scoring category IDs are fixed enums. Evidence and AI explanations are separate fields; AI text never supplies or changes a numeric score. The contract intentionally carries no candidate name, email, demographic data, or other personal attributes.
+Use the Zod schemas and inferred TypeScript types exported by `@devrank/contracts`: `candidateInputSchema`, `evidenceSchema`, `roleWeightConfigurationSchema`, and `evaluationResponseSchema`. Contract `schemaVersion` is `1.0.0`; the deterministic scoring configuration and outputs identify `scoringVersion: "1.0.0"`. The response schema accepts this field optionally for compatibility, while new scorer output always includes it. Candidate IDs are opaque strings. Role IDs and scoring category IDs are fixed enums. Evidence and AI explanations are separate fields; AI text never supplies or changes a numeric score. The contract intentionally carries no candidate name, email, demographic data, or other personal attributes.
 
 ## Proposed request
 
@@ -46,6 +46,7 @@ The example is illustrative and intentionally incomplete across six categories, 
 ```json
 {
   "schemaVersion": "1.0.0",
+  "scoringVersion": "1.0.0",
   "candidateId": "synthetic-candidate-001",
   "targetRole": "software_developer",
   "categoryScores": [

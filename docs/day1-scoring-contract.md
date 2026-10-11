@@ -49,6 +49,7 @@ This valid JSON illustrates insufficient evidence: there is one score, one missi
 ```json
 {
   "schemaVersion": "1.0.0",
+  "scoringVersion": "1.0.0",
   "candidateId": "synthetic-candidate-demo",
   "targetRole": "software_developer",
   "categoryScores": [
