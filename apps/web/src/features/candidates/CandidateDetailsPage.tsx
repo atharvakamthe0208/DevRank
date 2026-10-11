@@ -1,18 +1,64 @@
-import { Link, useParams } from 'react-router-dom';
-import { candidates } from './mockCandidates';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import type { Candidate } from '@devrank/contracts';
+import { useAuth } from '../auth/AuthProvider';
+import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { supabase } from '../../lib/supabase/client';
+import { parseCandidateApiResponse } from './candidate-response-validation';
+
+type LoadState = { loading: true } | { loading: false; candidate: Candidate } | { loading: false; error: string; missing?: boolean };
 
 export function CandidateDetailsPage() {
-  const { id } = useParams();
-  const candidate = candidates.find((person) => person.id === id);
-  if (!candidate) return <div className="not-found-card"><span className="not-found-mark">?</span><h1>Candidate not found</h1><p>This demo candidate may have moved or doesn’t exist.</p><Link className="primary-button link-button" to="/dashboard">Back to overview</Link></div>;
+  const { id = '' } = useParams();
+  const location = useLocation();
+  const { session } = useAuth();
+  const [state, setState] = useState<LoadState>({ loading: true });
 
-  return <div className="detail-page">
-    <Link className="back-link" to="/dashboard">← <span>Back to overview</span></Link>
-    <div className="detail-profile-card"><div className={`avatar avatar-xl avatar-${candidate.color}`}>{candidate.initials}</div><div className="profile-main"><div className="profile-title-row"><div><h1>{candidate.name}</h1><p>{candidate.role} <span>·</span> {candidate.location}</p></div><button className="secondary-button" type="button">··· <span className="sr-only">More actions</span></button></div><div className="profile-meta"><span>▧ {candidate.experience} experience</span><span>✉ {candidate.email}</span><span className="candidate-status"><i/> Active candidate</span></div><div className="skill-list">{candidate.skills.map((skill) => <span key={skill}>{skill}</span>)}</div></div><div className="overall-score"><span>OVERALL SCORE</span><strong>{candidate.score}<small>/100</small></strong><em>↗ {candidate.trend}</em></div></div>
+  useEffect(() => {
+    const controller = new AbortController();
+    async function load() {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+        setState({ loading: false, error: 'This candidate address is invalid.', missing: true });
+        return;
+      }
+      if (!session?.access_token) { setState({ loading: false, error: 'Your secure session is unavailable. Sign in again to view this candidate.' }); return; }
+      setState({ loading: true });
+      try {
+        const response = await apiRequest<unknown>(`/candidates/${id}`, { signal: controller.signal }, session.access_token);
+        if (controller.signal.aborted) return;
+        const parsed = parseCandidateApiResponse(response);
+        if (!parsed) throw new Error('Candidate details returned by the server were incomplete or invalid.');
+        setState({ loading: false, candidate: parsed });
+      } catch (cause) {
+        if (controller.signal.aborted) return;
+        if (cause instanceof ApiRequestError && cause.status === 401) {
+          setState({ loading: false, error: 'Your session expired. Sign in again to continue.' });
+          await supabase?.auth.signOut({ scope: 'local' });
+        } else if (cause instanceof ApiRequestError && cause.status === 403) setState({ loading: false, error: 'Recruiter access is not approved for this workspace.' });
+        else if (cause instanceof ApiRequestError && cause.status === 404) setState({ loading: false, error: 'This candidate does not exist or is not available in your workspace.', missing: true });
+        else setState({ loading: false, error: cause instanceof Error ? cause.message : 'Could not load candidate details. Check your connection and try again.' });
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [id, session?.access_token]);
 
-    <section className="detail-section"><div className="section-heading"><div><h2>Score breakdown</h2><p>Performance across six evaluation dimensions</p></div><span className="mock-pill">✦ Sample scores</span></div><div className="score-grid">{candidate.scores.map((item, index) => <article className="dimension-card" key={item.label}><div className="dimension-top"><span className={`dimension-icon dim-${index}`}>{['⌘', '⌁', '◷', '⑂', '♟', '✳'][index]}</span><span className="dimension-index">0{index + 1}</span></div><div className="dimension-score">{item.value}<small>/100</small></div><strong className="dimension-label">{item.label}</strong><div className="score-track"><span style={{ width: `${item.value}%` }} /></div><div className="dimension-foot"><span>Sample score</span><span>{item.value >= 90 ? 'Excellent' : item.value >= 80 ? 'Strong' : 'Good'}</span></div></article>)}</div></section>
+  if (state.loading) return <div className="candidate-detail-state" role="status">Loading candidate…</div>;
+  if (!('candidate' in state)) return <div className="not-found-card"><span className="not-found-mark">{state.missing ? '?' : '!'}</span><h1>{state.missing ? 'Candidate not found' : 'Could not load candidate'}</h1><p>{state.error}</p><Link className="primary-button link-button" to="/dashboard/candidates">Back to candidates</Link></div>;
 
-    <section className="detail-section profile-links-section"><div className="section-heading"><div><h2>Developer profiles</h2><p>Public profile links provided as demo examples</p></div></div><div className="profile-links">{[{ name: 'GitHub', handle: candidate.github, url: `https://github.com/${candidate.github}`, mark: 'GH', className: 'github-mark' }, { name: 'LeetCode', handle: candidate.leetcode, url: `https://leetcode.com/u/${candidate.leetcode}`, mark: 'LC', className: 'leetcode-mark' }, { name: 'HackerRank', handle: candidate.hackerrank, url: `https://www.hackerrank.com/profile/${candidate.hackerrank}`, mark: 'HR', className: 'hackerrank-mark' }].map((profile) => <a className="profile-link-card" href={profile.url} key={profile.name} target="_blank" rel="noreferrer"><span className={`platform-mark ${profile.className}`}>{profile.mark}</span><span><strong>{profile.name}</strong><small>@{profile.handle}</small></span><span className="external-arrow">↗</span></a>)}</div></section>
-    <p className="mock-note"><span>ⓘ</span> Scores and candidate information on this page are illustrative demo content, not an evaluation or hiring recommendation.</p>
+  const candidate = state.candidate;
+  const notice = (location.state as { notice?: unknown } | null)?.notice;
+  const profiles = [
+    { name: 'GitHub', handle: candidate.githubUsername, url: candidate.githubUsername ? `https://github.com/${encodeURIComponent(candidate.githubUsername)}` : '', mark: 'GH', className: 'github-mark' },
+    { name: 'LeetCode', handle: candidate.leetcodeUsername, url: candidate.leetcodeUsername ? `https://leetcode.com/u/${encodeURIComponent(candidate.leetcodeUsername)}/` : '', mark: 'LC', className: 'leetcode-mark' },
+    { name: 'HackerRank', handle: candidate.hackerrankUsername, url: candidate.hackerrankUsername ? `https://www.hackerrank.com/profile/${encodeURIComponent(candidate.hackerrankUsername)}` : '', mark: 'HR', className: 'hackerrank-mark' },
+  ];
+  const availableProfiles = profiles.filter((profile) => profile.handle && profile.url);
+  return <div className="detail-page candidate-api-detail">
+    <Link className="back-link" to="/dashboard/candidates">← <span>Back to candidates</span></Link>
+    {typeof notice === 'string' && <p className="form-feedback candidate-success-message" role="status">{notice}</p>}
+    <section className="detail-profile-card"><div className="avatar avatar-xl avatar-user">{candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</div><div className="profile-main"><div className="profile-title-row"><div><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE PROFILE</span><h1>{candidate.name}</h1></div></div><div className="profile-meta"><span>Added <time dateTime={candidate.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(candidate.createdAt))}</time></span>{candidate.email && <a href={`mailto:${candidate.email}`}>✉ {candidate.email}</a>}</div></div></section>
+    <section className="detail-section profile-links-section"><div className="section-heading"><div><h2>Developer profiles</h2><p>Profiles associated with this candidate record</p></div></div><div className="profile-links">{availableProfiles.length ? availableProfiles.map((profile) => <a className="profile-link-card" href={profile.url} key={profile.name} target="_blank" rel="noreferrer"><span className={`platform-mark ${profile.className}`}>{profile.mark}</span><span><strong>{profile.name}</strong><small>@{profile.handle}</small></span><span className="external-arrow">↗</span></a>) : <p className="candidate-detail-empty">No developer profile usernames have been added.</p>}</div></section>
+    <p className="candidate-management-note"><span aria-hidden="true">ⓘ</span> Evaluation scores and role assignments are not part of the current candidate data model.</p>
   </div>;
 }

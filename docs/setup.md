@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Use Node.js 20 or newer (under 25) and npm. From the repository root run `npm install`, then copy `.env.example` to root `.env` for the API and `apps/web/.env.example` to `apps/web/.env` for browser-safe Vite settings. The root example includes both `VITE_*` browser settings and API settings; only Vite-prefixed values are exposed in the browser. Replace placeholders locally and keep `.env` files untracked. The backend also has a focused example at `apps/api/.env.example`.
+Use Node.js 20 or newer (under 25) and npm. From the repository root run `npm install`, then copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env`. The API loads its own `.env` by a path relative to its source/build, independent of the current working directory; Vite loads the web workspace `.env`. The legacy root `.env.example` is not loaded by either server. Replace placeholders locally and keep populated `.env` files untracked.
 
 ## Commands
 
@@ -14,13 +14,13 @@ Use Node.js 20 or newer (under 25) and npm. From the repository root run `npm in
 - `npm test --workspace @devrank/api` runs API auth, candidate, GitHub adapter, platform data, health, validation, and environment tests.
 - `npm run lint` is reserved; no linter is configured yet.
 
-The API exposes `GET /api/health` (and the legacy `GET /health`), authenticated candidate CRUD at `/api/candidates`, GitHub profile lookups at `GET /api/github?profile=...`, and candidate-provided platform submissions at `POST /api/candidates/:id/platform-data`. Supabase Auth and database operations require real `SUPABASE_URL` and `SUPABASE_ANON_KEY` values. Candidate requests must use a Supabase access token; the API verifies it, then forwards that user's token to PostgreSQL so RLS applies. No service-role key is used. Real Supabase authentication and connectivity are unverified until valid project credentials are configured.
+The API exposes `GET /api/health` (and the legacy `GET /health`), recruiter-only candidate CRUD at `/api/candidates`, GitHub profile lookups at `GET /api/github?profile=...`, and candidate-provided platform submissions at `POST /api/candidates/:id/platform-data`. The web app provides recruiter login at `/login`, the candidate list at `/dashboard/candidates`, create form at `/candidates/new`, and details at `/candidates/:id`. The candidate form follows the shared schema: name is required; email and GitHub, LeetCode, and HackerRank usernames are optional. Candidate search, role assignment, and scoring are not implemented because the current API/data model does not define them. Supabase Auth and database operations require real `SUPABASE_URL` and `SUPABASE_ANON_KEY` values. Candidate requests must use a Supabase access token; the API verifies it, then forwards that user's token to PostgreSQL so RLS applies. No service-role key is used. Real Supabase authentication and connectivity are unverified until valid project credentials are configured.
 
 After starting the API, verify health with `curl http://localhost:3000/api/health`; the expected response is `{"status":"ok"}`.
 
 ## Environment variables
 
-- API: `API_PORT`, `NODE_ENV`, `WEB_ORIGIN`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, optional `GITHUB_TOKEN`.
+- API (`apps/api/.env`): `API_PORT`, `NODE_ENV`, `WEB_ORIGIN`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, optional `GITHUB_TOKEN`. `WEB_ORIGIN` is the primary frontend origin. In development and tests the API also permits HTTP loopback origins (`localhost`, `127.0.0.1`, and `::1`) on arbitrary ports to accommodate Vite's automatic port selection. Production permits only the configured `WEB_ORIGIN`.
 - Web: `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 - `GITHUB_TOKEN` is optional and used only server-side to increase the official GitHub REST API rate limit. Keep it out of frontend `VITE_*` settings and committed files. Public GitHub profile lookup works without it.
 - LeetCode and HackerRank values are candidate-provided; no platform integration or independent verification is implemented. Restricted scraping and unofficial endpoints are excluded.

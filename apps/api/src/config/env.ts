@@ -1,5 +1,11 @@
-import 'dotenv/config';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { config as loadDotEnv } from 'dotenv';
 import { z } from 'zod';
+
+// Resolve the API's own env file from this module, not from the caller's CWD.
+// Shell-provided environment values still take precedence over values in .env.
+loadDotEnv({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../.env') });
 
 const optionalUrl = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,

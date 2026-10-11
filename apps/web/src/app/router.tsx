@@ -5,6 +5,8 @@ import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { AccessPendingPage, AuthCallbackPage, ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage } from '../features/auth/AuthPages';
 import { useAuth } from '../features/auth/AuthProvider';
 import { AdminRecruitersPage } from '../features/admin/AdminRecruitersPage';
+import { CandidateListPage } from '../features/candidates/CandidateListPage';
+import { AddCandidatePage } from '../features/candidates/AddCandidatePage';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh } = useAuth();
@@ -47,8 +49,9 @@ export const router = createBrowserRouter([
   { element: <ProtectedRecruiterRoutes />, children: [{ path: '/', element: <AppShell />, children: [
     { index: true, element: <Navigate to="/dashboard" replace /> },
     { path: 'dashboard', element: <DashboardPage /> },
-    { path: 'dashboard/candidates', element: <SimplePage title="All candidates" /> },
+    { path: 'dashboard/candidates', element: <CandidateListPage /> },
     { path: 'dashboard/reports', element: <SimplePage title="Reports" /> },
+    { path: 'candidates/new', element: <AddCandidatePage /> },
     { path: 'candidates/:id', element: <CandidateDetailsPage /> },
   ] }] },
   { path: '*', element: <NotFoundPage /> },

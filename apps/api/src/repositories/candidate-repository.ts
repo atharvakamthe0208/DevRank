@@ -27,7 +27,7 @@ export interface CandidateRepository {
 }
 
 function toCandidate(row: CandidateRow): ReturnType<typeof candidateSchema.parse> {
-  return candidateSchema.parse({
+  const result = candidateSchema.safeParse({
     id: row.id,
     name: row.full_name,
     ...(row.email ? { email: row.email } : {}),
@@ -37,10 +37,99 @@ function toCandidate(row: CandidateRow): ReturnType<typeof candidateSchema.parse
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
+  if (!result.success) {
+    const allowedFields = new Set(['id', 'name', 'email', 'githubUsername', 'leetcodeUsername', 'hackerrankUsername', 'createdAt', 'updatedAt']);
+    console.error('Candidate database row validation failed', {
+      schema: 'candidateSchema',
+      issues: result.error.issues.map((issue) => ({
+        path: issue.path.map((part) => typeof part === 'string' && allowedFields.has(part) ? part : '[field]').join('.'),
+        code: /^[a-z0-9_]{1,40}$/i.test(issue.code) ? issue.code : 'unknown',
+      })),
+    });
+    throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Candidate data could not be processed');
+  }
+  return result.data;
 }
 
-function databaseError(error: unknown, operation: string): never {
-  if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+type DatabaseCategory =
+  | 'network_dns_tls'
+  | 'invalid_credentials'
+  | 'constraint'
+  | 'permission_or_rls'
+  | 'schema'
+  | 'postgrest_other'
+  | 'connection_or_unknown';
+type DatabaseDiagnostic = { category: DatabaseCategory; code?: string; httpStatus?: number };
+type DatabaseFailureSource = 'supabase_response' | 'thrown_exception';
+
+function safeErrorName(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return 'non_error_throw';
+  const rawName = 'name' in error && typeof error.name === 'string'
+    ? error.name
+    : error instanceof Error
+      ? error.constructor.name
+      : undefined;
+  return rawName && /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(rawName)
+    ? rawName
+    : error instanceof Error ? 'Error' : 'structured_error';
+}
+
+/** Return only non-sensitive database metadata. Never log provider messages or request data. */
+export function candidateDatabaseDiagnostic(error: unknown): DatabaseDiagnostic {
+  const chain: object[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && typeof current === 'object' && current !== null && !chain.includes(current); depth++) {
+    chain.push(current);
+    current = 'cause' in current ? current.cause : undefined;
+  }
+
+  const safeCode = (value: unknown) => typeof value === 'string' && /^[A-Z0-9_]{1,32}$/i.test(value) ? value : undefined;
+  const code = chain.map((item) => 'code' in item ? safeCode(item.code) : undefined).find(Boolean);
+  const statusValue = chain.map((item) => {
+    if ('status' in item && typeof item.status === 'number') return item.status;
+    if ('statusCode' in item && typeof item.statusCode === 'number') return item.statusCode;
+    if ('response' in item && typeof item.response === 'object' && item.response !== null && 'status' in item.response && typeof item.response.status === 'number') return item.response.status;
+    return undefined;
+  }).find((status) => status !== undefined);
+  const httpStatus = statusValue !== undefined && statusValue >= 100 && statusValue <= 599 ? statusValue : undefined;
+  const diagnostic = (category: DatabaseCategory): DatabaseDiagnostic => ({
+    category,
+    ...(code ? { code } : {}),
+    ...(httpStatus !== undefined ? { httpStatus } : {}),
+  });
+
+  const networkCodes = new Set([
+    'ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH',
+    'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET', 'ERR_TLS_CERT_ALTNAME_INVALID', 'CERT_HAS_EXPIRED',
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN',
+  ]);
+  if (chain.some((item) => {
+    const currentCode = 'code' in item ? safeCode(item.code) : undefined;
+    return Boolean(currentCode && (
+      networkCodes.has(currentCode)
+      || currentCode.startsWith('ERR_TLS_')
+      || currentCode.startsWith('ERR_SSL_')
+      || currentCode.startsWith('CERT_')
+    ));
+  })) return diagnostic('network_dns_tls');
+  if (httpStatus === 401 || code === 'PGRST301' || code?.toLowerCase().includes('invalid_api_key')) return diagnostic('invalid_credentials');
+  if (httpStatus === 403 || code === '42501') return diagnostic('permission_or_rls');
+  if (code === '23503' || code === '23505' || code === '23514' || code === '23502') return diagnostic('constraint');
+  if (code === '42703' || code === '42P01' || code === 'PGRST204' || code === 'PGRST205') return diagnostic('schema');
+  if (code?.startsWith('PGRST') || httpStatus !== undefined) return diagnostic('postgrest_other');
+  return diagnostic('connection_or_unknown');
+}
+
+function databaseError(error: unknown, operation: string, failureSource: DatabaseFailureSource): never {
+  const diagnostic = candidateDatabaseDiagnostic(error);
+  // Provider errors can contain SQL, identifiers, or submitted values. Log only safe metadata.
+  console.error('Candidate database operation failed', {
+    operation,
+    failureSource,
+    errorName: safeErrorName(error),
+    ...diagnostic,
+  });
+  if (diagnostic.code === '23505') {
     throw new HttpError(409, 'CONFLICT', 'A conflicting candidate record already exists');
   }
   throw new HttpError(503, 'DATABASE_UNAVAILABLE', `Unable to ${operation} right now`);
@@ -69,11 +158,11 @@ export const candidateRepository: CandidateRepository = {
         })
         .select(candidateColumns)
         .single();
-      if (error) return databaseError(error, 'create the candidate');
+      if (error) return databaseError(error, 'create the candidate', 'supabase_response');
       return toCandidate(data as CandidateRow);
     } catch (error) {
       if (error instanceof HttpError) throw error;
-      return databaseError(error, 'create the candidate');
+      return databaseError(error, 'create the candidate', 'thrown_exception');
     }
   },
 
@@ -88,7 +177,7 @@ export const candidateRepository: CandidateRepository = {
         .order('created_at', { ascending: false })
         .order('id', { ascending: true })
         .range(offset, offset + query.pageSize - 1);
-      if (error) return databaseError(error, 'list candidates');
+      if (error) return databaseError(error, 'list candidates', 'supabase_response');
       return {
         items: (data as CandidateRow[]).map(toCandidate),
         page: query.page,
@@ -97,7 +186,7 @@ export const candidateRepository: CandidateRepository = {
       };
     } catch (error) {
       if (error instanceof HttpError) throw error;
-      return databaseError(error, 'list candidates');
+      return databaseError(error, 'list candidates', 'thrown_exception');
     }
   },
 
@@ -110,12 +199,12 @@ export const candidateRepository: CandidateRepository = {
         .eq('owner_id', auth.userId)
         .is('archived_at', null)
         .maybeSingle();
-      if (error) return databaseError(error, 'retrieve the candidate');
+      if (error) return databaseError(error, 'retrieve the candidate', 'supabase_response');
       if (!data) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       return toCandidate(data as CandidateRow);
     } catch (error) {
       if (error instanceof HttpError) throw error;
-      return databaseError(error, 'retrieve the candidate');
+      return databaseError(error, 'retrieve the candidate', 'thrown_exception');
     }
   },
 
@@ -136,12 +225,12 @@ export const candidateRepository: CandidateRepository = {
         .is('archived_at', null)
         .select(candidateColumns)
         .maybeSingle();
-      if (error) return databaseError(error, 'update the candidate');
+      if (error) return databaseError(error, 'update the candidate', 'supabase_response');
       if (!data) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       return toCandidate(data as CandidateRow);
     } catch (error) {
       if (error instanceof HttpError) throw error;
-      return databaseError(error, 'update the candidate');
+      return databaseError(error, 'update the candidate', 'thrown_exception');
     }
   },
 
@@ -155,11 +244,11 @@ export const candidateRepository: CandidateRepository = {
         .is('archived_at', null)
         .select('id')
         .maybeSingle();
-      if (error) return databaseError(error, 'delete the candidate');
+      if (error) return databaseError(error, 'delete the candidate', 'supabase_response');
       if (!data) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
     } catch (error) {
       if (error instanceof HttpError) throw error;
-      return databaseError(error, 'delete the candidate');
+      return databaseError(error, 'delete the candidate', 'thrown_exception');
     }
   },
 };

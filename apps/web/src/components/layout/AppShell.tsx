@@ -12,7 +12,9 @@ export function AppShell() {
   const location = useLocation();
   const { profile, signOut } = useAuth();
   const [signOutError, setSignOutError] = useState('');
-  const pageTitle = location.pathname.startsWith('/candidates/')
+  const pageTitle = location.pathname === '/candidates/new'
+    ? 'Add candidate'
+    : location.pathname.startsWith('/candidates/')
     ? 'Candidate profile'
     : location.pathname.includes('candidates')
       ? 'Candidates'
