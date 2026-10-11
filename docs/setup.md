@@ -11,18 +11,19 @@ Use Node.js 20 or newer (under 25) and npm. From the repository root run `npm in
 - `npm run build` builds all workspaces with build scripts.
 - `npm run typecheck` runs configured TypeScript checks.
 - `npm test` runs workspace Vitest suites.
-- `npm test --workspace @devrank/api` runs API auth, candidate, health, validation, and environment tests.
+- `npm test --workspace @devrank/api` runs API auth, candidate, GitHub adapter, platform data, health, validation, and environment tests.
 - `npm run lint` is reserved; no linter is configured yet.
 
-The API exposes `GET /api/health`, `GET /api/auth/me`, candidate CRUD under `/api/candidates`, and administrator-only recruiter review under `/api/admin/recruiters`. Candidate routes require a verified Supabase token, confirmed email, and approved recruiter profile. Admin routes require a verified, confirmed administrator profile and recheck authorization in database functions. Supabase connectivity remains unverified until project credentials and migrations are configured.
+The API exposes `GET /api/health` (and the legacy `GET /health`), authenticated candidate CRUD at `/api/candidates`, GitHub profile lookups at `GET /api/github?profile=...`, and candidate-provided platform submissions at `POST /api/candidates/:id/platform-data`. Supabase Auth and database operations require real `SUPABASE_URL` and `SUPABASE_ANON_KEY` values. Candidate requests must use a Supabase access token; the API verifies it, then forwards that user's token to PostgreSQL so RLS applies. No service-role key is used. Real Supabase authentication and connectivity are unverified until valid project credentials are configured.
 
 After starting the API, verify health with `curl http://localhost:3000/api/health`; the expected response is `{"status":"ok"}`.
 
 ## Environment variables
 
-- API: `API_PORT`, `NODE_ENV`, `WEB_ORIGIN`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`.
+- API: `API_PORT`, `NODE_ENV`, `WEB_ORIGIN`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, optional `GITHUB_TOKEN`.
 - Web: `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
-- GitHub and Groq keys are not consumed by this issue and are intentionally absent from the environment examples until their integrations are implemented.
+- `GITHUB_TOKEN` is optional and used only server-side to increase the official GitHub REST API rate limit. Keep it out of frontend `VITE_*` settings and committed files. Public GitHub profile lookup works without it.
+- LeetCode and HackerRank values are candidate-provided; no platform integration or independent verification is implemented. Restricted scraping and unofficial endpoints are excluded.
 
 ## Database migration workflow
 

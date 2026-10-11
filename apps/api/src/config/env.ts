@@ -16,6 +16,7 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
   SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: optionalSecret,
+  GITHUB_TOKEN: optionalSecret,
 });
 
 export type ApiEnvironment = z.infer<typeof envSchema>;

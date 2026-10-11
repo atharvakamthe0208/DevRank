@@ -23,7 +23,7 @@ function responseFor(candidate: Record<string, any>, insufficient = false) {
     ? Number((categoryScores.reduce((sum, item) => sum + (item.score ?? 0) * parsedWeights[item.categoryId], 0) / 100).toFixed(2))
     : undefined;
   return {
-    schemaVersion: '1.0.0', candidateId: candidate.candidateId, targetRole: candidate.targetRole,
+    schemaVersion: '1.0.0', scoringVersion: '1.0.0', candidateId: candidate.candidateId, targetRole: candidate.targetRole,
     ...(overallScore !== undefined ? { overallScore } : {}), categoryScores, roleWeightsUsed: parsedWeights,
     evidence, ...(missingEvidence.length === 0 ? { confidence: 0.8 } : {}), strengths: [], skillGaps: [], recommendations: [], missingEvidence,
     calculationExplanation: 'Weighted sum of available normalized category scores; overall score is omitted until all six categories have evidence.',
@@ -59,6 +59,13 @@ describe('shared candidate evaluation contracts', () => {
     expect(evaluationResponseSchema.safeParse(responseFor(candidate)).success).toBe(true);
     expect(categoryScoreSchema.safeParse({ categoryId: 'technical_skills', displayName: 'Technical Skills', status: 'insufficient_evidence', score: 0, evidenceRefs: [], explanation: 'Missing.' }).success).toBe(false);
   });
+  it('accepts legacy responses without scoringVersion and validates the optional version format', () => {
+    const candidate = candidates[0] as Record<string, any>;
+    const response = responseFor(candidate);
+    const { scoringVersion: _version, ...legacyResponse } = response;
+    expect(evaluationResponseSchema.safeParse(legacyResponse).success).toBe(true);
+    expect(evaluationResponseSchema.safeParse({ ...response, scoringVersion: 'not-a-version' }).success).toBe(false);
+  });
   it('rejects malformed outputs and keeps insufficient evaluations scoreless', () => {
     const incomplete = responseFor(candidates[4] as Record<string, any>);
     expect(incomplete.evaluationStatus).toBe('insufficient_evidence');
@@ -74,6 +81,7 @@ describe('shared candidate evaluation contracts', () => {
       const candidate = candidates.find((item) => (item as Record<string, any>).candidateId === outcome.candidateId) as Record<string, any>;
       const actual = responseFor(candidate);
       expect(actual.targetRole).toBe(outcome.targetRole);
+      expect(actual.scoringVersion).toBe(outcome.scoringVersion);
       expect(actual.evaluationStatus).toBe(outcome.evaluationStatus);
       expect(actual.overallScore).toBe(outcome.overallScore);
       expect(Object.fromEntries(actual.categoryScores.filter((item) => item.score !== undefined).map((item) => [item.categoryId, item.score]))).toEqual(outcome.categoryScores);

@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { schemaVersion, roleIdSchema, roleWeightsSchema, scoringCategorySchema, scoringCategories, scoreSchema, confidenceSchema, categoryScoreSchema } from './scoring.js';
+import { schemaVersion, scoringVersionSchema, roleIdSchema, roleWeightsSchema, scoringCategorySchema, scoringCategories, scoreSchema, confidenceSchema, categoryScoreSchema } from './scoring.js';
 import { evidenceSchema } from './evidence.js';
 
 export const candidateInputSchema = z.object({ candidateId: z.string().min(1), targetRole: roleIdSchema, evidence: z.array(evidenceSchema) });
 export const evaluationResponseSchema = z.object({
   schemaVersion: z.literal(schemaVersion),
+  scoringVersion: scoringVersionSchema.optional(),
   candidateId: z.string().min(1),
   targetRole: roleIdSchema,
   overallScore: scoreSchema.optional(),
