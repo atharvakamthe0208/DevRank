@@ -53,4 +53,4 @@ The web app is served at `http://localhost:5173`; the API health endpoint is `ht
 
 ## Current scope and next steps
 
-The repository includes a minimal Express foundation, Supabase bearer-token verification, owner-scoped candidate CRUD APIs, shared candidate contracts, and prepared SQL migrations. Migrations have not been applied to a database. Evaluation APIs, scoring, AI, and most product UI are not implemented. See [docs/api-contract.md](docs/api-contract.md) for candidate endpoints and [docs/team-workflow.md](docs/team-workflow.md) for Git conventions.
+The repository includes a minimal Express foundation, Supabase bearer-token verification, owner-scoped candidate CRUD APIs, an official GitHub REST adapter, candidate-provided LeetCode/HackerRank evidence submission, shared contracts, and prepared SQL migrations. Migrations have not been applied to a database. Evaluation APIs, scoring, AI, and most product UI are not implemented. See [docs/api-contract.md](docs/api-contract.md) for API contracts and [docs/team-workflow.md](docs/team-workflow.md) for Git conventions.
