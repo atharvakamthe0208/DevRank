@@ -4,6 +4,7 @@ import {
   evaluationResponseSchema,
   roleWeightConfigurationSchema,
   schemaVersion,
+  scoringVersion as currentScoringVersion,
   scoringCategories,
   type CandidateInput,
   type EvaluationResponse,
@@ -11,6 +12,7 @@ import {
 } from '@devrank/contracts';
 
 const roleWeightsUrl = new URL('../../../../../config/role-weights.json', import.meta.url);
+export const SUPPORTED_SCORING_VERSIONS = [currentScoringVersion] as const;
 
 export class ScoringValidationError extends Error {
   constructor(message: string) {
@@ -20,7 +22,7 @@ export class ScoringValidationError extends Error {
 }
 
 /** Load and validate the one shared role-weight configuration. */
-export function loadRoleWeightConfiguration(): RoleWeightConfiguration {
+export function loadRoleWeightConfiguration(requestedVersion?: string): RoleWeightConfiguration {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(roleWeightsUrl, 'utf8')) as unknown;
@@ -31,6 +33,13 @@ export function loadRoleWeightConfiguration(): RoleWeightConfiguration {
   const validation = roleWeightConfigurationSchema.safeParse(parsed);
   if (!validation.success) {
     throw new ScoringValidationError(`Invalid role-weight configuration: ${validation.error.issues.map(({ message }) => message).join('; ')}`);
+  }
+  const selectedVersion = requestedVersion ?? validation.data.scoringVersion;
+  if (!SUPPORTED_SCORING_VERSIONS.includes(selectedVersion as typeof SUPPORTED_SCORING_VERSIONS[number])) {
+    throw new ScoringValidationError(`Unsupported scoring version "${selectedVersion}". Supported versions: ${SUPPORTED_SCORING_VERSIONS.join(', ')}.`);
+  }
+  if (selectedVersion !== validation.data.scoringVersion) {
+    throw new ScoringValidationError(`Scoring version "${selectedVersion}" is not present in the role-weight configuration (configured: "${validation.data.scoringVersion}").`);
   }
   return validation.data;
 }
@@ -43,6 +52,7 @@ function roundToHundredth(value: number): number {
 export function scoreCandidate(
   input: unknown,
   configuration: unknown = loadRoleWeightConfiguration(),
+  requestedVersion?: string,
 ): EvaluationResponse {
   const candidateResult = candidateInputSchema.safeParse(input);
   if (!candidateResult.success) {
@@ -51,6 +61,14 @@ export function scoreCandidate(
   const configResult = roleWeightConfigurationSchema.safeParse(configuration);
   if (!configResult.success) {
     throw new ScoringValidationError(`Invalid role-weight configuration: ${configResult.error.issues.map(({ path, message }) => `${path.join('.') || 'configuration'}: ${message}`).join('; ')}`);
+  }
+
+  const selectedVersion = requestedVersion ?? configResult.data.scoringVersion;
+  if (!SUPPORTED_SCORING_VERSIONS.includes(selectedVersion as typeof SUPPORTED_SCORING_VERSIONS[number])) {
+    throw new ScoringValidationError(`Unsupported scoring version "${selectedVersion}". Supported versions: ${SUPPORTED_SCORING_VERSIONS.join(', ')}.`);
+  }
+  if (selectedVersion !== configResult.data.scoringVersion) {
+    throw new ScoringValidationError(`Requested scoring version "${selectedVersion}" does not match the supplied configuration version "${configResult.data.scoringVersion}".`);
   }
 
   const candidate: CandidateInput = candidateResult.data;
@@ -78,7 +96,8 @@ export function scoreCandidate(
       };
     }
 
-    const mean = scoredEvidence.reduce((total, item) => total + item.normalizedValue!, 0) / scoredEvidence.length;
+    const normalizedValues = scoredEvidence.map(({ normalizedValue }) => normalizedValue!).sort((left, right) => left - right);
+    const mean = normalizedValues.reduce((total, value) => total + value, 0) / normalizedValues.length;
     return {
       categoryId: category.id,
       displayName: category.displayName,
@@ -96,6 +115,7 @@ export function scoreCandidate(
     : undefined;
   const result: EvaluationResponse = {
     schemaVersion,
+    scoringVersion: selectedVersion,
     candidateId: candidate.candidateId,
     targetRole: candidate.targetRole,
     ...(overallScore === undefined ? {} : { overallScore }),

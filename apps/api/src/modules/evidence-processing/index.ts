@@ -13,7 +13,7 @@ import {
   type EvaluationResponse,
   type ScoringCategory,
 } from '@devrank/contracts';
-import { scoreCandidate } from '../scoring/index.js';
+import { loadRoleWeightConfiguration, scoreCandidate } from '../scoring/index.js';
 
 export type EvidenceType = z.infer<typeof evidenceTypeSchema>;
 const originalValueSchema = z.union([z.string().min(1), z.number().finite(), z.boolean()]);
@@ -69,6 +69,7 @@ export interface EvidenceProcessingOptions {
   normalizationRules?: EvidenceNormalizationRules;
   categoryMapping?: unknown;
   roleWeights?: unknown;
+  scoringVersion?: string;
 }
 export interface EvidenceProcessingResult {
   evaluation: EvaluationResponse;
@@ -231,11 +232,12 @@ export function processCandidateEvidence(input: unknown, options: EvidenceProces
     mappedEvidence.push(mappingResult.evidence);
   });
 
+  const scoringConfiguration = options.roleWeights ?? loadRoleWeightConfiguration(options.scoringVersion);
   const evaluation = scoreCandidate({
     candidateId: candidate.data.candidateId,
     targetRole: candidate.data.targetRole,
     evidence: mappedEvidence,
-  }, options.roleWeights);
+  }, scoringConfiguration, options.scoringVersion);
   return { evaluation, rejectedEvidence, unmappedEvidence, unnormalizedEvidence };
 }
 

@@ -24,7 +24,7 @@ Input: `synthetic-candidate-001` in `fixtures/dummy-candidates.json` has one nor
 (80×25 + 75×20 + 78×20 + 82×15 + 80×10 + 72×10) / 100 = 78.10
 ```
 
-Its response has schema version `1.0.0`, six scored categories, evidence references for each, `evaluationStatus: "completed"`, and `overallScore: 78.1`. Candidate 004 has five scored categories and missing communication evidence, so its response has no overall score. Candidate 005 has all six categories missing and also has no overall score.
+Its response has contract schema version `1.0.0`, scoring version `1.0.0`, six scored categories, evidence references for each, `evaluationStatus: "completed"`, and `overallScore: 78.1`. Candidate 004 has five scored categories and missing communication evidence, so its response has no overall score. Candidate 005 has all six categories missing and also has no overall score.
 
 ## Files
 
