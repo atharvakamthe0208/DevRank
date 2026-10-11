@@ -60,8 +60,14 @@ describe('candidate platform data API', () => {
     const app = express();
     app.use(express.json());
     const auth = createAuthenticate(async (token) => {
-      if (token === 'owner-token') return { userId: ownerId };
-      if (token === 'other-owner-token') return { userId: otherOwnerId };
+      const approvedRecruiter = (userId: string) => ({
+        userId,
+        email: 'recruiter@example.com',
+        emailConfirmed: true,
+        profile: { id: userId, display_name: 'Recruiter', role: 'recruiter' as const, approval_status: 'approved' as const },
+      });
+      if (token === 'owner-token') return approvedRecruiter(ownerId);
+      if (token === 'other-owner-token') return approvedRecruiter(otherOwnerId);
       return null;
     });
     app.use('/api/candidates', createCandidatesRouter(undefined, auth, createCandidatePlatformController(repository)));
