@@ -3,5 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Supabase is optional for the initial UI scaffold. Never place service-role keys here.
-export const supabase = url && anonKey ? createClient(url, anonKey) : null;
+// Browser code may only use the publishable/anon key. Never place a service-role key here.
+export const supabase = url && anonKey ? createClient(url, anonKey, {
+  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
+}) : null;

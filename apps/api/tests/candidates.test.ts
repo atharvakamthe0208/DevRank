@@ -69,8 +69,15 @@ describe('candidate API authorization and CRUD', () => {
     const application = express();
     application.use(express.json());
     const auth = createAuthenticate(async (token) => {
-      if (token === 'valid-owner-token') return { userId: ownerId };
-      if (token === 'valid-other-token') return { userId: otherUserId };
+      const verifiedRecruiter = (userId: string, approval_status: 'pending' | 'approved' | 'rejected' = 'approved', emailConfirmed = true) => ({
+        userId, email: 'recruiter@example.com', emailConfirmed,
+        profile: { id: userId, display_name: 'Recruiter', role: 'recruiter' as const, approval_status },
+      });
+      if (token === 'valid-owner-token') return verifiedRecruiter(ownerId);
+      if (token === 'valid-other-token') return verifiedRecruiter(otherUserId);
+      if (token === 'pending-token') return verifiedRecruiter(ownerId, 'pending');
+      if (token === 'rejected-token') return verifiedRecruiter(ownerId, 'rejected');
+      if (token === 'unconfirmed-token') return verifiedRecruiter(ownerId, 'approved', false);
       if (token === 'auth-provider-failure') throw new Error('sensitive provider response');
       return null;
     });
@@ -100,6 +107,16 @@ describe('candidate API authorization and CRUD', () => {
     const body = await response.text();
     expect(body).toContain('AUTH_SERVICE_UNAVAILABLE');
     expect(body).not.toContain('sensitive provider response');
+  });
+
+  it.each([
+    ['pending-token', 'RECRUITER_APPROVAL_REQUIRED'],
+    ['rejected-token', 'APPLICATION_REJECTED'],
+    ['unconfirmed-token', 'EMAIL_NOT_CONFIRMED'],
+  ])('blocks recruiter endpoints for %s', async (token, code) => {
+    const response = await fetch(`${origin}/api/candidates`, { headers: { Authorization: `Bearer ${token}` } });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code } });
   });
 
   it('creates a candidate under the verified user and does not expose ownership fields', async () => {

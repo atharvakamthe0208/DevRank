@@ -47,6 +47,12 @@ describe('API HTTP conventions', () => {
     expect(await response.json()).toEqual({ status: 'ok' });
   });
 
+  it('denies admin application routes without an authenticated administrator token', async () => {
+    const response = await fetch(`${apiOrigin}/api/admin/recruiters`);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: 'UNAUTHENTICATED' } });
+  });
+
   it('uses the shared error shape for unknown routes', async () => {
     const response = await fetch(`${apiOrigin}/api/not-implemented`);
     expect(response.status).toBe(404);

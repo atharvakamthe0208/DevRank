@@ -27,4 +27,6 @@ After starting the API, verify health with `curl http://localhost:3000/api/healt
 
 ## Database migration workflow
 
-Review `supabase/migrations/20261010000000_initial_devrank_schema.sql` and `supabase/migrations/20261011000000_candidate_api_fields.sql` with the team before applying them. They are version-controlled proposals, not applied migrations. Confirm the target project, inspect the SQL diff, and apply through the team's controlled Supabase migration workflow; then verify RLS and table definitions in a non-production project before production. Do not apply migrations automatically from the API or local startup.
+Review and apply the four migrations in timestamp order: initial schema, candidate API fields, recruiter authorization/RLS, then admin approval functions. The new migrations preserve table data and existing policies while adding restrictive access gates. See [Recruiter authentication](authentication.md) for project settings and the one-time first-admin provisioning process. Do not apply migrations automatically from the API or local startup. The target live database was not inspected from this checkout.
+
+Lint is not configured in this repository; `npm run lint` currently performs no lint checks.

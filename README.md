@@ -53,4 +53,4 @@ The web app is served at `http://localhost:5173`; the API health endpoint is `ht
 
 ## Current scope and next steps
 
-The repository includes a minimal Express foundation, Supabase bearer-token verification, owner-scoped candidate CRUD APIs, an official GitHub REST adapter, candidate-provided LeetCode/HackerRank evidence submission, shared contracts, and prepared SQL migrations. Migrations have not been applied to a database. Evaluation APIs, scoring, AI, and most product UI are not implemented. See [docs/api-contract.md](docs/api-contract.md) for API contracts and [docs/team-workflow.md](docs/team-workflow.md) for Git conventions.
+The repository includes the React dashboard and candidate UI, recruiter Supabase Auth flows, a token-verifying API with recruiter approval gates, candidate CRUD, and migration proposals for approved-recruiter RLS and admin-managed applications. Scoring and AI remain in progress. Migrations are not applied automatically; configure Supabase using [docs/authentication.md](docs/authentication.md). See [docs/architecture.md](docs/architecture.md) for boundaries and [docs/team-workflow.md](docs/team-workflow.md) for Git conventions.

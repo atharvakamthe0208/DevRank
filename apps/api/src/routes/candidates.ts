@@ -7,7 +7,8 @@ import {
   candidateUpdateSchema,
 } from '@devrank/contracts';
 import { createCandidateController } from '../controllers/candidate-controller.js';
-import { authenticate } from '../middleware/authenticate.js';
+import { authenticate, requireApprovedRecruiter } from '../middleware/authenticate.js';
+import { validateBody } from '../middleware/validate-body.js';
 import { validateParams, validateQuery } from '../middleware/validate-request.js';
 import { createCandidatePlatformController } from '../controllers/candidate-platform-controller.js';
 import { validateBody } from '../middleware/validate-body.js';
@@ -18,7 +19,7 @@ export function createCandidatesRouter(
   platformController = createCandidatePlatformController(),
 ) {
   const router = Router();
-  router.use(authMiddleware);
+  router.use(authMiddleware, recruiterMiddleware);
   router.get('/', validateQuery(candidateListQuerySchema), controller.list);
   router.post('/', validateBody(candidateCreateSchema), controller.create);
   router.post(
