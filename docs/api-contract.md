@@ -1,86 +1,86 @@
 # Proposed candidate evaluation API contract
 
-## Current API and compatibility
+Shared Zod schemas and inferred types live in `packages/contracts/src`. Import these from both workspaces instead of redefining request or response shapes. Current starter contracts cover candidates, platform evidence and availability, evaluation requests/status, scoring categories and weights, AI analysis, comparisons, rankings, and standard API errors. These are initial shapes for team review, not a finalized API specification. Coordinate changes with all owners.
 
-The API currently exposes only `GET /health` and a JSON 404 response. There is no candidate evaluation route or existing evaluation request/response format to replace. The proposal below does not add a route or change `/health`; it defines the shared payload for owners to adopt after review. Frontend and backend owners must agree on the route, authentication, persistence, and rollout before an endpoint is implemented. This is a proposal, not team approval.
+## Current HTTP conventions
 
-## Shared source of truth
+- `GET /api/health` returns HTTP 200 with `{ "status": "ok" }`.
+- The prior scaffold path `GET /health` remains as a compatibility alias.
+- Successful resource responses use a resource-specific JSON object; a universal success envelope is not required for health.
+- Errors use `{ "error": { "code": "...", "message": "...", "details": ... } }`. `details` is optional and contains field paths/messages for validation failures only.
+- Unknown routes return HTTP 404 with code `NOT_FOUND`. Malformed JSON returns HTTP 400 with code `INVALID_JSON`. Unexpected errors do not expose exception messages or stacks.
+- Zod body validators are registered on routes with `validateBody(schema)`; query and path inputs use `validateQuery` and `validateParams`.
+- The current shared scoring contract lists four categories, while the 8-day plan gives six category names as examples. Priya and the team must resolve that mismatch before the canonical category enum or role weights are finalized; the initial database migration therefore stores category keys without a fixed enum constraint.
 
-Use the Zod schemas and inferred TypeScript types exported by `@devrank/contracts`: `candidateInputSchema`, `evidenceSchema`, `roleWeightConfigurationSchema`, and `evaluationResponseSchema`. Contract `schemaVersion` is `1.0.0`; the deterministic scoring configuration and outputs identify `scoringVersion: "1.0.0"`. The response schema accepts this field optionally for compatibility, while new scorer output always includes it. Candidate IDs are opaque strings. Role IDs and scoring category IDs are fixed enums. Evidence and AI explanations are separate fields; AI text never supplies or changes a numeric score. The contract intentionally carries no candidate name, email, demographic data, or other personal attributes.
+## Authentication
 
-## Proposed request
+Candidate routes require `Authorization: Bearer <supabase-access-token>`. The API verifies the token through Supabase Auth (`auth.getUser(token)`) and never trusts a client-supplied user ID. The verified ID and original token are attached to request-local auth context; the token is forwarded only to a request-scoped Supabase client so PostgreSQL RLS sees `auth.uid()`. Tokens are not returned or logged. The web app remains responsible for sign-in through Supabase Auth; this API does not implement passwords or a duplicate login system.
 
-```json
-{
-  "candidateId": "synthetic-candidate-001",
-  "targetRole": "software_developer",
-  "evidence": [
-    {
-      "evidenceId": "c001-tech",
-      "evidenceType": "technical_screen",
-      "source": "Synthetic structured technical screen",
-      "description": "Strong TypeScript and API fundamentals",
-      "originalValue": "4/5 rubric",
-      "normalizedValue": 80,
-      "verificationStatus": "unverified",
-      "categoryId": "technical_skills",
-      "availability": "available"
-    },
-    {
-      "evidenceId": "c001-dsa",
-      "evidenceType": "coding_assessment",
-      "source": "Synthetic coding sample",
-      "description": "No assessment supplied",
-      "verificationStatus": "unverified",
-      "categoryId": "problem_solving_dsa",
-      "availability": "missing"
-    }
-  ]
-}
-```
+Missing, malformed, invalid, or expired credentials return HTTP 401 (`UNAUTHENTICATED`). Supabase Auth outages or missing backend configuration return HTTP 503 (`AUTH_SERVICE_UNAVAILABLE`). Candidate reads and writes are scoped to the authenticated owner. A missing candidate and another user's candidate both return HTTP 404 to avoid disclosing whether the other user's record exists. There is no role/permission model yet, so no candidate route currently returns 403.
 
-The example is illustrative and intentionally incomplete across six categories, so it must not produce an overall score. `observedAt` is an optional ISO timestamp. Raw `originalValue` is preserved only when available; `normalizedValue` is a 0–100 value produced by a documented deterministic normalization step. Missing evidence is represented by `availability: "missing"` and has no normalized value. Verification means source checking status, not a guarantee that a score is correct.
+## Candidate API
 
-## Proposed response
+All endpoints are under `/api/candidates` and require a valid bearer token.
+
+| Method and path | Behavior | Success |
+| --- | --- | --- |
+| `POST /api/candidates` | Create for the authenticated owner; client ownership fields are rejected | `201` with candidate object |
+| `GET /api/candidates?page=1&pageSize=20` | List active records for that owner, newest first with stable ID tie-break | `200` with `{ items, page, pageSize, total }` |
+| `GET /api/candidates/:id` | Read one active record owned by the caller | `200` with candidate object |
+| `PATCH /api/candidates/:id` | Update supported fields only | `200` with updated candidate object |
+| `DELETE /api/candidates/:id` | Archive the record; related evidence and evaluation history are retained | `204` with no body |
+
+Create request example:
 
 ```json
 {
-  "schemaVersion": "1.0.0",
-  "scoringVersion": "1.0.0",
-  "candidateId": "synthetic-candidate-001",
-  "targetRole": "software_developer",
-  "categoryScores": [
-    { "categoryId": "technical_skills", "displayName": "Technical Skills", "score": 80, "confidence": 0.8, "status": "scored", "evidenceRefs": ["c001-tech"], "explanation": "The supplied screen supports this score." },
-    { "categoryId": "problem_solving_dsa", "displayName": "Problem-Solving and DSA", "status": "insufficient_evidence", "evidenceRefs": [], "explanation": "No problem-solving evidence supplied." },
-    { "categoryId": "relevant_project_experience", "displayName": "Relevant Project Experience", "status": "insufficient_evidence", "evidenceRefs": [], "explanation": "No project evidence supplied." },
-    { "categoryId": "practical_assessment_performance", "displayName": "Practical Assessment Performance", "status": "insufficient_evidence", "evidenceRefs": [], "explanation": "No work sample supplied." },
-    { "categoryId": "communication_skills", "displayName": "Communication Skills", "status": "insufficient_evidence", "evidenceRefs": [], "explanation": "No structured interview evidence supplied." },
-    { "categoryId": "learning_adaptability", "displayName": "Learning Ability and Adaptability", "status": "insufficient_evidence", "evidenceRefs": [], "explanation": "No learning example supplied." }
-  ],
-  "roleWeightsUsed": { "technical_skills": 25, "problem_solving_dsa": 20, "relevant_project_experience": 20, "practical_assessment_performance": 15, "communication_skills": 10, "learning_adaptability": 10 },
-  "evidence": [{ "evidenceId": "c001-tech", "evidenceType": "technical_screen", "source": "Synthetic technical screen", "description": "Strong TypeScript and API fundamentals", "originalValue": "4/5 rubric", "normalizedValue": 80, "verificationStatus": "unverified", "categoryId": "technical_skills", "availability": "available" }],
-  "strengths": ["Synthetic example: technical screen"],
-  "skillGaps": ["Problem-solving evidence is not available"],
-  "recommendations": ["Collect a structured problem-solving sample"],
-  "missingEvidence": ["problem_solving_dsa", "relevant_project_experience", "practical_assessment_performance", "communication_skills", "learning_adaptability"],
-  "calculationExplanation": "Overall score is omitted until all six categories have evidence.",
-  "evaluationStatus": "insufficient_evidence",
-  "aiExplanation": { "summary": "Example explanation grounded in supplied evidence.", "strengths": ["Synthetic example: technical screen"], "skillGaps": ["Problem-solving evidence is not available"], "recommendations": ["Collect a structured problem-solving sample"] },
-  "decisionSupportNotice": "Decision support only; not an automatic hiring decision."
+  "name": "Taylor Example",
+  "email": "taylor@example.com",
+  "githubUsername": "taylor-dev",
+  "leetcodeUsername": "taylor_codes",
+  "hackerrankUsername": "taylor-dev"
 }
 ```
 
-The sample above is a schema-valid insufficient-evidence response. It omits `overallScore`, while preserving the one supported category score. A completed response requires evidence for all six categories and includes that score. `evidenceRefs` must reference evidence items in the response. Confidence is optional and must only be supplied when the scoring method supports it. AI explanation text is separate from evidence-backed facts.
+The response candidate includes `id`, `name`, optional `email` and platform usernames, `createdAt`, and `updatedAt`; it never includes `owner_id`. Candidate storage uses the existing `owner_id` column (the verified Supabase Auth user ID), rather than introducing a duplicate `created_by` column. Platform inputs are usernames, not URLs. Name is trimmed and limited to 120 characters; email is validated; usernames are trimmed, limited to 100 characters, and accept only letters, digits, `_`, `.`, and `-`. Page starts at 1 and `pageSize` is 1–100. Unknown fields are rejected; `id`, `owner_id`, and `created_by` are not writable.
 
-## Validation and errors
+The existing contracts do not establish a supported role list or `targetRole` field, so candidate CRUD does not add one. Role assignment stays in role profiles/evaluations until the team agrees on its contract. All request/response schemas live in `packages/contracts/src/candidate*.ts`.
 
-The shared schemas reject unknown category/role identifiers, out-of-range scores (0–100), out-of-range confidence (0–1), a missing normalized value on available evidence only when a scorer requires one, a value attached to missing evidence, missing categories, invalid role weight totals, negative weights, and dangling evidence references. Each role must define exactly six non-negative weights totaling 100. API owners should continue using the current standard `apiErrorSchema` for errors; this proposal does not define new HTTP status codes.
+Validation errors return HTTP 400 (`VALIDATION_ERROR`) with field paths and messages. Unknown candidates return HTTP 404 (`NOT_FOUND`); duplicate conflicts return HTTP 409 (`CONFLICT`); missing database configuration or database failures return sanitized HTTP 503 errors. Unexpected errors use the existing generic 500 response convention.
 
-## Integration actions for owners
+## GitHub profile lookup
 
-- **Frontend (Aryan):** import candidate and response types from `@devrank/contracts`; use the five fixtures for UI states; render missing evidence distinctly from a score of zero; keep AI explanation visually distinct from evidence and numeric results.
-- **Backend (Atharva):** review the proposal before adding an endpoint; validate request/response with shared schemas; agree on route, auth, persistence, and error behavior; do not expose secrets or include unnecessary personal data.
-- **Scoring/AI (Priya):** implement deterministic normalization and weighted scoring behind the API; validate any generated explanation against the response schema; never let AI change scores.
-- **All owners:** review the preliminary category definitions, weights, and insufficient-evidence policy before adopting them. No approval is recorded here.
+`GET /api/github?profile=<username-or-profile-URL>` requires the same Supabase Bearer token as candidate routes. The `profile` query value accepts a GitHub username or an HTTPS `github.com/<username>` profile URL. The API calls GitHub's official REST API and returns profile URL, public repository count, followers/following, and metadata for at most the 100 most recently updated owned public repositories (name, URL, description, stars, forks, primary language, update time). `repositoriesTruncated` indicates when the API's public repository count exceeds the returned sample. This lookup does not persist data or imply a verified score.
 
-Fixtures are in `fixtures/dummy-candidates.json` and `fixtures/expected-evaluations.json`; weights are in `config/role-weights.json`.
+Invalid profile input returns 400 (`INVALID_GITHUB_PROFILE`); an unknown user returns 404 (`GITHUB_USER_NOT_FOUND`); GitHub rate limits return 429 (`GITHUB_RATE_LIMITED`); timeout, network, authentication, malformed provider responses, and other provider failures return sanitized errors. Provider response bodies, stack traces, and credentials are not returned. Optional backend-only `GITHUB_TOKEN` increases GitHub API quota; anonymous public access is used when it is unset. Calls have an 8-second timeout and repository retrieval is capped at two 50-repository pages.
+
+## Candidate-provided platform data
+
+`POST /api/candidates/:id/platform-data` requires a valid Bearer token and a candidate owned by the authenticated user. It stores an append-only entry in the existing owner-scoped `platform_evidence` table; candidate ID and owner ID are set server-side. It accepts LeetCode and HackerRank submissions and never scrapes provider pages.
+
+LeetCode request:
+
+```json
+{
+  "platform": "leetcode",
+  "profileUrl": "https://leetcode.com/u/example/",
+  "handle": "example",
+  "availability": "available",
+  "statistics": { "problemsSolved": 120, "easySolved": 55, "mediumSolved": 55, "hardSolved": 10 }
+}
+```
+
+HackerRank request:
+
+```json
+{
+  "platform": "hackerrank",
+  "handle": "example",
+  "availability": "available",
+  "statistics": { "points": 0, "badges": 2, "certificates": 1 }
+}
+```
+
+For both platforms, provide either `profileUrl` or `handle` (or both), and explicit `availability`: `available`, `unavailable`, or `not_provided`. Available data requires at least one supported statistic. LeetCode supports nonnegative integer counts (`problemsSolved`, `easySolved`, `mediumSolved`, `hardSolved`); HackerRank supports nonnegative `points` and integer `badges`/`certificates`. Statistics are optional individually; absent fields remain absent, and `0` is preserved as a real value. Non-available submissions omit `statistics`. Unknown fields and platform-mismatched profile URLs are rejected.
+
+Success returns HTTP 201 with `id`, `candidateId`, `platform`, `availability`, `provenance: "candidate_provided"`, optional `profileUrl`, `handle`, and `statistics`, and `submittedAt` (ISO timestamp). HTTP 400 (`VALIDATION_ERROR`) covers malformed or unsupported fields; 401 (`UNAUTHENTICATED`) requires valid credentials; 404 (`NOT_FOUND`) covers missing, archived, or another owner's candidate; and 503 reports unavailable storage. Candidate-provided means the recruiter submitted the candidate's reported data; it has not been independently verified. Authorized LeetCode/HackerRank integrations are not implemented; restricted scraping, browser automation, and unofficial endpoints are excluded.

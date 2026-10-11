@@ -42,7 +42,7 @@ Copy `.env.example` to `.env` for the API and to `apps/web/.env` for Vite. Repla
 npm run dev
 ```
 
-The web app is served at `http://localhost:5173`; the API health endpoint is `http://localhost:3000/health`. Workspace commands are `npm run build`, `npm run lint`, `npm run test`, and `npm run typecheck`. Lint and test currently report no configured tasks; add them with their owning module rather than treating an empty result as coverage.
+The web app is served at `http://localhost:5173`; the API health endpoint is `http://localhost:3000/api/health`. Workspace commands are `npm run build`, `npm run lint`, `npm run test`, and `npm run typecheck`. Lint is not configured yet; API tests cover the health route, request validation, error conventions, and environment parsing.
 
 ## Team ownership
 
@@ -53,4 +53,4 @@ The web app is served at `http://localhost:5173`; the API health endpoint is `ht
 
 ## Current scope and next steps
 
-This commit establishes structure and minimal runnable entry points. Scoring, AI, business APIs, database schema, and product UI are not implemented. Next: agree on candidate/evaluation contract fields, design and review the initial schema, implement auth and candidate persistence, then develop deterministic scoring and the UI against shared mock/API contracts. See [docs/architecture.md](docs/architecture.md) for boundaries and [docs/team-workflow.md](docs/team-workflow.md) for Git conventions.
+The repository includes a minimal Express foundation, Supabase bearer-token verification, owner-scoped candidate CRUD APIs, an official GitHub REST adapter, candidate-provided LeetCode/HackerRank evidence submission, shared contracts, and prepared SQL migrations. Migrations have not been applied to a database. Evaluation APIs, scoring, AI, and most product UI are not implemented. See [docs/api-contract.md](docs/api-contract.md) for API contracts and [docs/team-workflow.md](docs/team-workflow.md) for Git conventions.
