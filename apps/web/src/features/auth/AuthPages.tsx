@@ -24,6 +24,7 @@ export function LoginPage() {
   const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
   if (state === 'approved') return <Navigate to={returnTo} replace/>;
   if (state === 'admin') return <Navigate to={returnTo === '/dashboard' ? '/admin/recruiters' : returnTo} replace/>;
+  if (state === 'profile-missing') return <Navigate to="/dashboard" replace/>;
   if (state === 'pending' || state === 'rejected' || state === 'unconfirmed') return <Navigate to="/access-pending" replace/>;
   async function submit(event: FormEvent) {
     event.preventDefault(); setMessage(''); const next = { email: validateEmail(email), password: password ? undefined : 'Enter your password.' }; setErrors(next);
@@ -49,6 +50,7 @@ export function SignupPage() {
   const [errors,setErrors] = useState<Record<string,string|undefined>>({}); const [message,setMessage] = useState(''); const [busy,setBusy] = useState(false);
   if (state === 'approved') return <Navigate to="/dashboard" replace/>;
   if (state === 'admin') return <Navigate to="/admin/recruiters" replace/>;
+  if (state === 'profile-missing') return <Navigate to="/dashboard" replace/>;
   if (state === 'pending' || state === 'rejected' || state === 'unconfirmed') return <Navigate to="/access-pending" replace/>;
   async function submit(event: FormEvent) {
     event.preventDefault(); setMessage(''); const next = validateSignup(fullName,email,password,confirm); setErrors(next);
@@ -89,6 +91,7 @@ export function AccessPendingPage() {
   if(state==='signed-out') return <Navigate to="/login" replace/>;
   if(state==='approved') return <Navigate to="/dashboard" replace/>;
   if(state==='admin') return <Navigate to="/admin/recruiters" replace/>;
+  if(state==='profile-missing') return <Navigate to="/dashboard" replace/>;
   const suspended = profile?.approval_status === 'suspended';
   const rejected = state === 'rejected';
   const notice = state === 'unconfirmed' ? 'Confirm your email using the link Supabase sent you. Then return here.' : rejected ? 'Your recruiter application was reviewed and not approved. Contact a DevRank administrator if you need more information.' : suspended ? 'Recruiter access to this workspace has been suspended. Contact your DevRank administrator.' : 'Your account is registered for recruiter access and is awaiting administrator approval.';
@@ -103,6 +106,7 @@ export function AuthCallbackPage() {
   const invalidLink = query.has('error') || query.has('error_description') || query.has('error_code') || hash.has('error') || hash.has('error_description') || hash.has('error_code');
   if(state==='approved') return <Navigate to="/dashboard" replace/>;
   if(state==='admin') return <Navigate to="/admin/recruiters" replace/>;
+  if(state==='profile-missing') return <Navigate to="/dashboard" replace/>;
   if(state==='pending'||state==='unconfirmed')return <Navigate to="/access-pending" replace/>;
   const statusMessage = invalidLink || state === 'signed-out'
     ? 'This confirmation link is invalid or has expired. Request a fresh confirmation email or sign in if you have already confirmed your address.'
