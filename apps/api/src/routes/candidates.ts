@@ -5,6 +5,7 @@ import {
   candidateListQuerySchema,
   candidatePlatformSubmissionSchema,
   candidateUpdateSchema,
+  githubSyncRequestSchema,
 } from '@devrank/contracts';
 import { createCandidateController } from '../controllers/candidate-controller.js';
 import { authenticate, requireApprovedRecruiter } from '../middleware/authenticate.js';
@@ -26,6 +27,12 @@ export function createCandidatesRouter(
     validateParams(candidateIdParamsSchema),
     validateBody(candidatePlatformSubmissionSchema),
     platformController.submit,
+  );
+  router.post(
+    '/:id/platform-data/github-sync',
+    validateParams(candidateIdParamsSchema),
+    validateBody(githubSyncRequestSchema),
+    platformController.syncGitHub,
   );
   router.get('/:id', validateParams(candidateIdParamsSchema), controller.get);
   router.patch('/:id', validateParams(candidateIdParamsSchema), validateBody(candidateUpdateSchema), controller.update);

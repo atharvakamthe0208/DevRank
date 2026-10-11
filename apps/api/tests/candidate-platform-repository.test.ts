@@ -93,4 +93,40 @@ describe('candidate platform evidence repository', () => {
       message: 'Unable to save platform data right now',
     });
   });
+
+  it('verifies candidate ownership and persists the validated GitHub profile snapshot', async () => {
+    const profile = {
+      username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 8,
+      followers: 10, following: 5, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+    };
+    const { client, candidateQuery, evidenceQuery } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: { id: evidenceId, candidate_id: candidateId, created_at: '2026-10-11T12:00:00.000Z' }, error: null },
+    );
+    const getGitHubProfile = vi.fn(async () => profile);
+    const repository = createCandidatePlatformRepository(() => client, getGitHubProfile);
+
+    const result = await repository.syncGitHub(auth, candidateId, 'octocat');
+
+    expect(candidateQuery.eq.mock.calls).toEqual([['id', candidateId], ['owner_id', ownerId]]);
+    expect(getGitHubProfile).toHaveBeenCalledWith('octocat');
+    expect(evidenceQuery.insert).toHaveBeenCalledWith(expect.objectContaining({
+      candidate_id: candidateId,
+      owner_id: ownerId,
+      source: 'github',
+      availability: 'available',
+      raw_evidence: { username: 'octocat', profileUrl: 'https://github.com/octocat' },
+      normalized_evidence: profile,
+    }));
+    expect(result).toMatchObject({ id: evidenceId, candidateId, provenance: 'github_api', profile });
+  });
+
+  it('does not call GitHub or write evidence for a candidate outside the recruiter scope', async () => {
+    const { client } = createClient({ data: null, error: null }, undefined);
+    const getGitHubProfile = vi.fn();
+    const repository = createCandidatePlatformRepository(() => client, getGitHubProfile);
+    await expect(repository.syncGitHub(auth, candidateId, 'octocat')).rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
+    expect(getGitHubProfile).not.toHaveBeenCalled();
+    expect(client.from).toHaveBeenCalledTimes(1);
+  });
 });
