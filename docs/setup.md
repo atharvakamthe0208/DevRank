@@ -6,7 +6,7 @@ Use Node.js 20 or newer (under 25) and npm. From the repository root run `npm in
 
 ## Commands
 
-- `npm run dev` starts Vite at `http://localhost:5173` and Express at `http://localhost:3000`.
+- `npm run dev` first builds shared contracts, then starts Vite at `http://localhost:5173` and Express at `http://localhost:3000`. `npm run dev:web` and `npm run dev:api` also build the shared contracts before starting one server.
 - `npm run dev:api` starts only the API; `npm run build --workspace @devrank/api` compiles it and `npm run start --workspace @devrank/api` runs the compiled server.
 - `npm run build` builds all workspaces with build scripts.
 - `npm run typecheck` runs configured TypeScript checks.

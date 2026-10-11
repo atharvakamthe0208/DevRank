@@ -6,6 +6,7 @@ export * from './comparison.js';
 export * from './evaluation.js';
 export * from './evaluation-response.js';
 export * from './evidence.js';
+export * from './github.js';
 export * from './platform-data.js';
 export * from './ranking.js';
 export * from './scoring.js';

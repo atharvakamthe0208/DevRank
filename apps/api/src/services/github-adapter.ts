@@ -58,7 +58,12 @@ export function createGitHubAdapter(fetcher: FetchLike = fetch, token: string | 
 
     if (!response.ok) {
       if (response.status === 404) throw new HttpError(404, 'GITHUB_USER_NOT_FOUND', 'GitHub user was not found');
-      if (response.status === 429 || (response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0')) {
+      const isRateLimit = response.status === 429 || (response.status === 403 && (
+        response.headers.get('x-ratelimit-remaining') === '0'
+        || response.headers.has('retry-after')
+        || await hasRateLimitMessage(response)
+      ));
+      if (isRateLimit) {
         throw new HttpError(429, 'GITHUB_RATE_LIMITED', 'GitHub API rate limit reached; retry later');
       }
       if (response.status === 401) throw new HttpError(502, 'GITHUB_AUTHENTICATION_FAILED', 'GitHub rejected the configured API credentials');
@@ -120,6 +125,16 @@ export function createGitHubAdapter(fetcher: FetchLike = fetch, token: string | 
       });
     },
   };
+}
+
+async function hasRateLimitMessage(response: Response): Promise<boolean> {
+  try {
+    const body: unknown = await response.clone().json();
+    if (typeof body !== 'object' || body === null || !('message' in body) || typeof body.message !== 'string') return false;
+    return /secondary rate limit|rate limit exceeded/i.test(body.message);
+  } catch {
+    return false;
+  }
 }
 
 const githubUserSchema = z.object({

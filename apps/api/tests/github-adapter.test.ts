@@ -92,6 +92,14 @@ describe('official GitHub REST adapter', () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({}, 403, { 'x-ratelimit-remaining': '0' }));
     const adapter = createGitHubAdapter(fetcher);
     await expect(adapter.getProfile('octocat')).rejects.toMatchObject({ statusCode: 429, code: 'GITHUB_RATE_LIMITED' });
+
+    const secondaryByHeader = createGitHubAdapter(vi.fn<typeof fetch>()
+      .mockResolvedValue(response({}, 403, { 'x-ratelimit-remaining': '99', 'retry-after': '60' })));
+    await expect(secondaryByHeader.getProfile('octocat')).rejects.toMatchObject({ statusCode: 429, code: 'GITHUB_RATE_LIMITED' });
+
+    const secondaryByMessage = createGitHubAdapter(vi.fn<typeof fetch>()
+      .mockResolvedValue(response({ message: 'You have exceeded a secondary rate limit.' }, 403)));
+    await expect(secondaryByMessage.getProfile('octocat')).rejects.toMatchObject({ statusCode: 429, code: 'GITHUB_RATE_LIMITED' });
   });
 
   it('sanitizes network and timeout failures', async () => {
