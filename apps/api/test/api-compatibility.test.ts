@@ -31,7 +31,7 @@ describe('existing API compatibility', () => {
     try {
       const response = await fetch(`http://127.0.0.1:${address.port}/api/evaluations`);
       expect(response.status).toBe(404);
-      expect(await response.json()).toEqual({ error: { code: 'NOT_FOUND', message: 'Route not found' } });
+      expect(await response.json()).toEqual({ error: { code: 'NOT_FOUND', message: 'Route GET /api/evaluations was not found' } });
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
