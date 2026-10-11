@@ -7,7 +7,8 @@ export const candidateSchema = z.object({
   githubUsername: z.string().optional(),
   leetcodeUsername: z.string().optional(),
   hackerrankUsername: z.string().optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  // PostgreSQL/PostgREST timestamptz values may use offsets such as +00:00 rather than Z.
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
 });
 export type Candidate = z.infer<typeof candidateSchema>;

@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../src/app.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
 import { validateBody } from '../src/middleware/validate-body.js';
+import { createAuthenticate } from '../src/middleware/authenticate.js';
+import { createApiRouter } from '../src/routes/index.js';
 
 async function startServer(application: express.Express): Promise<{ server: Server; origin: string }> {
   const server = application.listen(0, '127.0.0.1');
@@ -24,6 +26,9 @@ describe('API HTTP conventions', () => {
   let apiOrigin: string;
   let validationServer: Server;
   let validationOrigin: string;
+  let authServer: Server;
+  let authOrigin: string;
+  const verifiedTokens: string[] = [];
 
   beforeAll(async () => {
     ({ server: apiServer, origin: apiOrigin } = await startServer(app));
@@ -35,10 +40,17 @@ describe('API HTTP conventions', () => {
     });
     validationApp.use(errorHandler);
     ({ server: validationServer, origin: validationOrigin } = await startServer(validationApp));
+
+    const authApp = express();
+    authApp.use('/api', createApiRouter(createAuthenticate(async (token) => {
+      verifiedTokens.push(token);
+      return { userId: 'user-1', email: 'recruiter@example.com', emailConfirmed: true, profile: { id: 'user-1', display_name: 'Recruiter', role: 'recruiter', approval_status: 'pending' } };
+    })));
+    ({ server: authServer, origin: authOrigin } = await startServer(authApp));
   });
 
   afterAll(async () => {
-    await Promise.all([closeServer(apiServer), closeServer(validationServer)]);
+    await Promise.all([closeServer(apiServer), closeServer(validationServer), closeServer(authServer)]);
   });
 
   it('returns the health response at /api/health', async () => {
@@ -47,10 +59,41 @@ describe('API HTTP conventions', () => {
     expect(await response.json()).toEqual({ status: 'ok' });
   });
 
+  it('allows a moved local Vite port and answers auth preflight requests', async () => {
+    const response = await fetch(`${apiOrigin}/api/auth/me`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5174',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5174');
+    expect(response.headers.get('access-control-allow-headers')).toContain('Authorization');
+  });
+
+  it('does not grant CORS access to arbitrary origins', async () => {
+    const response = await fetch(`${apiOrigin}/api/health`, { headers: { Origin: 'https://attacker.example' } });
+    expect(response.status).toBe(200);
+    expect(response.headers.has('access-control-allow-origin')).toBe(false);
+  });
+
   it('denies admin application routes without an authenticated administrator token', async () => {
     const response = await fetch(`${apiOrigin}/api/admin/recruiters`);
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ error: { code: 'UNAUTHENTICATED' } });
+  });
+
+  it('verifies the bearer token before returning the caller recruiter profile at /auth/me', async () => {
+    const response = await fetch(`${authOrigin}/api/auth/me`, { headers: { Authorization: 'Bearer verified-test-token' } });
+    expect(response.status).toBe(200);
+    expect(verifiedTokens).toEqual(['verified-test-token']);
+    expect(await response.json()).toEqual({
+      user: { id: 'user-1', email: 'recruiter@example.com' },
+      profile: { id: 'user-1', display_name: 'Recruiter', role: 'recruiter', approval_status: 'pending' },
+      emailConfirmed: true,
+    });
   });
 
   it('uses the shared error shape for unknown routes', async () => {

@@ -15,12 +15,12 @@ The final two migrations do not drop tables or application data. The recruiter m
 
 ## Supabase Auth dashboard
 
-1. In **Project Settings → API**, copy the Project URL and the publishable key (or legacy `anon` key). Use those values in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `apps/web/.env`, and in `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the API environment. Also set `VITE_API_BASE_URL=http://localhost:3000/api` and `WEB_ORIGIN=http://localhost:5173`. Never use a secret/service-role key in the browser or these environment examples.
+1. In **Project Settings → API**, copy the Project URL and the publishable key (or legacy `anon` key). Use those values in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `apps/web/.env`, and in `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `apps/api/.env`. Also set `VITE_API_BASE_URL=http://localhost:3000/api` and `WEB_ORIGIN=http://localhost:5173` in their respective example files. The API loads `apps/api/.env` explicitly, while Vite reads `apps/web/.env`; root `.env` is not loaded by these workspace scripts. Never use a secret/service-role key in the browser or these environment examples.
 2. In **Authentication → Providers → Email**, enable email/password and keep email confirmation enabled. Set the minimum password length to at least 12 characters, matching the signup/reset validation in the app.
-3. In **Authentication → URL Configuration**, use `http://localhost:5173` as the local Site URL and allow these redirect URLs: `http://localhost:5173/auth/callback` and `http://localhost:5173/reset-password`. Add exact HTTPS production URLs when deploying.
+3. In **Authentication → URL Configuration**, use `http://localhost:5173` as the local Site URL and allow `http://localhost:*/auth/callback` and `http://localhost:*/reset-password` so confirmation/reset links return to the active Vite port. Supabase supports `*` wildcards in redirect URL allow-list patterns; keep production entries exact HTTPS URLs. Signup's `emailRedirectTo` and password reset's `redirectTo` use `window.location.origin`; the Supabase JS client persists sessions and detects confirmation query/hash data on `/auth/callback`.
 4. Verify the confirmation and reset email templates. Configure custom SMTP under **Project Settings → Authentication → SMTP Settings** for production delivery; no SMTP credentials are read from or stored in this repository.
 
-The target checkout contains no `.env`, `apps/web/.env`, or `apps/api/.env` file. The live Supabase URL, Auth settings, redirects, and SMTP delivery could not be verified here. Do not assume email delivery works until you test confirmation and password reset using a non-production account.
+This local checkout has ignored workspace `.env` files, and the API/web settings were checked without displaying their key values. The configured URL host is present in both workspace files; the live Supabase dashboard settings, migration state, redirect allow-list, and SMTP delivery could not be verified from this repository. Do not assume email delivery or profile trigger setup works until you test confirmation and password reset using a non-production account.
 
 ## Provision the first administrator
 
@@ -43,7 +43,7 @@ Verify that exactly the intended owner account is returned. Do not run this for 
 
 ## Test locally
 
-1. Copy `.env.example` to `.env` and `apps/web/.env.example` to `apps/web/.env`, then fill in your own Project URL and public key locally. Do not paste secrets into chat or commit populated env files.
+1. Copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env`, then fill in your own Project URL and public key locally. Do not paste secrets into chat or commit populated env files.
 2. Apply migrations in order, configure Auth redirects/confirmation, and run `npm run dev` from the repository root.
 3. Open `http://localhost:5173/signup`, create a recruiter account, then confirm the email using Supabase's message. The account should see the pending-access page.
 4. Provision the first administrator as above. As that administrator, open `/admin/recruiters`, approve the test recruiter, and confirm it appears as approved.

@@ -1,37 +1,17 @@
-import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { candidates, candidateStats, type Candidate } from '../candidates/mockCandidates';
-
-function ScoreBadge({ score }: { score: number }) {
-  return <span className={`score-badge ${score >= 85 ? 'score-high' : score >= 75 ? 'score-mid' : 'score-low'}`}><span />{score}</span>;
-}
-
-function CandidateRow({ person, index }: { person: Candidate; index: number }) {
-  return <tr><td><span className="row-number">0{index + 1}</span></td><td><Link className="candidate-cell" to={`/candidates/${person.id}`}><span className={`avatar avatar-${person.color}`}>{person.initials}</span><span><strong>{person.name}</strong><small>{person.email}</small></span></Link></td><td><span className="role-cell">{person.role}</span></td><td><ScoreBadge score={person.score} /></td><td><span className="trend-cell">↗ {person.trend}</span></td><td><span className="updated-cell">{person.updated}</span></td><td><Link className="row-action" to={`/candidates/${person.id}`} aria-label={`View ${person.name}`}>↗</Link></td></tr>;
-}
+import { useAuth } from '../auth/AuthProvider';
+import { useCandidates } from '../candidates/useCandidates';
 
 export function DashboardPage() {
-  const [query, setQuery] = useState('');
-  const [sort, setSort] = useState('top');
-  const visibleCandidates = useMemo(() => {
-    const filtered = candidates.filter((person) => `${person.name} ${person.role}`.toLowerCase().includes(query.toLowerCase()));
-    return [...filtered].sort((a, b) => sort === 'recent' ? a.updated.localeCompare(b.updated) : b.score - a.score);
-  }, [query, sort]);
-
+  const { profile } = useAuth();
+  const { items, total, loading, error, reload } = useCandidates(1, 5);
+  const today = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
   return <div className="dashboard-page">
-    <section className="welcome-row"><div><div className="eyebrow"><span className="eyebrow-line" /> MONDAY, OCTOBER 12, 2026</div><h1>Good morning, Aryan <span className="wave">✳</span></h1><p className="page-subtitle">Here’s what’s happening with your candidates today.</p></div><button className="primary-button" type="button" onClick={() => document.getElementById('candidate-search')?.focus()}><span>＋</span> Add candidate</button></section>
-    <section className="stat-grid" aria-label="Candidate statistics">
-      <article className="stat-card"><div className="stat-top"><span>Total candidates</span><span className="stat-icon icon-lavender">♙</span></div><div className="stat-value">{String(candidateStats.total).padStart(2, '0')}<span className="stat-change">↗ 12.8%</span></div><div className="stat-foot">vs. last month <span className="mini-bars"><i/><i/><i/><i/><i/><i/><i/></span></div></article>
-      <article className="stat-card"><div className="stat-top"><span>Average score</span><span className="stat-icon icon-mint">◉</span></div><div className="stat-value">{candidateStats.average}<small className="out-of">/ 100</small><span className="stat-change">↗ 4.2%</span></div><div className="stat-foot">across all candidates <span className="mini-bars green-bars"><i/><i/><i/><i/><i/><i/><i/></span></div></article>
-      <article className="stat-card"><div className="stat-top"><span>Top performer</span><span className="stat-icon icon-yellow">✦</span></div><div className="top-performer"><span className="avatar avatar-lavender">{candidateStats.top.initials}</span><span><strong>{candidateStats.top.name}</strong><small>Score {candidateStats.top.score}</small></span></div><div className="stat-foot">Leading this month <span className="mini-bars yellow-bars"><i/><i/><i/><i/><i/><i/><i/></span></div></article>
-      <article className="stat-card"><div className="stat-top"><span>Active this week</span><span className="stat-icon icon-peach">◷</span></div><div className="stat-value">{candidateStats.activeThisWeek}<span className="stat-change">↗ 8.3%</span></div><div className="stat-foot">candidates evaluated <span className="mini-bars peach-bars"><i/><i/><i/><i/><i/><i/><i/></span></div></article>
+    <section className="welcome-row"><div><div className="eyebrow"><span className="eyebrow-line" /> {today.toUpperCase()}</div><h1>Welcome{profile?.display_name ? `, ${profile.display_name.split(/\s+/)[0]}` : ''} <span className="wave">✳</span></h1><p className="page-subtitle">Your recruiter workspace and candidate records.</p></div><Link className="primary-button link-button" to="/candidates/new"><span>＋</span> Add candidate</Link></section>
+    <section className="workspace-summary"><div className="workspace-summary-icon">♙</div><div><span className="summary-label">CANDIDATES IN YOUR WORKSPACE</span><strong>{loading ? '…' : error ? '—' : total}</strong><p>{error ? 'We could not load the current count.' : 'Candidate profiles are private to your recruiter account.'}</p></div><Link to="/dashboard/candidates" className="view-all">Manage candidates <span>→</span></Link></section>
+    <section className="table-section"><div className="section-heading"><div><div className="section-title-row"><h2>Recently added</h2><span className="count-pill">{loading ? '…' : Math.min(total, 5)}</span></div><p>Latest candidate records in your workspace</p></div><Link to="/dashboard/candidates" className="view-all">View all candidates <span>→</span></Link></div>
+      {loading ? <div className="candidate-list-state" role="status">Loading candidates…</div> : error ? <div className="candidate-list-state" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={reload}>Try again</button></div> : items.length === 0 ? <div className="candidate-list-state"><span className="placeholder-mark">♙</span><h3>No candidates yet</h3><p>Add your first candidate to get started.</p><Link className="primary-button link-button" to="/candidates/new">Add candidate</Link></div> : <div className="candidate-management-table-wrap"><table className="candidate-management-table"><thead><tr><th>Candidate</th><th>Developer profiles</th><th>Added</th><th><span className="sr-only">Details</span></th></tr></thead><tbody>{items.map((candidate) => <tr key={candidate.id}><td><Link className="management-candidate" to={`/candidates/${candidate.id}`}><span className="avatar avatar-user">{candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span><strong>{candidate.name}</strong><small>{candidate.email || 'Email not provided'}</small></span></Link></td><td className="candidate-profile-count">{[candidate.githubUsername, candidate.leetcodeUsername, candidate.hackerrankUsername].filter(Boolean).length} linked</td><td><time dateTime={candidate.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(candidate.createdAt))}</time></td><td><Link className="row-action" to={`/candidates/${candidate.id}`} aria-label={`View ${candidate.name}`}>↗</Link></td></tr>)}</tbody></table></div>}
     </section>
-
-    <section className="table-section"><div className="section-heading"><div><div className="section-title-row"><h2>Top candidates</h2><span className="count-pill">{candidates.length}</span></div><p>Ranked by overall candidate score</p></div><Link to="/dashboard/candidates" className="view-all">View all candidates <span>→</span></Link></div>
-      <div className="table-toolbar"><label className="search-box"><span aria-hidden="true">⌕</span><input id="candidate-search" type="search" placeholder="Search candidates..." value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="toolbar-right"><button className="filter-button" type="button">☷ <span>Filter</span></button><label className="sort-select"><span>Sort by</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="top">Top score</option><option value="recent">Recently updated</option></select><span className="select-chevron">⌄</span></label></div></div>
-      <div className="table-scroll"><table className="candidate-table"><thead><tr><th>#</th><th>Candidate</th><th>Role</th><th>Score <span className="sort-caret">↕</span></th><th>Trend</th><th>Last activity</th><th aria-label="Actions" /></tr></thead><tbody>{visibleCandidates.map((person, index) => <CandidateRow key={person.id} person={person} index={index} />)}{visibleCandidates.length === 0 && <tr><td colSpan={7} className="empty-state">No candidates match “{query}”. Try another name or role.</td></tr>}</tbody></table></div>
-      <div className="table-footer"><span>Showing <strong>{visibleCandidates.length}</strong> of {candidates.length} demo candidates</span><div className="pagination"><button disabled aria-label="Previous page">‹</button><button className="current-page">1</button><button disabled aria-label="Next page">›</button></div></div>
-    </section>
-    <p className="mock-note"><span>ⓘ</span> This is a demo workspace. Candidate data and scores shown are sample information.</p>
+    <p className="candidate-management-note"><span aria-hidden="true">ⓘ</span> Evaluation scores and candidate rankings will appear when that workflow is available.</p>
   </div>;
 }

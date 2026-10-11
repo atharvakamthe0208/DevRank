@@ -2,12 +2,12 @@ import { once } from 'node:events';
 import type { Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Candidate } from '@devrank/contracts';
+import { candidateListResponseSchema, candidateSchema, type Candidate } from '@devrank/contracts';
 import { createCandidateController } from '../src/controllers/candidate-controller.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
 import { HttpError } from '../src/middleware/http-error.js';
 import { validateBody } from '../src/middleware/validate-body.js';
-import { candidateRepository, type CandidateRepository } from '../src/repositories/candidate-repository.js';
+import { candidateDatabaseDiagnostic, candidateRepository, type CandidateRepository } from '../src/repositories/candidate-repository.js';
 import { createCandidatesRouter } from '../src/routes/candidates.js';
 import { createAuthenticate } from '../src/middleware/authenticate.js';
 
@@ -19,9 +19,27 @@ const candidate: Candidate = {
   name: 'Taylor Example',
   email: 'taylor@example.com',
   githubUsername: 'taylor-dev',
-  createdAt: '2026-10-10T12:00:00.000Z',
-  updatedAt: '2026-10-10T12:00:00.000Z',
+  createdAt: '2026-10-10T12:00:00.000+00:00',
+  updatedAt: '2026-10-10T12:00:00.000+00:00',
 };
+
+describe('candidate database diagnostics', () => {
+  it.each([
+    [{ code: 'PGRST204', message: 'sensitive column and SQL detail' }, { category: 'schema', code: 'PGRST204' }],
+    [{ code: '42703', message: 'sensitive column and SQL detail' }, { category: 'schema', code: '42703' }],
+    [{ code: '42501', message: 'sensitive RLS detail' }, { category: 'permission_or_rls', code: '42501' }],
+    [{ code: '23514', message: 'sensitive constraint detail' }, { category: 'constraint', code: '23514' }],
+    [{ code: 'PGRST116', message: 'sensitive PostgREST detail', status: 406 }, { category: 'postgrest_other', code: 'PGRST116', httpStatus: 406 }],
+    [{ code: 'PGRST301', message: 'sensitive JWT detail', status: 401 }, { category: 'invalid_credentials', code: 'PGRST301', httpStatus: 401 }],
+    [{ code: '42501', status: 403 }, { category: 'permission_or_rls', code: '42501', httpStatus: 403 }],
+    [{ cause: { code: 'ENOTFOUND', hostname: 'secret-hostname.example' } }, { category: 'network_dns_tls', code: 'ENOTFOUND' }],
+    [{ cause: { code: 'ERR_TLS_CERT_ALTNAME_INVALID' } }, { category: 'network_dns_tls', code: 'ERR_TLS_CERT_ALTNAME_INVALID' }],
+    [{ message: 'secret-bearing provider response' }, { category: 'connection_or_unknown' }],
+  ])('classifies only safe metadata from a database error', (error, expected) => {
+    expect(candidateDatabaseDiagnostic(error)).toEqual(expected);
+    expect(JSON.stringify(candidateDatabaseDiagnostic(error))).not.toMatch(/sensitive|secret/i);
+  });
+});
 
 async function startServer(application: express.Express): Promise<{ server: Server; origin: string }> {
   const server = application.listen(0, '127.0.0.1');
@@ -45,8 +63,8 @@ function createTestRepository(): CandidateRepository {
       if (auth.userId === otherUserId) throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to list candidates right now');
       return { items: [candidate], page: query.page, pageSize: query.pageSize, total: 1 };
     }),
-    get: vi.fn(async (auth) => {
-      if (auth.userId !== ownerId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+    get: vi.fn(async (auth, id) => {
+      if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       return candidate;
     }),
     update: vi.fn(async (auth, _id, input) => {
@@ -127,12 +145,29 @@ describe('candidate API authorization and CRUD', () => {
     });
     expect(response.status).toBe(201);
     const body = await response.text();
-    expect(JSON.parse(body)).toMatchObject({ id: candidateId, name: 'Taylor Example' });
+    const payload: unknown = JSON.parse(body);
+    expect(candidateSchema.safeParse(payload).success).toBe(true);
+    expect(payload).toMatchObject({
+      id: candidateId,
+      name: 'Taylor Example',
+      createdAt: '2026-10-10T12:00:00.000+00:00',
+      updatedAt: '2026-10-10T12:00:00.000+00:00',
+    });
     expect(body).not.toContain('owner_id');
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({ userId: ownerId, accessToken: 'valid-owner-token' }),
       { name: 'Taylor Example', email: 'taylor@example.com', githubUsername: 'taylor-dev' },
     );
+  });
+
+  it('returns a safe database failure when candidate creation cannot be persisted', async () => {
+    const response = await fetch(`${origin}/api/candidates`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer valid-other-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Taylor Example' }),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: 'DATABASE_UNAVAILABLE' } });
   });
 
   it.each([
@@ -155,11 +190,35 @@ describe('candidate API authorization and CRUD', () => {
       headers: { Authorization: 'Bearer valid-owner-token' },
     });
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ items: [candidate], page: 2, pageSize: 10, total: 1 });
+    const payload: unknown = await response.json();
+    expect(candidateListResponseSchema.safeParse(payload).success).toBe(true);
+    expect(payload).toMatchObject({ items: [candidate], page: 2, pageSize: 10, total: 1 });
     expect(repository.list).toHaveBeenCalledWith(
       expect.objectContaining({ userId: ownerId }),
       { page: 2, pageSize: 10 },
     );
+  });
+
+  it('returns an empty page from the list endpoint without inventing candidates', async () => {
+    vi.mocked(repository.list).mockResolvedValueOnce({ items: [], page: 1, pageSize: 20, total: 0 });
+    const response = await fetch(`${origin}/api/candidates`, { headers: { Authorization: 'Bearer valid-owner-token' } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ items: [], page: 1, pageSize: 20, total: 0 });
+  });
+
+  it('returns the owner candidate details from the authenticated details endpoint', async () => {
+    const response = await fetch(`${origin}/api/candidates/${candidateId}`, { headers: { Authorization: 'Bearer valid-owner-token' } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(candidate);
+    expect(repository.get).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId }), candidateId);
+  });
+
+  it('returns not found and requires authentication for candidate details', async () => {
+    const missing = await fetch(`${origin}/api/candidates/00000000-0000-4000-8000-000000000001`, { headers: { Authorization: 'Bearer valid-owner-token' } });
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
+    const unauthenticated = await fetch(`${origin}/api/candidates/${candidateId}`);
+    expect(unauthenticated.status).toBe(401);
   });
 
   it('validates IDs and hides another user candidate as not found', async () => {

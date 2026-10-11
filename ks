@@ -1,0 +1,258 @@
+warning: in the working copy of '.env.example', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/app/router.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/features/auth/AuthPages.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/features/auth/AuthProvider.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/web/src/features/dashboard/DashboardPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/authentication.md', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/.env.example b/.env.example[m
+[1mindex 90fca48..982069e 100644[m
+[1m--- a/.env.example[m
+[1m+++ b/.env.example[m
+[36m@@ -1,12 +1,4 @@[m
+[31m-# Frontend (Vite exposes VITE_* values to browsers; use the Supabase publishable/anon key only)[m
+[31m-VITE_API_BASE_URL=http://localhost:3000/api[m
+[31m-VITE_SUPABASE_URL=https://your-project.supabase.co[m
+[31m-VITE_SUPABASE_ANON_KEY=your-public-anon-key[m
+[31m-[m
+[31m-# Backend (server only; token verification uses the publishable/anon key, never a service-role key)[m
+[31m-API_PORT=3000[m
+[31m-NODE_ENV=development[m
+[31m-WEB_ORIGIN=http://localhost:5173[m
+[31m-SUPABASE_URL=https://your-project.supabase.co[m
+[31m-SUPABASE_ANON_KEY=your-public-anon-key[m
+[31m-GITHUB_TOKEN=[m
+[32m+[m[32m# Environment configuration is workspace-specific. These variables are not[m
+[32m+[m[32m# loaded from the repository root by `npm run dev`.[m
+[32m+[m[32m# API: copy apps/api/.env.example to apps/api/.env.[m
+[32m+[m[32m# Web: copy apps/web/.env.example to apps/web/.env.[m
+[1mdiff --git a/README.md b/README.md[m
+[1mindex ebd2ba3..a0b3a8f 100644[m
+[1m--- a/README.md[m
+[1m+++ b/README.md[m
+[36m@@ -36,7 +36,7 @@[m [mSee [docs/setup.md](docs/setup.md) for setup and [docs/team-workflow.md](docs/te[m
+ npm install[m
+ ```[m
+ [m
+[31m-Copy `.env.example` to `.env` for the API and to `apps/web/.env` for Vite. Replace placeholders locally; never commit populated environment files. Start both development servers with:[m
+[32m+[m[32mCopy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env`. The API loads its own workspace `.env` regardless of the shell's current directory; Vite loads the web workspace `.env`. Root `.env` is not used by the workspace servers. Replace placeholders locally; never commit populated environment files. Start both development servers with:[m
+ [m
+ ```sh[m
+ npm run dev[m
+[36m@@ -53,4 +53,4 @@[m [mThe web app is served at `http://localhost:5173`; the API health endpoint is `ht[m
+ [m
+ ## Current scope and next steps[m
+ [m
+[31m-The repository includes the React dashboard and candidate UI, recruiter Supabase Auth flows, a token-verifying API with recruiter approval gates, candidate CRUD, and migration proposals for approved-recruiter RLS and admin-managed applications. Scoring and AI remain in progress. Migrations are not applied automatically; configure Supabase using [docs/authentication.md](docs/authentication.md). See [docs/architecture.md](docs/architecture.md) for boundaries and [docs/team-workflow.md](docs/team-workflow.md) for Git conventions.[m
+[32m+[m[32mThe repository includes recruiter Supabase Auth flows, an API-backed candidate list/create/details workflow, a token-verifying API with recruiter approval gates, candidate CRUD, and migrations for approved-recruiter RLS and admin-managed applications. Candidate scores and role assignments are not part of the candidate CRUD model yet; scoring and AI remain in progress. Migrations are not applied automatically; configure Supabase using [docs/authentication.md](docs/authentication.md). See [docs/setup.md](docs/setup.md) for candidate routes and [docs/architecture.md](docs/architecture.md) for system boundaries.[m
+[1mdiff --git a/apps/api/package.json b/apps/api/package.json[m
+[1mindex e4340a8..3bb62b0 100644[m
+[1m--- a/apps/api/package.json[m
+[1m+++ b/apps/api/package.json[m
+[36m@@ -7,7 +7,7 @@[m
+     "dev": "tsx watch src/server.ts",[m
+     "build": "tsc -p tsconfig.json",[m
+     "start": "node dist/server.js",[m
+[31m-    "test": "vitest run --passWithNoTests",[m
+[32m+[m[32m    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts",[m
+     "typecheck": "tsc --noEmit -p tsconfig.json"[m
+   },[m
+   "dependencies": {[m
+[1mdiff --git a/apps/api/src/app.ts b/apps/api/src/app.ts[m
+[1mindex 09c50ee..626c691 100644[m
+[1m--- a/apps/api/src/app.ts[m
+[1m+++ b/apps/api/src/app.ts[m
+[36m@@ -1,6 +1,7 @@[m
+ import cors from 'cors';[m
+ import express from 'express';[m
+ import { env } from './config/env.js';[m
+[32m+[m[32mimport { isCorsOriginAllowed } from './config/cors-policy.js';[m
+ import { errorHandler } from './middleware/error-handler.js';[m
+ import { notFoundHandler } from './middleware/not-found.js';[m
+ import { healthController } from './controllers/health.js';[m
+[36m@@ -10,7 +11,12 @@[m [mimport { githubRouter } from './routes/github.js';[m
+ [m
+ export const app = express();[m
+ app.disable('x-powered-by');[m
+[31m-app.use(cors({ origin: env.WEB_ORIGIN }));[m
+[32m+[m[32mapp.use(cors({[m
+[32m+[m[32m  origin: (origin, callback) => callback(null, isCorsOriginAllowed(origin, env.NODE_ENV, env.WEB_ORIGIN) ? origin : false),[m
+[32m+[m[32m  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],[m
+[32m+[m[32m  allowedHeaders: ['Authorization', 'Content-Type'],[m
+[32m+[m[32m  optionsSuccessStatus: 204,[m
+[32m+[m[32m}));[m
+ app.use(express.json({ limit: '1mb' }));[m
+ app.use('/api', apiRouter);[m
+ app.use('/api/candidates', candidatesRouter);[m
+[1mdiff --git a/apps/api/src/config/env.ts b/apps/api/src/config/env.ts[m
+[1mindex 6304be4..65c995b 100644[m
+[1m--- a/apps/api/src/config/env.ts[m
+[1m+++ b/apps/api/src/config/env.ts[m
+[36m@@ -1,6 +1,12 @@[m
+[31m-import 'dotenv/config';[m
+[32m+[m[32mimport { dirname, resolve } from 'node:path';[m
+[32m+[m[32mimport { fileURLToPath } from 'node:url';[m
+[32m+[m[32mimport { config as loadDotEnv } from 'dotenv';[m
+ import { z } from 'zod';[m
+ [m
+[32m+[m[32m// Resolve the API's own env file from this module, not from the caller's CWD.[m
+[32m+[m[32m// Shell-provided environment values still take precedence over values in .env.[m
+[32m+[m[32mloadDotEnv({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../.env') });[m
+[32m+[m
+ const optionalUrl = z.preprocess([m
+   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,[m
+   z.string().url().optional(),[m
+[1mdiff --git a/apps/api/src/controllers/candidate-controller.ts b/apps/api/src/controllers/candidate-controller.ts[m
+[1mindex c71193f..50da3bd 100644[m
+[1m--- a/apps/api/src/controllers/candidate-controller.ts[m
+[1m+++ b/apps/api/src/controllers/candidate-controller.ts[m
+[36m@@ -1,4 +1,6 @@[m
+ import {[m
+[32m+[m[32m  candidateListResponseSchema,[m
+[32m+[m[32m  candidateSchema,[m
+   candidateIdParamsSchema,[m
+   candidateListQuerySchema,[m
+   type CandidateListQuery,[m
+[36m@@ -8,6 +10,36 @@[m [mimport { candidateRepository, type CandidateRepository } from '../repositories/c[m
+ import { HttpError } from '../middleware/http-error.js';[m
+ import { asyncHandler } from '../utils/async-handler.js';[m
+ [m
+[32m+[m[32mconst candidateResponseFields = new Set([[m
+[32m+[m[32m  'id', 'name', 'email', 'githubUsername', 'leetcodeUsername', 'hackerrankUsername',[m
+[32m+[m[32m  'createdAt', 'updatedAt', 'items', 'page', 'pageSize', 'total',[m
+[32m+[m[32m]);[m
+[32m+[m
+[32m+[m[32mfunction invalidCandidateResponse(schema: string, issues: Array<{ path: PropertyKey[]; code: string }>): never {[m
+[32m+[m[32m  console.error('Candidate API response validation failed', {[m
+[32m+[m[32m    schema,[m
+[32m+[m[32m    issues: issues.map((issue) => ({[m
+[32m+[m[32m      path: issue.path.map((part) => typeof part === 'number'[m
+[32m+[m[32m        ? '[index]'[m
+[32m+[m[32m        : candidateResponseFields.has(String(part)) ? String(part) : '[field]').join('.'),[m
+[32m+[m[32m      code: /^[a-z0-9_]{1,40}$/i.test(issue.code) ? issue.code : 'unknown',[m
+[32m+[m[32m    })),[m
+[32m+[m[32m  });[m
+[32m+[m[32m  throw new HttpError(500, 'INVALID_API_RESPONSE', 'Candidate data could not be processed');[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction checkedCandidate(value: unknown) {[m
+[32m+[m[32m  const result = candidateSchema.safeParse(value);[m
+[32m+[m[32m  if (!result.success) return invalidCandidateResponse('candidateSchema', result.error.issues);[m
+[32m+[m[32m  return result.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction checkedCandidateList(value: unknown) {[m
+[32m+[m[32m  const result = candidateListResponseSchema.safeParse(value);[m
+[32m+[m[32m  if (!result.success) return invalidCandidateResponse('candidateListResponseSchema', result.error.issues);[m
+[32m+[m[32m  return result.data;[m
+[32m+[m[32m}[m
+[32m+[m
+ function authContext(request: Request) {[m
+   if (!request.auth) throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required');[m
+   return request.auth;[m
+[36m@@ -24,16 +56,16 @@[m [mfunction listQuery(request: Request): CandidateListQuery {[m
+ export function createCandidateController(repository: CandidateRepository = candidateRepository) {[m
+   return {[m
+     list: asyncHandler(async (request, response) => {[m
+[31m-      response.json(await repository.list(authContext(request), listQuery(request)));[m
+[32m+[m[32m      response.json(checkedCandidateList(await repository.list(authContext(request), listQuery(request))));[m
+     }),[m
+     create: asyncHandler(async (request, response) => {[m
+[31m-      response.status(201).json(await repository.create(authContext(request), request.body));[m
+[32m+[m[32m      response.status(201).json(checkedCandidate(await repository.create(authContext(request), request.body)));[m
+     }),[m
+     get: asyncHandler(async (request, response) => {[m
+[31m-      response.json(await repository.get(authContext(request), candidateId(request)));[m
+[32m+[m[32m      response.json(checkedCandidate(await repository.get(authContext(request), candidateId(request))));[m
+     }),[m
+     update: asyncHandler(async (request, response) => {[m
+[31m-      response.json(await repository.update(authContext(request), candidateId(request), request.body));[m
+[32m+[m[32m      response.json(checkedCandidate(await repository.update(authContext(request), candidateId(request), request.body)));[m
+     }),[m
+     archive: asyncHandler(async (request, response) => {[m
+       await repository.archive(authContext(request), candidateId(request));[m
+[1mdiff --git a/apps/api/src/repositories/candidate-repository.ts b/apps/api/src/repositories/candidate-repository.ts[m
+[1mindex 9908669..59bee5a 100644[m
+[1m--- a/apps/api/src/repositories/candidate-repository.ts[m
+[1m+++ b/apps/api/src/repositories/candidate-repository.ts[m
+[36m@@ -27,7 +27,7 @@[m [mexport interface CandidateRepository {[m
+ }[m
+ [m
+ function toCandidate(row: CandidateRow): ReturnType<typeof candidateSchema.parse> {[m
+[31m-  return candidateSchema.parse({[m
+[32m+[m[32m  const result = candidateSchema.safeParse({[m
+     id: row.id,[m
+     name: row.full_name,[m
+     ...(row.email ? { email: row.email } : {}),[m
+[36m@@ -37,10 +37,99 @@[m [mfunction toCandidate(row: CandidateRow): ReturnType<typeof candidateSchema.parse[m
+     createdAt: row.created_at,[m
+     updatedAt: row.updated_at,[m
+   });[m
+[32m+[m[32m  if (!result.success) {[m
+[32m+[m[32m    const allowedFields = new Set(['id', 'name', 'email', 'githubUsername', 'leetcodeUsername', 'hackerrankUsername', 'createdAt', 'updatedAt']);[m
+[32m+[m[32m    console.error('Candidate database row validation failed', {[m
+[32m+[m[32m      schema: 'candidateSchema',[m
+[32m+[m[32m      issues: result.error.issues.map((issue) => ({[m
+[32m+[m[32m        path: issue.path.map((part) => typeof part === 'string' && allowedFields.has(part) ? part : '[field]').join('.'),[m
+[32m+[m[32m        code: /^[a-z0-9_]{1,40}$/i.test(issue.code) ? issue.code : 'unknown',[m
+[32m+[m[32m      })),[m
+[32m+[m[32m    });[m
+[32m+[m[32m    throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Candidate data could not be processed');[m
+[32m+[m[32m  }[m
+[32m+[m[32m  return result.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mtype DatabaseCategory =[m
+[32m+[m[32m  | 'network_dns_tls'[m
+[32m+[m[32m  | 'invalid_credentials'[m
+[32m+[m[32m  | 'constraint'[m
+[32m+[m[32m  | 'permission_or_rls'[m
+[32m+[m[32m  | 'schema'[m
+[32m+[m[32m  | 'postgrest_other'[m
+[32m+[m[32m  | 'connection_or_unknown';[m
+[32m+[m[32mtype DatabaseDiagnostic = { category: DatabaseCategory; code?: string; httpStatus?: number };[m
+[32m+[m[32mtype DatabaseFailureSource = 'supabase_response' | 'thrown_exception';[m
+[32m+[m
+[32m+[m[32mfunction safeErrorName(error: unknown): string {[m
+[32m+[m[32m  if (typeof error !== 'object' || error === null) return 'non_error_throw';[m
+[32m+[m[32m  const rawName = 'name' in error && typeof error.name === 'string'[m
+[32m+[m[32m    ? error.name[m
+[32m+[m[32m    : error instanceof Error[m
+[32m+[m[32m      ? error.constructor.name[m
+[32m+[m[32m      : undefined;[m
+[32m+[m[32m  return rawName && /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(rawName)[m
+[32m+[m[32m    ? rawName[m
+[32m+[m[32m    : error instanceof Error ? 'Error' : 'structured_error';[m
+ }[m
+ [m
+[31m-function databaseError(error: unknown, operation: string): never {[m
+[31m-  if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {[m
+[32m+[m[32m/** Return only non-sensitive database metadata. Never log provider messages or request data. */[m
+[32m+[m[32mexport function candidateDatabaseDiagnostic(error: unknown): DatabaseDiagnostic {[m
+[32m+[m[32m  const chain: object[] = [];[m
+[32m+[m[32m  let current: unknown = error;[m
+[32m+[m[32m  for (let depth = 0; depth < 5 && typeof current === 'object' && current !== null && !chain.includes(current); depth++) {[m
+[32m+[m[32m    chain.push(current);[m
+[32m+[m[32m    current = 'cause' in current ? current.cause : undefined;[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  const safeCode = (value: unknown) => typeof value === 'string' && /^[A-Z0-9_]{1,32}$/i.test(value) ? value : undefined;[m
+[32m+[m[32m  const code = chain.map((item) => 'code' in item ? safeCode(item.code) : undefined).find(Boolean);[m
+[32m+[m[32m  const statusValue = chain.map((item) => {[m
+[32m+[m[32m    if ('status' in item && typeof item.status === 'number') return item.status;[m
+[32m+[m[32m    if ('statusCode' in item && typeof item.statusCode === 'number') return item.statusCode;[m
+[32m+[m[32m    if ('response' in item && typeof item.response === 'object' && item.response !== null && 'status' in item.response && typeof item.response.status === 'number') return item.response.status;[m
+[32m+[m[32m    return undefined;[m
+[32m+[m[32m  }).find((status) => status !== undefined);[m
+[32m+[m[32m  const httpStatus = statusValue !== undefined && statusValue >= 100 && statusValue <= 599 ? statusValue : undefined;[m
+[32m+[m[32m  const diagnostic = (category: DatabaseCategory): DatabaseDiagnostic => ({[m
+[32m+[m[32m    category,[m
+[32m+[m[32m    ...(code ? { code } : {}),[m
+[32m+[m[32m    ...(httpStatus !== undefined ? { httpStatus } : {}),[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  const networkCodes = new Set([[m
+[32m+[m[32m    'ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH',[m
+[32m+[m[32m    'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET', 'ERR_TLS_CERT_ALTNAME_INVALID', 'CERT_HAS_EXPIRED',[m
+[32m+[m[32m    'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN',[m
+[32m+[m[32m  ]);[m
+[32m+[m[32m  if (chain.so
