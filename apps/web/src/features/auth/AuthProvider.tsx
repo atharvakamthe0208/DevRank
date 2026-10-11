@@ -3,9 +3,10 @@ import type { Session } from '@supabase/supabase-js';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { supabase } from '../../lib/supabase/client';
 import { clearPasswordRecovery, isPasswordRecoveryForUser, rememberPasswordRecovery } from './password-recovery';
+import { classifyRecruiterAccess, type RecruiterProfile } from './access-state';
 
-type Profile = { id: string; display_name: string | null; role: 'recruiter' | 'admin'; approval_status: 'pending' | 'approved' | 'rejected' | 'suspended' } | null;
-type AuthState = 'loading' | 'signed-out' | 'approved' | 'admin' | 'pending' | 'rejected' | 'unconfirmed' | 'error';
+type Profile = RecruiterProfile | null;
+type AuthState = 'loading' | 'signed-out' | 'approved' | 'admin' | 'pending' | 'rejected' | 'unconfirmed' | 'profile-missing' | 'error';
 type AuthContextValue = {
   state: AuthState; session: Session | null; profile: Profile; error: string;
   passwordRecovery: boolean; clearPasswordRecovery: () => void;
@@ -32,12 +33,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const result = await apiRequest<{ user: { id: string }; profile: Profile; emailConfirmed: boolean }>('/auth/me', undefined, nextSession.access_token);
       if (currentVerification !== verificationId.current) return;
       setProfile(result.profile);
-      if (!result.profile) { setError('Your account profile is missing. Contact the DevRank project administrator.'); setState('error'); }
-      else if (!result.emailConfirmed) setState('unconfirmed');
-      else if (result.profile.role === 'admin' && result.profile.approval_status === 'approved') setState('admin');
-      else if (result.profile.role === 'recruiter' && result.profile.approval_status === 'approved') setState('approved');
-      else if (result.profile.approval_status === 'rejected') setState('rejected');
-      else setState('pending');
+      const accessState = classifyRecruiterAccess(result.profile, result.emailConfirmed);
+      setState(accessState);
+      if (accessState === 'profile-missing') setError('Your authenticated account has no recruiter profile. Contact the DevRank project administrator.');
     } catch (cause) {
       if (currentVerification !== verificationId.current) return;
       if (cause instanceof ApiRequestError && cause.status === 401) {

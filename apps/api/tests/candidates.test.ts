@@ -118,13 +118,21 @@ describe('candidate API authorization and CRUD', () => {
   );
 
   it('handles an authentication provider outage without exposing provider details', async () => {
-    const response = await fetch(`${origin}/api/candidates`, {
-      headers: { Authorization: 'Bearer auth-provider-failure' },
-    });
-    expect(response.status).toBe(503);
-    const body = await response.text();
-    expect(body).toContain('AUTH_SERVICE_UNAVAILABLE');
-    expect(body).not.toContain('sensitive provider response');
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const response = await fetch(`${origin}/api/candidates`, {
+        headers: { Authorization: 'Bearer auth-provider-failure' },
+      });
+      expect(response.status).toBe(503);
+      const body = await response.text();
+      expect(body).toContain('AUTH_SERVICE_UNAVAILABLE');
+      expect(body).not.toContain('sensitive provider response');
+      expect(diagnostic).toHaveBeenCalledWith('DevRank authentication verification unavailable', { stage: 'custom_verifier' });
+      expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('auth-provider-failure');
+      expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('sensitive provider response');
+    } finally {
+      diagnostic.mockRestore();
+    }
   });
 
   it.each([

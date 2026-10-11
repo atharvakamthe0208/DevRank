@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseEnv } from '../src/config/env.js';
+import { mergeEnvironment, parseEnv } from '../src/config/env.js';
 import { assertSupabaseConfiguration } from '../src/config/supabase.js';
 import { isCorsOriginAllowed } from '../src/config/cors-policy.js';
 
@@ -14,6 +14,14 @@ describe('API environment configuration', () => {
 
   it('rejects invalid ports without echoing environment values', () => {
     expect(() => parseEnv({ API_PORT: 'not-a-port' })).toThrow('Invalid API environment configuration');
+  });
+
+  it('does not let a blank inherited key mask the API workspace env value', () => {
+    const source = mergeEnvironment(
+      { SUPABASE_ANON_KEY: 'local-publishable-key' },
+      { SUPABASE_ANON_KEY: '' },
+    );
+    expect(parseEnv(source).SUPABASE_ANON_KEY).toBe('local-publishable-key');
   });
 
   it('requires both Supabase URL and anonymous key when database access is requested', () => {

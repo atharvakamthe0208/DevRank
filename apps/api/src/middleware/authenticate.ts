@@ -6,30 +6,69 @@ import type { AuthContext } from '../types/auth.js';
 export type VerifiedIdentity = Omit<AuthContext, 'accessToken'>;
 export type TokenVerifier = (token: string) => Promise<VerifiedIdentity | null>;
 
-async function verifySupabaseToken(token: string): Promise<VerifiedIdentity | null> {
-  const client = getSupabaseClient(token);
-  const { data, error } = await client.auth.getUser(token);
-  if (error) {
-    const status = 'status' in error ? error.status : undefined;
-    if (typeof status === 'number' && status >= 400 && status < 500 && status !== 429) return null;
-    throw new Error('Supabase Auth verification is unavailable');
+type VerificationStage = 'configuration' | 'token_verification' | 'profile_lookup' | 'custom_verifier';
+type SupabaseClientFactory = typeof getSupabaseClient;
+
+class VerificationUnavailableError extends Error {
+  constructor(readonly stage: VerificationStage, readonly status?: number) {
+    super('Authentication verification is unavailable');
+    this.name = 'VerificationUnavailableError';
   }
-  if (!data.user) return null;
-  const { data: profile, error: profileError } = await client
-    .from('profiles')
-    .select('id, display_name, role, approval_status')
-    .eq('id', data.user.id)
-    .maybeSingle();
-  if (profileError) throw new Error('Recruiter profile lookup is unavailable');
-  return {
-    userId: data.user.id,
-    email: data.user.email ?? null,
-    emailConfirmed: Boolean(data.user.email_confirmed_at),
-    profile: profile as VerifiedIdentity['profile'],
+}
+
+function providerStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object' || !('status' in error)) return undefined;
+  const status = error.status;
+  return typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599 ? status : undefined;
+}
+
+export function createSupabaseTokenVerifier(clientFactory: SupabaseClientFactory = getSupabaseClient): TokenVerifier {
+  return async (token) => {
+    let client: ReturnType<SupabaseClientFactory>;
+    try {
+      client = clientFactory(token);
+    } catch {
+      throw new VerificationUnavailableError('configuration');
+    }
+
+    let user: { id: string; email?: string | null; email_confirmed_at?: string | null } | null;
+    try {
+      const { data, error } = await client.auth.getUser(token);
+      if (error) {
+        const status = providerStatus(error);
+        if (typeof status === 'number' && status >= 400 && status < 500 && status !== 429) return null;
+        throw new VerificationUnavailableError('token_verification', status);
+      }
+      user = data.user;
+    } catch (cause) {
+      if (cause instanceof VerificationUnavailableError) throw cause;
+      throw new VerificationUnavailableError('token_verification');
+    }
+    if (!user) return null;
+
+    let profile: VerifiedIdentity['profile'];
+    try {
+      const result = await client
+        .from('profiles')
+        .select('id, display_name, role, approval_status')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (result.error) throw new VerificationUnavailableError('profile_lookup', providerStatus(result.error));
+      profile = result.data as VerifiedIdentity['profile'];
+    } catch (cause) {
+      if (cause instanceof VerificationUnavailableError) throw cause;
+      throw new VerificationUnavailableError('profile_lookup');
+    }
+    return {
+      userId: user.id,
+      email: user.email ?? null,
+      emailConfirmed: Boolean(user.email_confirmed_at),
+      profile,
+    };
   };
 }
 
-export function createAuthenticate(verifyToken: TokenVerifier = verifySupabaseToken): RequestHandler {
+export function createAuthenticate(verifyToken: TokenVerifier = createSupabaseTokenVerifier()): RequestHandler {
   return async (request, response, next) => {
     const authorization = request.get('authorization');
     const match = authorization?.match(/^Bearer\s+([^\s]+)$/i);
@@ -48,8 +87,15 @@ export function createAuthenticate(verifyToken: TokenVerifier = verifySupabaseTo
 
       request.auth = { ...identity, accessToken };
       next();
-    } catch {
+    } catch (cause) {
       // Avoid exposing Supabase errors or credentials; distinguish outages from rejected tokens.
+      const failure = cause instanceof VerificationUnavailableError
+        ? cause
+        : new VerificationUnavailableError('custom_verifier');
+      console.error('DevRank authentication verification unavailable', {
+        stage: failure.stage,
+        ...(failure.status ? { status: failure.status } : {}),
+      });
       response.status(503).json(apiErrorSchema.parse({
         error: { code: 'AUTH_SERVICE_UNAVAILABLE', message: 'Authentication service is temporarily unavailable' },
       }));

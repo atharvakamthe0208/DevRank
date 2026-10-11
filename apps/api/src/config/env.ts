@@ -5,7 +5,15 @@ import { z } from 'zod';
 
 // Resolve the API's own env file from this module, not from the caller's CWD.
 // Shell-provided environment values still take precedence over values in .env.
-loadDotEnv({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../.env') });
+const localEnv = loadDotEnv({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../.env') });
+export function mergeEnvironment(fileValues: Record<string, string | undefined>, inheritedValues: NodeJS.ProcessEnv | Record<string, string | undefined>): Record<string, string | undefined> {
+  const merged = { ...fileValues, ...inheritedValues };
+  // A blank shell variable is not useful configuration and should not mask a valid workspace .env value.
+  for (const [name, value] of Object.entries(fileValues)) {
+    if (inheritedValues[name]?.trim() === '') merged[name] = value;
+  }
+  return merged;
+}
 
 const optionalUrl = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -38,4 +46,4 @@ export function parseEnv(source: NodeJS.ProcessEnv | Record<string, string | und
   return result.data;
 }
 
-export const env = parseEnv(process.env);
+export const env = parseEnv(mergeEnvironment(localEnv.parsed ?? {}, process.env));
