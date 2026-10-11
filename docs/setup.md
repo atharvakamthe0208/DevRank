@@ -14,7 +14,7 @@ Use Node.js 20 or newer (under 25) and npm. From the repository root run `npm in
 - `npm test --workspace @devrank/api` runs API auth, candidate, health, validation, and environment tests.
 - `npm run lint` is reserved; no linter is configured yet.
 
-The API exposes `GET /api/health` (and the legacy `GET /health`) plus authenticated candidate CRUD at `/api/candidates`. Supabase Auth and database operations require real `SUPABASE_URL` and `SUPABASE_ANON_KEY` values. Candidate requests must use a Supabase access token; the API verifies it, then forwards that user's token to PostgreSQL so RLS applies. No service-role key is used. Real Supabase authentication and connectivity are unverified until valid project credentials are configured.
+The API exposes `GET /api/health`, `GET /api/auth/me`, candidate CRUD under `/api/candidates`, and administrator-only recruiter review under `/api/admin/recruiters`. Candidate routes require a verified Supabase token, confirmed email, and approved recruiter profile. Admin routes require a verified, confirmed administrator profile and recheck authorization in database functions. Supabase connectivity remains unverified until project credentials and migrations are configured.
 
 After starting the API, verify health with `curl http://localhost:3000/api/health`; the expected response is `{"status":"ok"}`.
 
@@ -26,4 +26,6 @@ After starting the API, verify health with `curl http://localhost:3000/api/healt
 
 ## Database migration workflow
 
-Review `supabase/migrations/20261010000000_initial_devrank_schema.sql` and `supabase/migrations/20261011000000_candidate_api_fields.sql` with the team before applying them. They are version-controlled proposals, not applied migrations. Confirm the target project, inspect the SQL diff, and apply through the team's controlled Supabase migration workflow; then verify RLS and table definitions in a non-production project before production. Do not apply migrations automatically from the API or local startup.
+Review and apply the four migrations in timestamp order: initial schema, candidate API fields, recruiter authorization/RLS, then admin approval functions. The new migrations preserve table data and existing policies while adding restrictive access gates. See [Recruiter authentication](authentication.md) for project settings and the one-time first-admin provisioning process. Do not apply migrations automatically from the API or local startup. The target live database was not inspected from this checkout.
+
+Lint is not configured in this repository; `npm run lint` currently performs no lint checks.

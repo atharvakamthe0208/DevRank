@@ -1,4 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { useAuth } from '../../features/auth/AuthProvider';
 
 const navItems = [
   { to: '/dashboard', label: 'Overview', icon: '⌂' },
@@ -8,6 +10,8 @@ const navItems = [
 
 export function AppShell() {
   const location = useLocation();
+  const { profile, signOut } = useAuth();
+  const [signOutError, setSignOutError] = useState('');
   const pageTitle = location.pathname.startsWith('/candidates/')
     ? 'Candidate profile'
     : location.pathname.includes('candidates')
@@ -26,12 +30,12 @@ export function AppShell() {
         </nav>
         <div className="sidebar-bottom">
           <div className="upgrade-card"><span className="upgrade-spark">✦</span><strong>Better hiring starts here.</strong><p>Make confident decisions with candidate insights.</p><button type="button" className="text-button">Explore DevRank <span aria-hidden="true">↗</span></button></div>
-          <div className="user-mini"><div className="avatar avatar-user">AP</div><div className="user-copy"><strong>Aryan Panchal</strong><span>Admin</span></div><span className="more-dots">···</span></div>
+          <div className="user-mini"><div className="avatar avatar-user">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</div><div className="user-copy"><strong>{profile?.display_name || 'Recruiter'}</strong><span>Recruiter</span></div><button type="button" className="logout-button" onClick={() => { setSignOutError(''); void signOut().catch(() => setSignOutError('Could not sign out. Check your connection and try again.')); }}>Log out</button></div>
         </div>
       </aside>
       <div className="main-column">
-        <header className="topbar"><div className="mobile-brand"><span className="brand-mark">d.</span> devrank<span className="brand-period">.</span></div><div className="breadcrumb"><span>Workspace</span><span className="crumb-slash">/</span><strong>{pageTitle}</strong></div><div className="topbar-actions"><span className="data-chip"><i /> Demo workspace</span><button className="icon-button notification-button" aria-label="Notifications">♧<i /></button><div className="avatar avatar-user top-avatar">AP</div></div></header>
-        <main className="page-content"><Outlet /></main>
+        <header className="topbar"><div className="mobile-brand"><span className="brand-mark">d.</span> devrank<span className="brand-period">.</span></div><div className="breadcrumb"><span>Workspace</span><span className="crumb-slash">/</span><strong>{pageTitle}</strong></div><div className="topbar-actions"><span className="data-chip"><i /> Recruiter workspace</span><button className="logout-button mobile-logout" type="button" onClick={() => { void signOut().catch(() => setSignOutError('Could not sign out. Try again.')); }}>Log out</button><div className="avatar avatar-user top-avatar">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</div></div></header>
+        <main className="page-content">{signOutError && <p className="form-feedback form-feedback-error" role="alert">{signOutError}</p>}<Outlet /></main>
       </div>
     </div>
   );
