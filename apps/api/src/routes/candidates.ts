@@ -12,16 +12,25 @@ import { authenticate, requireApprovedRecruiter } from '../middleware/authentica
 import { validateBody } from '../middleware/validate-body.js';
 import { validateParams, validateQuery } from '../middleware/validate-request.js';
 import { createCandidatePlatformController } from '../controllers/candidate-platform-controller.js';
+import { createEvaluationController } from '../controllers/evaluation-controller.js';
+import { evaluationRequestSchema } from '@devrank/contracts';
 
 export function createCandidatesRouter(
   controller = createCandidateController(),
   authMiddleware = authenticate,
   platformController = createCandidatePlatformController(),
+  evaluationController = createEvaluationController(),
 ) {
   const router = Router();
   router.use(authMiddleware, requireApprovedRecruiter);
   router.get('/', validateQuery(candidateListQuerySchema), controller.list);
   router.post('/', validateBody(candidateCreateSchema), controller.create);
+  router.post(
+    '/:id/evaluations',
+    validateParams(candidateIdParamsSchema),
+    validateBody(evaluationRequestSchema),
+    evaluationController.create,
+  );
   router.post(
     '/:id/platform-data',
     validateParams(candidateIdParamsSchema),

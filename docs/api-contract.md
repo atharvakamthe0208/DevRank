@@ -10,13 +10,26 @@ Shared Zod schemas and inferred types live in `packages/contracts/src`. Import t
 - Errors use `{ "error": { "code": "...", "message": "...", "details": ... } }`. `details` is optional and contains field paths/messages for validation failures only.
 - Unknown routes return HTTP 404 with code `NOT_FOUND`. Malformed JSON returns HTTP 400 with code `INVALID_JSON`. Unexpected errors do not expose exception messages or stacks.
 - Zod body validators are registered on routes with `validateBody(schema)`; query and path inputs use `validateQuery` and `validateParams`.
-- The current shared scoring contract lists four categories, while the 8-day plan gives six category names as examples. Priya and the team must resolve that mismatch before the canonical category enum or role weights are finalized; the initial database migration therefore stores category keys without a fixed enum constraint.
+- The active shared scoring contract defines six categories. The initial database migration leaves category keys unconstrained for forward compatibility; the API validates evaluation results against the shared enum.
 
 ## Authentication
 
 Candidate routes require `Authorization: Bearer <supabase-access-token>`. The API verifies the token through Supabase Auth (`auth.getUser(token)`) and never trusts a client-supplied user ID or role. The verified ID, email confirmation state, profile role/status, and original token are attached to request-local auth context; the token is forwarded only to a request-scoped Supabase client so PostgreSQL RLS sees `auth.uid()`. Tokens are not returned or logged. Recruiter candidate routes require a confirmed email and approved recruiter profile; admin routes require a confirmed email and approved admin profile, and their database functions independently recheck authorization.
 
 Missing, malformed, invalid, or expired credentials return HTTP 401 (`UNAUTHENTICATED`). Supabase Auth outages or missing backend configuration return HTTP 503 (`AUTH_SERVICE_UNAVAILABLE`). Unconfirmed or unapproved recruiter access returns HTTP 403. Candidate reads and writes are scoped to the authenticated owner. A missing candidate and another user's candidate both return HTTP 404 to avoid disclosing whether the other user's record exists. `GET /api/auth/me` returns the verified user's profile and access state. Admins can list applications at `GET /api/admin/recruiters?status=pending|approved|rejected` and decide a pending application at `PATCH /api/admin/recruiters/:id/decision` with `{ "decision": "approved" | "rejected" }`.
+
+## Evaluation API
+
+All evaluation endpoints require a valid bearer token and an approved recruiter profile. Candidate and role-profile ownership are checked by the API and RLS.
+
+| Method and path | Behavior | Success |
+| --- | --- | --- |
+| `POST /api/candidates/:id/evaluations` | Creates a historical evaluation for an owned active candidate. Body: `{ "roleProfileId": "<uuid>" }`. | `201` with persisted evaluation and deterministic result |
+| `GET /api/evaluations/:id` | Retrieves one evaluation owned by the caller. | `200` with the persisted evaluation |
+
+The selected role profile name must match a supported shared role ID and its weights must define the six shared categories totaling 100. Invalid profiles return `422` (`ROLE_CONFIGURATION_INVALID`); inaccessible candidates/roles and evaluations return `404`. The response has `id`, `candidateId`, `roleProfileId`, `status` (`completed` or `insufficient_evidence`), `createdAt`, and `result` using the shared `evaluationResponseSchema`. Each explicit request creates a new record. Insufficient evidence retains category statuses and evidence references and omits `overallScore`; provider snapshots and raw platform metrics are not converted to scores. Only normalized evidence matching the shared evidence contract is scored. Scoring version and effective weights are persisted with the validated result. The API performs no LLM call.
+
+Migration `20261012000000_evaluation_results.sql` adds the result and weight snapshots and allows `insufficient_evidence`; apply it to the intended Supabase project before using the endpoints. The six-category contract is the active scorer source of truth; the older four-category note below is historical and should be reconciled separately.
 
 ## Candidate API
 
