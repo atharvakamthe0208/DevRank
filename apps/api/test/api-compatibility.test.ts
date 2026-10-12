@@ -29,9 +29,9 @@ describe('existing API compatibility', () => {
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Expected an ephemeral TCP port.');
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/evaluations`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/not-implemented`);
       expect(response.status).toBe(404);
-      expect(await response.json()).toEqual({ error: { code: 'NOT_FOUND', message: 'Route GET /api/evaluations was not found' } });
+      expect(await response.json()).toEqual({ error: { code: 'NOT_FOUND', message: 'Route GET /api/not-implemented was not found' } });
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }

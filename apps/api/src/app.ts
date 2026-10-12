@@ -8,6 +8,7 @@ import { healthController } from './controllers/health.js';
 import { apiRouter } from './routes/index.js';
 import { candidatesRouter } from './routes/candidates.js';
 import { githubRouter } from './routes/github.js';
+import { evaluationsRouter } from './routes/evaluations.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -20,6 +21,7 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use('/api', apiRouter);
 app.use('/api/candidates', candidatesRouter);
+app.use('/api/evaluations', evaluationsRouter);
 app.use('/api/github', githubRouter);
 // Keep the original scaffold health path available while clients move to /api/health.
 app.get('/health', healthController);

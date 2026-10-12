@@ -10,7 +10,7 @@ Shared Zod schemas and inferred types live in `packages/contracts/src`. Import t
 - Errors use `{ "error": { "code": "...", "message": "...", "details": ... } }`. `details` is optional and contains field paths/messages for validation failures only.
 - Unknown routes return HTTP 404 with code `NOT_FOUND`. Malformed JSON returns HTTP 400 with code `INVALID_JSON`. Unexpected errors do not expose exception messages or stacks.
 - Zod body validators are registered on routes with `validateBody(schema)`; query and path inputs use `validateQuery` and `validateParams`.
-- The current shared scoring contract lists four categories, while the 8-day plan gives six category names as examples. Priya and the team must resolve that mismatch before the canonical category enum or role weights are finalized; the initial database migration therefore stores category keys without a fixed enum constraint.
+- The shared scoring contract defines the six categories documented in `docs/day1-scoring-contract.md`; preliminary role weights live in `config/role-weights.json` and remain subject to review.
 
 ## Authentication
 
@@ -88,3 +88,18 @@ For both platforms, provide either `profileUrl` or `handle` (or both), and expli
 Success returns HTTP 201 with `id`, `candidateId`, `platform`, `availability`, `provenance: "candidate_provided"`, optional `profileUrl`, `handle`, and `statistics`, and `submittedAt` (ISO timestamp). HTTP 400 (`VALIDATION_ERROR`) covers malformed or unsupported fields; 401 (`UNAUTHENTICATED`) requires valid credentials; 404 (`NOT_FOUND`) covers missing, archived, or another owner's candidate; and 503 reports unavailable storage. Candidate-provided means the recruiter submitted the candidate's reported data; it has not been independently verified. The candidate details page provides separate LeetCode and HackerRank forms for explicit availability and the supported metrics. These entries are saved with `provenance: "candidate_provided"`, remain unverified, and are not used as scores. The forms preserve zero-valued metrics and show validation, saving, saved, and error states. Authorized LeetCode/HackerRank integrations are not implemented; restricted scraping, browser automation, and unofficial endpoints are excluded.
 
 No migration is required for platform data UI: the existing `platform_evidence` schema already allows GitHub/LeetCode/HackerRank source rows, ties each record to its candidate and owner, and has owner-scoped RLS policies.
+
+## Evaluation workflow (Issue #11)
+
+Both evaluation endpoints require a Supabase Bearer token and approved recruiter access. The API derives supported roles and weights from the validated `config/role-weights.json`; the browser does not own a duplicate role list.
+
+| Method and path | Behavior | Success |
+| --- | --- | --- |
+| `GET /api/evaluations/roles` | Return configured roles, display names, and category weights | `200` with `{ roles: [...] }` |
+| `POST /api/evaluations` | Verify candidate ownership and run the deterministic scorer for the requested role | `200` with candidate, role, timestamp, shared evaluation response, and evidence limitations |
+
+The request is `{ "candidateId": "<uuid>", "roleId": "software_developer" }`. Unknown or other-owner candidates return the same `404 NOT_FOUND`. Requests are schema-validated and callers cannot supply candidate ownership, category scores, evidence, or role weights. Evaluation responses use the shared `evaluationRunResponseSchema` and its nested `evaluationResponseSchema`.
+
+The current workflow is stateless: it does not insert rows into `evaluations`, `category_scores`, or `ai_analyses`, and requires no migration. The existing platform snapshots are not rubric-normalized for the six categories. Therefore a run with no explicitly normalized category evidence reports `insufficient_evidence`, omits the overall score, and identifies this limitation; it never converts platform counts or missing values into scores. The role weights are preliminary and not approved hiring criteria. To produce scores, collect rubric-backed evidence using the existing shared evidence contract and approved category mapping in a later workflow.
+
+Use the Evaluations item in the recruiter navigation, or select **Evaluate candidate** from a candidate profile. The page supports candidate/role selection, request progress and retry, all six category statuses, overall score when complete, errors, and evidence limitations. Results are displayed only for the current selection and are cleared before a new run or when selection changes.
