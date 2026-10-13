@@ -24,13 +24,6 @@ function transient(error: unknown): boolean {
     || (typeof value.code === 'string' && ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN'].includes(value.code));
 }
 
-function redactCandidateText(value: string): string {
-  return value
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted email]')
-    .replace(/\b(?:https?:\/\/|www\.)\S+/gi, '[redacted URL]')
-    .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, (match) => (match.match(/\d/g)?.length ?? 0) >= 8 ? '[redacted phone]' : match);
-}
-
 function buildInput(evaluation: PersistedEvaluation) {
   const result = evaluation.result;
   const evidenceById = new Map(result.evidence.map((item) => [item.evidenceId, item]));
@@ -56,7 +49,8 @@ function buildInput(evaluation: PersistedEvaluation) {
       evidenceId: item.evidenceId,
       categoryId: item.categoryId,
       evidenceType: item.evidenceType,
-      description: redactCandidateText(item.description).slice(0, MAX_TEXT),
+      source: item.source.slice(0, 100),
+      description: item.description.slice(0, MAX_TEXT),
       normalizedValue: item.normalizedValue,
       verificationStatus: item.verificationStatus,
     })),

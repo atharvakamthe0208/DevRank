@@ -36,20 +36,6 @@ describe('AI analysis service', () => {
     expect(JSON.parse(providerInput)).toMatchObject({ overallScore: 75, scoringVersion: '1.0.0' });
   });
 
-  it('redacts common contact details before evidence leaves the API', async () => {
-    const privateEvaluation = structuredClone(evaluation);
-    privateEvaluation.result.evidence[0]!.description = 'Contact dev@example.com at https://example.test or +1 (555) 123-4567';
-    let input = '';
-    const service = createAiAnalysisService(configured, async (prompt) => { input = prompt; return validOutput; });
-    await service.analyze(privateEvaluation);
-    expect(input).not.toContain('dev@example.com');
-    expect(input).not.toContain('https://example.test');
-    expect(input).not.toContain('555) 123-4567');
-    expect(input).toContain('[redacted email]');
-    expect(input).toContain('[redacted URL]');
-    expect(input).toContain('[redacted phone]');
-  });
-
   it('rejects malformed, excessive, and unsupported provider output', async () => {
     const malformed = createAiAnalysisService(configured, async () => ({ ...validOutput, extra: true }));
     await expect(malformed.analyze(evaluation)).rejects.toMatchObject({ code: 'AI_INVALID_RESPONSE' });
