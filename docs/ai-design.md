@@ -20,3 +20,9 @@ AI_TIMEOUT_MS=12000
 ```
 
 The API can start without `GROQ_API_KEY`; only the analysis endpoint is unavailable until configured. Never log or expose the key. Automated tests mock the provider and do not require a live Groq credential.
+
+## Recruiter presentation
+
+After running a persisted evaluation, recruiters can choose **Generate AI analysis** on the evaluation page. The web client posts an empty JSON object to the authenticated `POST /api/evaluations/:id/ai-analysis` endpoint and validates the response with `aiAnalysisResponseSchema`. It presents the summary, cited strengths and weaknesses, role relevance, recommendations, and supporting evidence descriptions. References are resolved against the persisted evaluation's evidence and category records; unknown references are not displayed as source material.
+
+The UI reports insufficient evidence when the API returns `analysis: null`, and shows a retry action for provider or network errors. Missing API configuration is called out without exposing provider details. AI output remains explanatory and does not change deterministic scores or create a hiring recommendation outside the evidence-referenced recommendations in the shared contract.
