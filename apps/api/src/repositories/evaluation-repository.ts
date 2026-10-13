@@ -1,7 +1,8 @@
-import { evaluationResponseSchema, persistedEvaluationSchema, roleIdSchema, roleWeightsSchema, type EvaluationRequest } from '@devrank/contracts';
+import { evaluationResponseSchema, persistedEvaluationSchema, roleIdSchema, roleWeightsSchema, type AiAnalysisResult, type EvaluationRequest, type EvaluationResponse } from '@devrank/contracts';
 import { getSupabaseClient } from '../config/supabase.js';
 import { HttpError } from '../middleware/http-error.js';
 import { processCandidateEvidence } from '../modules/evidence-processing/index.js';
+import { analyzeEvaluation, attachAiAnalysis } from '../modules/ai/index.js';
 import { loadRoleWeightConfiguration } from '../modules/scoring/index.js';
 import type { AuthContext } from '../types/auth.js';
 
@@ -11,7 +12,12 @@ export interface EvaluationRepository {
 }
 const unavailable = () => new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to process the evaluation right now');
 
-export function createEvaluationRepository(getClient = getSupabaseClient): EvaluationRepository {
+export type EvaluationAnalyzer = (evaluation: EvaluationResponse) => Promise<AiAnalysisResult>;
+
+export function createEvaluationRepository(
+  getClient = getSupabaseClient,
+  analyze: EvaluationAnalyzer = analyzeEvaluation,
+): EvaluationRepository {
   return {
     async create(auth, candidateId, input) {
       let client;
@@ -25,7 +31,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         if (!role) throw new HttpError(404, 'ROLE_PROFILE_NOT_FOUND', 'Role profile not found');
         const targetRole = roleIdSchema.safeParse(role.name);
         const weights = roleWeightsSchema.safeParse(role.weights);
-        if (!targetRole.success || !weights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'Role profile must use a supported role name and six valid weights totaling 100');
+        if (!targetRole.success || !weights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'Role profile must use a supported role name and five valid weights totaling 100');
 
         const { data: rows, error: evidenceError } = await client.from('platform_evidence').select('id,source,availability,normalized_evidence,observed_at,created_at').eq('candidate_id', candidateId).eq('owner_id', auth.userId).order('created_at', { ascending: true });
         if (evidenceError || !rows) throw unavailable();
@@ -40,7 +46,8 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         const configuredScoring = loadRoleWeightConfiguration();
         const config = { ...configuredScoring, roles: { [targetRole.data]: weights.data } };
         const { evaluation } = processCandidateEvidence({ candidateId, targetRole: targetRole.data, evidence }, { roleWeights: config });
-        const validResult = evaluationResponseSchema.parse(evaluation);
+        const deterministicResult = evaluationResponseSchema.parse(evaluation);
+        const validResult = await attachAiAnalysis(deterministicResult, analyze);
         const status = validResult.evaluationStatus;
         const { data: saved, error: insertError } = await client.from('evaluations').insert({
           owner_id: auth.userId, candidate_id: candidateId, role_profile_id: input.roleProfileId,

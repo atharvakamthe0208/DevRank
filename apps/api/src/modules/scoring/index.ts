@@ -127,8 +127,8 @@ export function scoreCandidate(
     recommendations: complete ? [] : ['Collect valid normalized evidence for each missing category before calculating an overall score.'],
     missingEvidence,
     calculationExplanation: complete
-      ? 'Each category score is the arithmetic mean of its available normalized evidence, rounded to two decimal places. Overall score is the weighted sum of the six category scores divided by 100, rounded to two decimal places.'
-      : 'Category scores are reported where normalized evidence is available. Overall score is omitted until all six categories have evidence.',
+      ? `Each category score is the arithmetic mean of its available normalized evidence, rounded to two decimal places. Overall score is the weighted sum of the ${scoringCategories.length} category scores divided by 100, rounded to two decimal places.`
+      : `Category scores are reported where normalized evidence is available. Overall score is omitted until all ${scoringCategories.length} categories have evidence.`,
     evaluationStatus: complete ? 'completed' : 'insufficient_evidence',
     aiExplanation: {
       summary: 'No AI-generated explanation was produced by deterministic scoring.',

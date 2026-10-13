@@ -1,5 +1,7 @@
 # Day 4 scoring versioning
 
+> **Historical v1 record:** This document describes the original six-category `1.0.0` policy. Day 5 removes Communication Skills from active scoring and introduces schema/scoring version `2.0.0`. Its old category and weights are retained here only to explain historical snapshots; see `docs/day5-ai-analysis.md` for current behavior.
+
 ## Summary and approval status
 
 The six Day 1 category IDs and display names are unchanged. No team approval is recorded for the role weights, category definitions, or scoring policies. The existing weights therefore remain marked preliminary and pending review in `config/role-weights.json`; this implementation does not describe them as finalized hiring criteria.

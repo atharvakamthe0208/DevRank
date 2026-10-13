@@ -1,5 +1,7 @@
 # Day 1 scoring contract
 
+> **Historical baseline:** This document records the original six-category v1 proposal. Day 5 supersedes it with five active categories and schema/scoring version `2.0.0`. Historical v1 snapshots remain read-only; structured interviews are now unmapped for scoring.
+
 ## Implemented behavior
 
 This contract is a shared starting point for frontend and backend work. It adds six scoring categories, normalized evidence and candidate input types, preliminary weights for three roles, an evaluation response schema, five synthetic fixtures, and contract tests. It does not implement an evaluation API route, persistence, an AI provider, or production scoring. The current API still exposes only `GET /health` and its JSON 404 fallback.

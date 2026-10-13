@@ -4,6 +4,7 @@ export * from './candidate.js';
 export * from './candidate-api.js';
 export * from './comparison.js';
 export * from './evaluation.js';
+export * from './legacy-evaluation.js';
 export * from './evaluation-response.js';
 export * from './evidence.js';
 export * from './github.js';

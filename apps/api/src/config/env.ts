@@ -31,6 +31,9 @@ const envSchema = z.object({
   SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: optionalSecret,
   GITHUB_TOKEN: optionalSecret,
+  GROQ_API_KEY: optionalSecret,
+  GROQ_MODEL: optionalSecret,
+  AI_ANALYSIS_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(10_000),
 });
 
 export type ApiEnvironment = z.infer<typeof envSchema>;

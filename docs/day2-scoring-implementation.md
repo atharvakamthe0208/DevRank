@@ -1,5 +1,7 @@
 # Day 2 scoring implementation
 
+> **Historical implementation record:** This describes the original six-category v1 scorer. Day 5 updates the active scorer to five categories and schema/scoring version `2.0.0`; current policy is in `docs/scoring-rules.md` and `docs/day5-ai-analysis.md`.
+
 ## Implemented
 
 Added a deterministic scorer in `apps/api/src/modules/scoring/index.ts`. It consumes the Day 1 candidate and normalized evidence shape, reads and validates the shared `config/role-weights.json`, scores categories, calculates a complete weighted score where possible, and validates the final output with `evaluationResponseSchema`. The API routes and request/response contracts are unchanged. The scorer makes no AI or external API calls.

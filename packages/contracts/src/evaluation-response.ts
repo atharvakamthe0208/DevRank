@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { aiAnalysisResultSchema } from './ai-analysis.js';
 import { schemaVersion, scoringVersionSchema, roleIdSchema, roleWeightsSchema, scoringCategorySchema, scoringCategories, scoreSchema, confidenceSchema, categoryScoreSchema } from './scoring.js';
 import { evidenceSchema } from './evidence.js';
 
@@ -20,6 +21,7 @@ export const evaluationResponseSchema = z.object({
   calculationExplanation: z.string().min(1),
   evaluationStatus: z.enum(['completed', 'insufficient_evidence']),
   aiExplanation: z.object({ summary: z.string(), strengths: z.array(z.string()), skillGaps: z.array(z.string()), recommendations: z.array(z.string()) }),
+  aiAnalysis: aiAnalysisResultSchema.optional(),
   decisionSupportNotice: z.literal('Decision support only; not an automatic hiring decision.'),
 }).superRefine((result, context) => {
   const categoryIds = result.categoryScores.map(({ categoryId }) => categoryId);
@@ -35,6 +37,12 @@ export const evaluationResponseSchema = z.object({
   }
   if (result.evaluationStatus === 'insufficient_evidence' && result.overallScore !== undefined) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['overallScore'], message: 'Insufficient-evidence evaluations must omit overallScore.' });
+  }
+  if (result.aiAnalysis?.status === 'completed' && result.evaluationStatus !== 'completed') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['aiAnalysis', 'status'], message: 'Completed AI analysis cannot overstate an insufficient-evidence evaluation.' });
+  }
+  if (result.aiAnalysis?.status === 'insufficient_evidence' && result.evaluationStatus !== 'insufficient_evidence') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['aiAnalysis', 'status'], message: 'AI insufficiency status must match deterministic evaluation status.' });
   }
   const ids = new Set(result.evidence.map(({ evidenceId }) => evidenceId));
   for (const [index, category] of result.categoryScores.entries()) {

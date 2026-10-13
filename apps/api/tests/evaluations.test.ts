@@ -21,9 +21,9 @@ describe('evaluation API routes', () => {
   let origin: string;
   const categories = scoringCategories.map(({ id, displayName }) => id);
   const created = { id: evaluationId, candidateId, roleProfileId, status: 'insufficient_evidence', createdAt: '2026-10-12T00:00:00.000Z', result: {
-    schemaVersion: '1.0.0', scoringVersion: '1.0.0', candidateId, targetRole: 'software_developer',
+    schemaVersion: '2.0.0', scoringVersion: '2.0.0', candidateId, targetRole: 'software_developer',
     categoryScores: scoringCategories.map(({ id, displayName }) => ({ categoryId: id, displayName, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' })),
-    roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+    roleWeightsUsed: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 },
     evidence: [], strengths: [], skillGaps: [], recommendations: ['Collect normalized evidence.'], missingEvidence: categories,
     calculationExplanation: 'No overall score without evidence.', evaluationStatus: 'insufficient_evidence',
     aiExplanation: { summary: 'No AI explanation.', strengths: [], skillGaps: [], recommendations: [] },

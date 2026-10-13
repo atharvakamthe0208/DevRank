@@ -1,5 +1,7 @@
 # Day 3 evidence processing
 
+> **Implementation history:** This began with the v1 six-category contract. Day 5 keeps the validation/normalization pipeline but removes Communication Skills from active scoring; structured interviews are reported as unmapped. Current rules are in `docs/day5-ai-analysis.md`.
+
 ## Implemented flow
 
 `apps/api/src/modules/evidence-processing/index.ts` adds separate validation, normalization, and category-mapping steps. `processCandidateEvidence` runs those steps and passes only mapped, schema-valid evidence to the existing Day 2 `scoreCandidate` function:
@@ -46,7 +48,7 @@ For example, a caller could supply an explicitly agreed rubric rule that maps `4
 | `coding_assessment` | `problem_solving_dsa` |
 | `project` | `relevant_project_experience` |
 | `work_sample` | `practical_assessment_performance` |
-| `structured_interview` | `communication_skills` |
+| `structured_interview` | unmapped (`null`); retained in the processing report, not scored |
 | `learning_record` | `learning_adaptability` |
 | `portfolio` | `relevant_project_experience` |
 | `other` | unmapped (`null`) |
@@ -85,7 +87,7 @@ With an explicitly supplied test rule for a five-point rubric, the processed Day
 }
 ```
 
-This transformation is a test example, not an approved project normalization rule. With no supplied rule, the same raw value is preserved without `normalizedValue`, and no category score is fabricated. On the complete synthetic example using explicit test-only rules, the Day 2 scorer returns scoring version `1.0.0`, category scores `80, 75, 78, 82, 80, 72`, and overall score `78.1` for Software Developer. Partial inputs preserve available category scores and omit the overall score.
+This transformation is a test example, not an approved project normalization rule. With no supplied rule, the same raw value is preserved without `normalizedValue`, and no category score is fabricated. On the current complete synthetic example using explicit test-only rules, the Day 5 scorer returns scoring version `2.0.0`, five category scores `80, 75, 78, 82, 72`, and overall score `77.89` for Software Developer. Partial inputs preserve available category scores and omit the overall score.
 
 ## Files created or changed
 
