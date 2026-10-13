@@ -2,7 +2,7 @@
 
 ## Implemented behavior
 
-This contract is the shared scoring baseline. It adds six scoring categories, normalized evidence and candidate input types, preliminary weights for three roles, an evaluation response schema, five synthetic fixtures, and contract tests. At the Day 1 stage it did not include an evaluation API route, persistence, an AI provider, or production scoring. The current stateless evaluation endpoints are documented in `docs/api-contract.md`; scores still require explicit rubric-normalized evidence.
+This contract is the shared scoring baseline. It adds six scoring categories, normalized evidence and candidate input types, preliminary weights for three roles, an evaluation response schema, five synthetic fixtures, and contract tests. At the Day 1 stage it did not include an evaluation API route, persistence, an AI provider, or production scoring. The current persisted evaluation endpoints are documented in `docs/api-contract.md`; scores still require explicit rubric-normalized evidence.
 
 All shared validators and TypeScript types are exported by `@devrank/contracts`. The package uses Zod already present in this repository, avoiding another dependency. The shared typed contract is the authoritative machine-readable format; JSON fixtures are examples. Names, emails, protected attributes, and unrelated personal details are excluded. Scores are decision support only and are never an automatic hiring decision.
 
@@ -85,7 +85,7 @@ All records are obviously synthetic and deterministic. Candidate 001 is a balanc
 - `packages/contracts/test/contracts.test.ts`: schema, weight, score, confidence, missing-evidence, output, and fixture tests.
 - `docs/api-contract.md`: existing API inventory and proposed request/response integration contract.
 
-At Day 1, no routes were changed; the API exposed `/health` and returned a structured 404 for other paths. The candidate request and evaluation response began as proposed contracts. Issue #11 now adopts shared request/response schemas with approved-recruiter authorization and candidate ownership checks. Team agreement is still needed on preliminary weights, evidence sources, normalization rubrics, minimum evidence policy, and confidence calibration. No external integration or database persistence is claimed.
+At Day 1, no routes were changed; the API exposed `/health` and returned a structured 404 for other paths. The candidate request and evaluation response began as proposed contracts. Issue #11 now adopts shared request/response schemas with approved-recruiter authorization and candidate ownership checks. Team agreement is still needed on preliminary weights, evidence sources, normalization rubrics, minimum evidence policy, and confidence calibration. No external scoring provider integration is claimed.
 
 ## Tests and known limits
 
