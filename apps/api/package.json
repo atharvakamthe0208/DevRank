@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "npm run build && concurrently -k -n compile,api \"tsc --watch -p tsconfig.json\" \"node --watch dist/server.js\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "test": "vitest run --passWithNoTests --config ../../vitest.config.ts",
