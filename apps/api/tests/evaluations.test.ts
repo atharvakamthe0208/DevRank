@@ -8,8 +8,9 @@ import { HttpError } from '../src/middleware/http-error.js';
 import { validateBody } from '../src/middleware/validate-body.js';
 import { validateParams } from '../src/middleware/validate-request.js';
 import { createEvaluationController } from '../src/controllers/evaluation-controller.js';
-import { candidateIdParamsSchema, evaluationIdParamsSchema, evaluationRequestSchema, scoringCategories } from '@devrank/contracts';
+import { candidateIdParamsSchema, evaluationRequestSchema, scoringCategories } from '@devrank/contracts';
 import type { EvaluationRepository } from '../src/repositories/evaluation-repository.js';
+import { createEvaluationsRouter } from '../src/routes/evaluations.js';
 
 const candidateId = 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c';
 const roleProfileId = 'e2c9bf0c-23d8-4d90-8cb5-8c33f0ef9084';
@@ -20,7 +21,7 @@ describe('evaluation API routes', () => {
   let server: Server;
   let origin: string;
   const categories = scoringCategories.map(({ id, displayName }) => id);
-  const created = { id: evaluationId, candidateId, roleProfileId, status: 'insufficient_evidence', createdAt: '2026-10-12T00:00:00.000Z', result: {
+  const created = { id: evaluationId, candidateId, roleProfileId, targetRole: 'software_developer', status: 'insufficient_evidence', createdAt: '2026-10-12T00:00:00.000Z', result: {
     schemaVersion: '2.0.0', scoringVersion: '2.0.0', candidateId, targetRole: 'software_developer',
     categoryScores: scoringCategories.map(({ id, displayName }) => ({ categoryId: id, displayName, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' })),
     roleWeightsUsed: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 },
@@ -29,7 +30,14 @@ describe('evaluation API routes', () => {
     aiExplanation: { summary: 'No AI explanation.', strengths: [], skillGaps: [], recommendations: [] },
     decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
   } };
-  const repository: EvaluationRepository = { create: vi.fn(async () => created), get: vi.fn(async () => created) };
+  const role = { id: 'software_developer' as const, displayName: 'Software Developer', weights: created.result.roleWeightsUsed };
+  const runResult = { id: evaluationId, status: 'insufficient_evidence' as const, candidate: { id: candidateId, name: 'Taylor Example' }, role, evaluatedAt: created.createdAt, evaluation: created.result, evidenceLimitations: ['Insufficient rubric-normalized evidence.'] };
+  const repository: EvaluationRepository = {
+    listRoles: vi.fn(() => ({ roles: [role] })),
+    run: vi.fn(async () => runResult),
+    create: vi.fn(async () => created),
+    get: vi.fn(async () => created),
+  };
 
   beforeAll(async () => {
     const app = express(); app.use(express.json());
@@ -37,8 +45,7 @@ describe('evaluation API routes', () => {
     const controller = createEvaluationController(repository);
     const candidates = express.Router(); candidates.use(authMiddleware, requireApprovedRecruiter);
     candidates.post('/:id/evaluations', validateParams(candidateIdParamsSchema), validateBody(evaluationRequestSchema), controller.create);
-    const evaluations = express.Router(); evaluations.use(authMiddleware, requireApprovedRecruiter);
-    evaluations.get('/:id', validateParams(evaluationIdParamsSchema), controller.get);
+    const evaluations = createEvaluationsRouter(controller, authMiddleware);
     app.use('/api/candidates', candidates); app.use('/api/evaluations', evaluations); app.use(errorHandler);
     server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('No test server address');
@@ -53,6 +60,15 @@ describe('evaluation API routes', () => {
     expect(read.status).toBe(200); expect(await read.json()).toEqual(created);
     expect(repository.create).toHaveBeenCalledWith(auth, candidateId, { roleProfileId });
     expect(repository.get).toHaveBeenCalledWith(auth, evaluationId);
+  });
+  it('serves configured roles and persists configured-role runs through the workflow API', async () => {
+    const rolesResponse = await fetch(`${origin}/api/evaluations/roles`);
+    expect(rolesResponse.status).toBe(200);
+    expect(await rolesResponse.json()).toEqual({ roles: [role] });
+    const response = await fetch(`${origin}/api/evaluations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ candidateId, roleId: role.id }) });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual(runResult);
+    expect(repository.run).toHaveBeenCalledWith(auth, { candidateId, roleId: role.id });
   });
   it('rejects invalid request bodies and IDs', async () => {
     const body = await fetch(`${origin}/api/candidates/${candidateId}/evaluations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roleProfileId, candidateId }) });
