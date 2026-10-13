@@ -1,0 +1,22 @@
+import { z } from 'zod';
+
+export const dashboardEvaluationStatusSchema = z.enum([
+  'pending', 'in_progress', 'completed', 'insufficient_evidence', 'failed',
+]);
+
+export const dashboardResponseSchema = z.object({
+  candidateCount: z.number().int().nonnegative(),
+  evaluationCount: z.number().int().nonnegative(),
+  statusCounts: z.record(dashboardEvaluationStatusSchema, z.number().int().nonnegative()),
+  recentEvaluations: z.array(z.object({
+    id: z.string().uuid(),
+    candidateId: z.string().uuid(),
+    candidateName: z.string().min(1),
+    status: dashboardEvaluationStatusSchema,
+    createdAt: z.string().datetime({ offset: true }),
+    score: z.number().finite().min(0).max(100).optional(),
+    scoringVersion: z.string().nullable(),
+  }).strict()).max(10),
+}).strict();
+
+export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
