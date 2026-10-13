@@ -40,3 +40,27 @@
   .evaluation-form-footer .primary-button { width: 100%; }
   .overall-score { justify-items: start; }
 }
+.ai-analysis { margin-top: 22px; padding: 22px; border: 1px solid var(--border, #e5e7eb); border-radius: 14px; background: #fbfcfe; }
+.ai-analysis-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.ai-analysis-heading h3 { margin: 8px 0 5px; font-size: 20px; }
+.ai-analysis-heading p { margin: 0; color: var(--muted, #697586); font-size: 13px; line-height: 1.5; }
+.ai-analysis-status, .ai-analysis-unavailable { margin: 20px 0 0; padding: 15px; border-radius: 10px; background: #eff5fc; color: #35577e; line-height: 1.6; }
+.ai-analysis-error { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-top: 18px; padding: 14px; border-radius: 10px; background: #fff1ef; color: #963b32; }
+.ai-analysis-error p { margin: 0; line-height: 1.5; }
+.ai-analysis-content { display: grid; gap: 14px; margin-top: 20px; }
+.ai-analysis-content article { padding: 18px; border: 1px solid var(--border, #e5e7eb); border-radius: 11px; background: #fff; }
+.ai-analysis-content h4 { margin: 0 0 9px; color: #25344b; font-size: 14px; }
+.ai-analysis-content article > p, .ai-analysis-observation > p { margin: 0; color: #4f5e73; font-size: 14px; line-height: 1.65; }
+.ai-analysis-observations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ai-analysis-observation { padding-top: 12px; }
+.ai-analysis-observation + .ai-analysis-observation { margin-top: 12px; border-top: 1px solid var(--border, #e5e7eb); }
+.ai-analysis-references { display: grid; gap: 6px; margin: 12px 0 0; padding-left: 18px; color: #728096; font-size: 12px; line-height: 1.5; }
+.ai-analysis-no-references, .ai-analysis-empty { margin: 8px 0 0; color: #8a94a4; font-size: 12px; line-height: 1.5; }
+.ai-analysis-disclaimer { margin: 0; color: var(--muted, #697586); font-size: 12px; line-height: 1.5; }
+@media (max-width: 760px) {
+  .ai-analysis-heading { align-items: stretch; flex-direction: column; }
+  .ai-analysis-heading .secondary-button { width: 100%; }
+  .ai-analysis-observations { grid-template-columns: 1fr; }
+  .ai-analysis { padding: 16px; }
+  .ai-analysis-error { align-items: flex-start; flex-direction: column; }
+}
