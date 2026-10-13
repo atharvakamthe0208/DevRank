@@ -22,11 +22,22 @@ function closeServer(server: Server): Promise<void> {
 describe('GitHub lookup API boundary', () => {
   let server: Server;
   let origin: string;
-  const adapter = { getProfile: vi.fn(async (profile: string) => ({ username: profile })) };
+  const profileResponse = {
+    username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 1,
+    followers: 10, following: 5, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+  };
+  const adapter = { getProfile: vi.fn(async () => profileResponse) };
 
   beforeAll(async () => {
     const app = express();
-    const auth = createAuthenticate(async (token) => token === 'valid-token' ? { userId: 'owner-id' } : null);
+    const auth = createAuthenticate(async (token) => {
+      if (!['valid-token', 'pending-token', 'rejected-token', 'unconfirmed-token'].includes(token)) return null;
+      const approval_status = token === 'pending-token' ? 'pending' : token === 'rejected-token' ? 'rejected' : 'approved';
+      return {
+        userId: 'owner-id', email: 'owner@example.com', emailConfirmed: token !== 'unconfirmed-token',
+        profile: { id: 'owner-id', display_name: 'Owner', role: 'recruiter', approval_status },
+      };
+    });
     app.use('/api/github', createGitHubRouter(createGitHubController(adapter), auth));
     app.use(errorHandler);
     ({ server, origin } = await startServer(app));
@@ -46,7 +57,23 @@ describe('GitHub lookup API boundary', () => {
       headers: { Authorization: 'Bearer valid-token' },
     });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ username: 'https://github.com/octocat' });
+    expect(await response.json()).toEqual(profileResponse);
     expect(adapter.getProfile).toHaveBeenCalledWith('https://github.com/octocat');
+  });
+
+  it.each(['pending-token', 'rejected-token', 'unconfirmed-token'])(
+    'blocks GitHub lookups for %s before calling the adapter', async (token) => {
+      adapter.getProfile.mockClear();
+      const response = await fetch(`${origin}/api/github?profile=octocat`, { headers: { Authorization: `Bearer ${token}` } });
+      expect(response.status).toBe(403);
+      expect(adapter.getProfile).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns a controlled contract error when an injected provider returns malformed data', async () => {
+    adapter.getProfile.mockResolvedValueOnce({ username: 'octocat' } as never);
+    const response = await fetch(`${origin}/api/github?profile=octocat`, { headers: { Authorization: 'Bearer valid-token' } });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ error: { code: 'GITHUB_INVALID_RESPONSE' } });
   });
 });
