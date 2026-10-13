@@ -23,6 +23,9 @@ const aiAnalysisContentSchema = z.object({
 }).strict();
 
 const completedAnalysisSchema = aiAnalysisContentSchema.extend({ status: z.literal('completed') }).superRefine((analysis, context) => {
+  if (analysis.limitations.length === 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['limitations'], message: 'A completed analysis must state its limitations.' });
+  }
   const findingReferences = [
     ...analysis.strengths.flatMap(({ evidenceReferences }) => evidenceReferences),
     ...analysis.developmentAreas.flatMap(({ evidenceReferences }) => evidenceReferences),

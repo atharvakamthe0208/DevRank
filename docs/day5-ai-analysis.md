@@ -95,7 +95,7 @@ Prompt instructions and structural validation reduce risk; they cannot guarantee
 
 `apps/api/test/ai-analysis.test.ts` mocks `fetch` and covers valid structured output, prompt-injection placement, PII redaction, unknown evidence IDs, malformed/empty output, missing fields, invalid types, missing configuration, timeout, rate limit, provider failure, empty evidence, invalid evaluation, and preservation of deterministic scores when analysis fails.
 
-Scoring and contract tests cover exactly five active categories, rejection of the removed category, valid normalized weights, score boundaries, missing evidence, structured-interview unmapped reporting, v2 version behavior, and read-only v1 snapshot compatibility. Full command results are recorded after final verification below.
+Scoring and contract tests cover exactly five active categories, rejection of the removed category, valid normalized weights, score boundaries, missing evidence, structured-interview unmapped reporting, v2 version behavior, and read-only v1 snapshot compatibility. Final verification on 2026-10-13: web tests 32/32 and contract tests 10/10 passed; API module/unit tests passed, but API route suites were blocked because sandbox policy denied loopback TCP (`EACCES`), leaving 52 of 145 API tests unable to execute. `npm run typecheck` passed. Contract/API builds passed; Vite build could not resolve a Supabase dependency due to sandbox `EPERM`. No live provider/database calls were made.
 
 ## Limitations, blockers, and coordination
 

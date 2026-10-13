@@ -202,7 +202,7 @@ export async function analyzeEvaluation(input: unknown, options: AiAnalysisOptio
     const analysis = aiAnalysisSchema.parse({
       ...parsedAnalysis.data,
       limitations: wasTruncated
-        ? [...parsedAnalysis.data.limitations, 'One or more evidence descriptions were shortened before provider submission.']
+        ? [...parsedAnalysis.data.limitations.slice(0, 19), 'One or more evidence descriptions were shortened before provider submission.']
         : parsedAnalysis.data.limitations,
     });
     return aiAnalysisResultSchema.parse(analysis);
