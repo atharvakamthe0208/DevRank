@@ -1,3 +1,22 @@
 # AI design
 
-AI integration belongs behind `apps/api/src/modules/ai`; prompts, provider calls, and output validation stay server-side. The intended provider stack is LangChain with Groq. AI receives validated evidence and deterministic results and returns explanatory structured output; it does not set scores or rankings. No AI provider is connected by this scaffold. Do not place Groq keys in frontend configuration.
+AI integration lives in `apps/api/src/modules/ai`; prompts, provider calls, credentials, and output validation stay server-side. The API uses LangChain's `ChatGroq` structured-output integration. AI receives a bounded view of a persisted deterministic evaluation and returns explanations; it never calculates or updates scores, weights, status, or scoring version.
+
+## Evaluation analysis endpoint
+
+`POST /api/evaluations/:id/ai-analysis` accepts no request fields. It requires a valid Supabase bearer token and an approved recruiter profile. The API loads the evaluation using the authenticated recruiter's ownership scope. The response is either:
+
+- `200 { status: "completed", evaluation, analysis }`: the original persisted evaluation plus a separate validated AI explanation.
+- `200 { status: "insufficient_evidence", evaluation, analysis: null }`: returned without contacting Groq when deterministic scoring has no overall score or usable evidence.
+
+Analysis includes a summary, evidence-referenced strengths and weaknesses, role relevance, and evidence-referenced recommendations. References must match supplied evidence IDs or the existing scoring category identifiers. It does not provide a hiring decision. Invalid provider output returns `502 AI_INVALID_RESPONSE`; missing credentials returns `503 AI_NOT_CONFIGURED`; provider authentication, network, and rate-limit failures return controlled `503` errors. Timeouts and transient provider failures are bounded. No AI output is persisted, so provider failures cannot modify a stored evaluation.
+
+Set these variables in `apps/api/.env` (never in the Vite app):
+
+```dotenv
+GROQ_API_KEY=your-groq-api-key
+GROQ_MODEL=openai/gpt-oss-120b
+AI_TIMEOUT_MS=12000
+```
+
+The API can start without `GROQ_API_KEY`; only the analysis endpoint is unavailable until configured. Never log or expose the key. Automated tests mock the provider and do not require a live Groq credential.

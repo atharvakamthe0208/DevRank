@@ -1,4 +1,5 @@
 import {
+  aiAnalysisResponseSchema,
   candidateIdParamsSchema,
   evaluationIdParamsSchema,
   evaluationRequestSchema,
@@ -8,6 +9,7 @@ import {
 import type { Request } from 'express';
 import { HttpError } from '../middleware/http-error.js';
 import { evaluationRepository, type EvaluationRepository } from '../repositories/evaluation-repository.js';
+import { aiAnalysisService, type AiAnalysisService } from '../modules/ai/index.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
 function authContext(request: Request) {
@@ -15,7 +17,7 @@ function authContext(request: Request) {
   return request.auth;
 }
 
-export function createEvaluationController(repository: EvaluationRepository = evaluationRepository) {
+export function createEvaluationController(repository: EvaluationRepository = evaluationRepository, aiService: AiAnalysisService = aiAnalysisService) {
   return {
     listRoles: asyncHandler(async (_request, response) => { response.json(repository.listRoles()); }),
     run: asyncHandler(async (request, response) => {
@@ -30,6 +32,16 @@ export function createEvaluationController(repository: EvaluationRepository = ev
     get: asyncHandler(async (request, response) => {
       const { id } = evaluationIdParamsSchema.parse(request.params);
       response.json(persistedEvaluationSchema.parse(await repository.get(authContext(request), id)));
+    }),
+    analyze: asyncHandler(async (request, response) => {
+      const { id } = evaluationIdParamsSchema.parse(request.params);
+      const evaluation = persistedEvaluationSchema.parse(await repository.get(authContext(request), id));
+      if (evaluation.status === 'insufficient_evidence' || evaluation.result.overallScore === undefined || evaluation.result.evidence.length === 0) {
+        response.json(aiAnalysisResponseSchema.parse({ status: 'insufficient_evidence', evaluation, analysis: null }));
+        return;
+      }
+      const analysis = await aiService.analyze(evaluation);
+      response.json(aiAnalysisResponseSchema.parse({ status: 'completed', evaluation, analysis }));
     }),
   };
 }

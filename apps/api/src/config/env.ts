@@ -31,6 +31,9 @@ const envSchema = z.object({
   SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: optionalSecret,
   GITHUB_TOKEN: optionalSecret,
+  GROQ_API_KEY: optionalSecret,
+  GROQ_MODEL: z.string().trim().min(1).max(100).default('openai/gpt-oss-120b'),
+  AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(12000),
 });
 
 export type ApiEnvironment = z.infer<typeof envSchema>;
