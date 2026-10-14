@@ -9,6 +9,7 @@ import {
   type GitHubSyncResponse,
 } from '@devrank/contracts';
 import { getSupabaseClient } from '../config/supabase.js';
+import { env } from '../config/env.js';
 import { HttpError } from '../middleware/http-error.js';
 import { githubAdapter } from '../services/github-adapter.js';
 import type { AuthContext } from '../types/auth.js';
@@ -23,9 +24,36 @@ function unavailable(operation: string): never {
   throw new HttpError(503, 'DATABASE_UNAVAILABLE', `Unable to ${operation} right now`);
 }
 
+type DatabaseFailure = { code?: unknown; message?: unknown; hint?: unknown; status?: unknown };
+
+function safeDiagnostic(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  return value.replace(/[\r\n\t]/g, ' ').replace(/(bearer\s+)[^\s,;]+/gi, '$1[redacted]')
+    .replace(/(token|secret|password|key)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, '[redacted]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[redacted]')
+    .slice(0, 300);
+}
+
+function githubSaveFailure(failure: unknown, logFailure: (diagnostics: Record<string, string | number>) => void): never {
+  const error = failure && typeof failure === 'object' ? failure as DatabaseFailure : {};
+  const code = typeof error.code === 'string' && /^[A-Z0-9_-]{1,32}$/i.test(error.code) ? error.code : undefined;
+  const status = typeof error.status === 'number' ? error.status : undefined;
+  const message = safeDiagnostic(error.message);
+  const hint = safeDiagnostic(error.hint);
+  logFailure({ ...(code ? { code } : {}), ...(message ? { message } : {}), ...(status ? { status } : {}), ...(hint ? { hint } : {}) });
+  if (code === '42501' || status === 403) {
+    throw new HttpError(403, 'GITHUB_DATABASE_PERMISSION_DENIED', 'The database denied saving GitHub data. Check the candidate ownership and platform_evidence permissions.');
+  }
+  throw new HttpError(503, 'GITHUB_DATA_SAVE_FAILED', 'GitHub data was retrieved, but the database could not save it. Check the API logs and database schema/permissions, then retry.');
+}
+
 export function createCandidatePlatformRepository(
   getClient = getSupabaseClient,
   getGitHubProfile: (profile: string) => Promise<GitHubProfileResponse> = (profile) => githubAdapter.getProfile(profile),
+  logGitHubSaveFailure: (diagnostics: Record<string, string | number>) => void = (diagnostics) => {
+    if (env.NODE_ENV === 'development') console.error('DevRank GitHub profile persistence failed', diagnostics);
+  },
 ): CandidatePlatformRepository {
   return {
     async getLatest(auth, candidateId) {
@@ -175,7 +203,8 @@ export function createCandidatePlatformRepository(
           })
           .select('id,candidate_id,created_at')
           .single();
-        if (error || !data) unavailable('save GitHub profile data');
+        if (error) githubSaveFailure(error, logGitHubSaveFailure);
+        if (!data) githubSaveFailure({ message: 'Database returned no saved row after GitHub evidence insert' }, logGitHubSaveFailure);
         return githubSyncResponseSchema.parse({
           id: data.id,
           candidateId: data.candidate_id,
@@ -187,7 +216,7 @@ export function createCandidatePlatformRepository(
         });
       } catch (error) {
         if (error instanceof HttpError) throw error;
-        unavailable('save GitHub profile data');
+        githubSaveFailure(error, logGitHubSaveFailure);
       }
     },
   };

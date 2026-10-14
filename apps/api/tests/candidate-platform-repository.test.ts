@@ -129,4 +129,39 @@ describe('candidate platform evidence repository', () => {
     expect(getGitHubProfile).not.toHaveBeenCalled();
     expect(client.from).toHaveBeenCalledTimes(1);
   });
+
+  it('reports GitHub persistence failures distinctly and logs sanitized database diagnostics', async () => {
+    const { client } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: null, error: { code: '42501', message: 'permission denied; bearer super-secret-token', status: 403, hint: 'Check RLS policy' } },
+    );
+    const log = vi.fn();
+    const repository = createCandidatePlatformRepository(() => client, async () => ({
+      username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 0,
+      followers: 0, following: 0, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+    }), log);
+    await expect(repository.syncGitHub(auth, candidateId, 'octocat')).rejects.toMatchObject({
+      statusCode: 403, code: 'GITHUB_DATABASE_PERMISSION_DENIED',
+    });
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({
+      code: '42501', status: 403, hint: 'Check RLS policy',
+      message: 'permission denied; bearer [redacted]',
+    }));
+    expect(JSON.stringify(log.mock.calls)).not.toContain('super-secret-token');
+  });
+
+  it('returns a distinct save failure when the database write throws or returns no row', async () => {
+    const { client, evidenceQuery } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: null, error: null },
+    );
+    evidenceQuery.single.mockRejectedValueOnce(new Error('connection refused'));
+    const repository = createCandidatePlatformRepository(() => client, async () => ({
+      username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 0,
+      followers: 0, following: 0, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+    }), vi.fn());
+    await expect(repository.syncGitHub(auth, candidateId, 'octocat')).rejects.toMatchObject({
+      statusCode: 503, code: 'GITHUB_DATA_SAVE_FAILED',
+    });
+  });
 });
