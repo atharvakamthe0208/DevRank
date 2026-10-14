@@ -29,7 +29,7 @@ describe('evaluation API routes', () => {
     aiExplanation: { summary: 'No AI explanation.', strengths: [], skillGaps: [], recommendations: [] },
     decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
   } };
-  const repository: EvaluationRepository = { create: vi.fn(async () => created), get: vi.fn(async () => created) };
+  const repository: EvaluationRepository = { listRoleProfiles: vi.fn(async () => ({ items: [] })), listForCandidate: vi.fn(async () => ({ items: [created] })), create: vi.fn(async () => created), get: vi.fn(async () => created) };
 
   beforeAll(async () => {
     const app = express(); app.use(express.json());
@@ -37,7 +37,9 @@ describe('evaluation API routes', () => {
     const controller = createEvaluationController(repository);
     const candidates = express.Router(); candidates.use(authMiddleware, requireApprovedRecruiter);
     candidates.post('/:id/evaluations', validateParams(candidateIdParamsSchema), validateBody(evaluationRequestSchema), controller.create);
+    candidates.get('/:id/evaluations', validateParams(candidateIdParamsSchema), controller.listForCandidate);
     const evaluations = express.Router(); evaluations.use(authMiddleware, requireApprovedRecruiter);
+    evaluations.get('/role-profiles', controller.listRoleProfiles);
     evaluations.get('/:id', validateParams(evaluationIdParamsSchema), controller.get);
     app.use('/api/candidates', candidates); app.use('/api/evaluations', evaluations); app.use(errorHandler);
     server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -53,6 +55,18 @@ describe('evaluation API routes', () => {
     expect(read.status).toBe(200); expect(await read.json()).toEqual(created);
     expect(repository.create).toHaveBeenCalledWith(auth, candidateId, { roleProfileId });
     expect(repository.get).toHaveBeenCalledWith(auth, evaluationId);
+  });
+  it('lists saved evaluation results for the candidate', async () => {
+    const response = await fetch(`${origin}/api/candidates/${candidateId}/evaluations`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ items: [created] });
+    expect(repository.listForCandidate).toHaveBeenCalledWith(auth, candidateId);
+  });
+  it('loads the recruiter’s configured role profiles without manufacturing defaults', async () => {
+    vi.mocked(repository.listRoleProfiles).mockResolvedValueOnce({ items: [{ id: roleProfileId, name: 'software_developer', description: null, usable: true, targetRole: 'software_developer', weights: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 } }] });
+    const response = await fetch(`${origin}/api/evaluations/role-profiles`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ items: [{ id: roleProfileId, usable: true, targetRole: 'software_developer' }] });
   });
   it('rejects invalid request bodies and IDs', async () => {
     const body = await fetch(`${origin}/api/candidates/${candidateId}/evaluations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roleProfileId, candidateId }) });

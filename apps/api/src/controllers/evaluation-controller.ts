@@ -10,6 +10,13 @@ export function createEvaluationController(repository: EvaluationRepository = ev
     return request.auth;
   };
   return {
+    listForCandidate: asyncHandler(async (request, response: Response) => {
+      const { id } = candidateIdParamsSchema.parse(request.params);
+      response.json(await repository.listForCandidate(authContext(request), id));
+    }),
+    listRoleProfiles: asyncHandler(async (request, response: Response) => {
+      response.json(await repository.listRoleProfiles(authContext(request)));
+    }),
     create: asyncHandler(async (request, response: Response) => {
       const { id } = candidateIdParamsSchema.parse(request.params);
       const saved = await repository.create(authContext(request), id, request.body);

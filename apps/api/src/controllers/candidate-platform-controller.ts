@@ -15,6 +15,10 @@ function authContext(request: Request) {
 
 export function createCandidatePlatformController(repository: CandidatePlatformRepository = candidatePlatformRepository) {
   return {
+    getLatest: asyncHandler(async (request, response) => {
+      const { id } = candidateIdParamsSchema.parse(request.params);
+      response.json(await repository.getLatest(authContext(request), id));
+    }),
     submit: asyncHandler(async (request, response) => {
       const { id } = candidateIdParamsSchema.parse(request.params);
       const input = request.body as CandidatePlatformSubmission;

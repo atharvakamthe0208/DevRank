@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { githubSyncResponseSchema } from './github.js';
 
 export const platformNameSchema = z.enum(['github', 'leetcode', 'hackerrank', 'candidate_provided']);
 export const sourceAvailabilitySchema = z.enum(['available', 'unavailable', 'not_provided', 'error']);
@@ -77,3 +78,8 @@ export const candidatePlatformResponseSchema = z.object({
 }).strict();
 
 export type CandidatePlatformResponse = z.infer<typeof candidatePlatformResponseSchema>;
+
+export const candidatePlatformDataResponseSchema = z.object({
+  items: z.array(z.union([candidatePlatformResponseSchema, githubSyncResponseSchema])),
+}).strict();
+export type CandidatePlatformDataResponse = z.infer<typeof candidatePlatformDataResponseSchema>;

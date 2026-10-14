@@ -5,10 +5,10 @@ export const scoringVersion = '2.0.0' as const;
 export const scoringVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/, 'Scoring version must use semantic version format (major.minor.patch).');
 export const scoringCategories = [
   { id: 'technical_skills', displayName: 'Technical Skills', description: 'Demonstrated proficiency in role-relevant languages, tools, and engineering concepts.' },
-  { id: 'problem_solving_dsa', displayName: 'Problem-Solving and DSA', description: 'Ability to reason through problems, select algorithms, and explain trade-offs.' },
+  { id: 'problem_solving_dsa', displayName: 'Problem-Solving / DSA', description: 'Ability to reason through problems, select algorithms, and explain trade-offs.' },
   { id: 'relevant_project_experience', displayName: 'Relevant Project Experience', description: 'Depth, relevance, and verifiable impact of work on related projects.' },
   { id: 'practical_assessment_performance', displayName: 'Practical Assessment Performance', description: 'Performance on a completed, role-relevant practical assessment.' },
-  { id: 'learning_adaptability', displayName: 'Learning Ability and Adaptability', description: 'Evidence of learning new tools or concepts and adapting to changing constraints.' },
+  { id: 'learning_adaptability', displayName: 'Learning & Adaptability', description: 'Evidence of learning new tools or concepts and adapting to changing constraints.' },
 ] as const;
 
 export const scoringCategorySchema = z.enum(scoringCategories.map(({ id }) => id) as [string, ...string[]]);

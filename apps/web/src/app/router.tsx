@@ -7,6 +7,8 @@ import { useAuth } from '../features/auth/AuthProvider';
 import { AdminRecruitersPage } from '../features/admin/AdminRecruitersPage';
 import { CandidateListPage } from '../features/candidates/CandidateListPage';
 import { AddCandidatePage } from '../features/candidates/AddCandidatePage';
+import { EvaluationCreatePage } from '../features/evaluations/EvaluationCreatePage';
+import { EvaluationResultPage } from '../features/evaluations/EvaluationResultPage';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh, signOut } = useAuth();
@@ -55,6 +57,8 @@ export const router = createBrowserRouter([
     { path: 'dashboard/reports', element: <SimplePage title="Reports" /> },
     { path: 'candidates/new', element: <AddCandidatePage /> },
     { path: 'candidates/:id', element: <CandidateDetailsPage /> },
+    { path: 'candidates/:id/evaluate', element: <EvaluationCreatePage /> },
+    { path: 'evaluations/:evaluationId', element: <EvaluationResultPage /> },
   ] }] },
   { path: '*', element: <NotFoundPage /> },
 ]);

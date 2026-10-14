@@ -28,6 +28,10 @@ function closeServer(server: Server): Promise<void> {
 
 function createRepository(): CandidatePlatformRepository {
   return {
+    getLatest: vi.fn(async (auth, id) => {
+      if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+      return { items: [] };
+    }),
     submit: vi.fn(async (auth, id, input) => {
       if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       if (auth.userId === otherOwnerId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
@@ -122,6 +126,14 @@ describe('candidate platform data API', () => {
     const missing = await syncGitHub({ profile: 'missing-profile' }, 'owner-token');
     expect(missing.status).toBe(404);
     expect(await missing.json()).toMatchObject({ error: { code: 'GITHUB_USER_NOT_FOUND' } });
+  });
+
+  it('returns persisted platform data only for the authorized candidate', async () => {
+    const response = await fetch(`${origin}/api/candidates/${candidateId}/platform-data`, { headers: { Authorization: 'Bearer owner-token' } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ items: [] });
+    expect(repository.getLatest).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId }), candidateId);
+    expect((await fetch(`${origin}/api/candidates/${candidateId}/platform-data`)).status).toBe(401);
   });
 
   it('requires approval and rejects malformed GitHub sync requests', async () => {

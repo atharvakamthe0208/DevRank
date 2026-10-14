@@ -7,6 +7,7 @@ import { evaluationIdParamsSchema } from '@devrank/contracts';
 export function createEvaluationsRouter(controller = createEvaluationController(), authMiddleware = authenticate) {
   const router = Router();
   router.use(authMiddleware, requireApprovedRecruiter);
+  router.get('/role-profiles', controller.listRoleProfiles);
   router.get('/:id', validateParams(evaluationIdParamsSchema), controller.get);
   return router;
 }

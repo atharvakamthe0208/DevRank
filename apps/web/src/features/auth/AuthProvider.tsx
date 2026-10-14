@@ -21,13 +21,24 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState('');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const verificationId = useRef(0);
+  const lastAttemptedSession = useRef<string | null | undefined>(undefined);
+  const inFlightSession = useRef<string | null | undefined>(undefined);
 
-  const restore = useCallback(async (nextSession: Session | null) => {
+  const restore = useCallback(async (nextSession: Session | null, force = false) => {
+    const sessionKey = nextSession?.access_token ?? null;
+    if (inFlightSession.current === sessionKey) return;
+    if (!force && lastAttemptedSession.current === sessionKey) return;
+    inFlightSession.current = sessionKey;
+    lastAttemptedSession.current = sessionKey;
     const currentVerification = ++verificationId.current;
     setSession(nextSession);
     setError('');
     setProfile(null);
-    if (!nextSession) { setState('signed-out'); return; }
+    if (!nextSession) {
+      setState('signed-out');
+      if (inFlightSession.current === sessionKey) inFlightSession.current = null;
+      return;
+    }
     setState('loading');
     try {
       const result = await apiRequest<{ user: { id: string }; profile: Profile; emailConfirmed: boolean }>('/auth/me', undefined, nextSession.access_token);
@@ -45,12 +56,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return;
       }
       const message = cause instanceof ApiRequestError
-        ? cause.status === 503
-          ? 'Authentication or profile verification is temporarily unavailable. Please try again shortly.'
-          : cause.message
+        ? cause.code === 'AUTH_CONFIGURATION_MISSING'
+          ? 'The DevRank API is missing SUPABASE_URL or SUPABASE_ANON_KEY. Configure apps/api/.env and restart the API.'
+          : cause.status === 503
+            ? 'Authentication or profile verification is temporarily unavailable. Please try again shortly.'
+            : cause.message
         : 'Could not reach the DevRank API. Confirm it is running on the configured API URL and that its CORS policy allows this local Vite origin.';
       setError(message);
       setState('error');
+    } finally {
+      if (inFlightSession.current === sessionKey) inFlightSession.current = null;
     }
   }, []);
 
@@ -89,7 +104,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!supabase) { setState('error'); return; }
     const { data, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) { setError('Could not restore your session. Please refresh and try again.'); setState('error'); return; }
-    await restore(data.session);
+    await restore(data.session, true);
   }, [restore]);
   const signOut = useCallback(async () => {
     if (!supabase) return;

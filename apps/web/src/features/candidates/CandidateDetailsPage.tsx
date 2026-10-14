@@ -6,6 +6,7 @@ import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { supabase } from '../../lib/supabase/client';
 import { parseCandidateApiResponse } from './candidate-response-validation';
 import { CandidatePlatformDataPanel } from './CandidatePlatformDataPanel';
+import { CandidateEvaluationHistory } from '../evaluations/CandidateEvaluationHistory';
 
 type LoadState = { loading: true } | { loading: false; candidate: Candidate } | { loading: false; error: string; missing?: boolean };
 
@@ -59,8 +60,9 @@ export function CandidateDetailsPage() {
     <Link className="back-link" to="/dashboard/candidates">← <span>Back to candidates</span></Link>
     {typeof notice === 'string' && <p className="form-feedback candidate-success-message" role="status">{notice}</p>}
     <section className="detail-profile-card"><div className="avatar avatar-xl avatar-user">{candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</div><div className="profile-main"><div className="profile-title-row"><div><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE PROFILE</span><h1>{candidate.name}</h1></div></div><div className="profile-meta"><span>Added <time dateTime={candidate.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(candidate.createdAt))}</time></span>{candidate.email && <a href={`mailto:${candidate.email}`}>✉ {candidate.email}</a>}</div></div></section>
-    <section className="detail-section profile-links-section"><div className="section-heading"><div><h2>Developer profiles</h2><p>Profiles associated with this candidate record</p></div></div><div className="profile-links">{availableProfiles.length ? availableProfiles.map((profile) => <a className="profile-link-card" href={profile.url} key={profile.name} target="_blank" rel="noreferrer"><span className={`platform-mark ${profile.className}`}>{profile.mark}</span><span><strong>{profile.name}</strong><small>@{profile.handle}</small></span><span className="external-arrow">↗</span></a>) : <p className="candidate-detail-empty">No developer profile usernames have been added.</p>}</div></section>
+    <section className="detail-section profile-links-section"><div className="section-heading"><div><h2>Developer profiles</h2><p>Profiles associated with this candidate record</p></div><Link className="primary-button link-button" to={`/candidates/${candidate.id}/evaluate`}>Evaluate candidate</Link></div><div className="profile-links">{availableProfiles.length ? availableProfiles.map((profile) => <a className="profile-link-card" href={profile.url} key={profile.name} target="_blank" rel="noreferrer"><span className={`platform-mark ${profile.className}`}>{profile.mark}</span><span><strong>{profile.name}</strong><small>@{profile.handle}</small></span><span className="external-arrow">↗</span></a>) : <p className="candidate-detail-empty">No developer profile usernames have been added.</p>}</div></section>
     <CandidatePlatformDataPanel candidate={candidate} />
-    <p className="candidate-management-note"><span aria-hidden="true">ⓘ</span> Evaluation scores and role assignments are not part of the current candidate data model.</p>
+    <CandidateEvaluationHistory candidateId={candidate.id} />
+    <p className="candidate-management-note"><span aria-hidden="true">ⓘ</span> Evaluation scores are calculated from normalized, mapped evidence and the selected saved role profile.</p>
   </div>;
 }

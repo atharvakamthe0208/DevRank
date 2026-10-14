@@ -41,7 +41,7 @@ The web app is served at `http://localhost:5173`; API health is `http://localhos
 
 ## Current implementation
 
-Recruiters can authenticate, manage candidates, submit LeetCode/HackerRank data as recruiter-provided evidence, and sync public GitHub profile evidence through the official REST API. API evaluation creation validates evidence, scores five categories, stores a versioned snapshot, and optionally attaches AI analysis. The web UI does not yet present evaluation/AI results, and comparison/ranking are not implemented. Database migrations must be applied separately; live Supabase and provider behavior is deployment-dependent.
+Recruiters can authenticate, manage candidates, submit LeetCode/HackerRank data as candidate-provided evidence, and sync public GitHub profile evidence through the official REST API. API evaluation creation validates evidence, scores five categories, stores a versioned snapshot, and optionally attaches AI analysis. The web app now offers evaluation setup from candidate profiles and displays persisted five-category results, missing evidence, and valid optional AI analysis. Existing role weights remain preliminary and must be approved; no default weights are created. Comparison/ranking are not implemented. Database migrations must be applied separately; live Supabase and provider behavior is deployment-dependent. See [evaluation UI documentation](docs/evaluation-ui.md).
 
 ## Team ownership
 

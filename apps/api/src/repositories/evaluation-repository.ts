@@ -1,4 +1,4 @@
-import { evaluationResponseSchema, persistedEvaluationSchema, roleIdSchema, roleWeightsSchema, type AiAnalysisResult, type EvaluationRequest, type EvaluationResponse } from '@devrank/contracts';
+import { candidateEvaluationsResponseSchema, evaluationResponseSchema, persistedEvaluationSchema, roleIdSchema, roleWeightsSchema, type AiAnalysisResult, type EvaluationRequest, type EvaluationResponse, roleProfileListResponseSchema } from '@devrank/contracts';
 import { getSupabaseClient } from '../config/supabase.js';
 import { HttpError } from '../middleware/http-error.js';
 import { processCandidateEvidence } from '../modules/evidence-processing/index.js';
@@ -7,6 +7,8 @@ import { loadRoleWeightConfiguration } from '../modules/scoring/index.js';
 import type { AuthContext } from '../types/auth.js';
 
 export interface EvaluationRepository {
+  listRoleProfiles(auth: AuthContext): Promise<unknown>;
+  listForCandidate(auth: AuthContext, candidateId: string): Promise<unknown>;
   create(auth: AuthContext, candidateId: string, input: EvaluationRequest): Promise<unknown>;
   get(auth: AuthContext, id: string): Promise<unknown>;
 }
@@ -19,6 +21,44 @@ export function createEvaluationRepository(
   analyze: EvaluationAnalyzer = analyzeEvaluation,
 ): EvaluationRepository {
   return {
+    async listForCandidate(auth, candidateId) {
+      let client;
+      try { client = getClient(auth.accessToken); } catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Evaluation storage is not configured'); }
+      try {
+        const { data: candidate, error: candidateError } = await client.from('candidates').select('id').eq('id', candidateId).eq('owner_id', auth.userId).is('archived_at', null).maybeSingle();
+        if (candidateError) throw unavailable();
+        if (!candidate) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+        const { data, error } = await client.from('evaluations').select('id,candidate_id,role_profile_id,status,created_at,evaluation_result').eq('candidate_id', candidateId).eq('owner_id', auth.userId).order('created_at', { ascending: false }).limit(20);
+        if (error || !data) throw unavailable();
+        return candidateEvaluationsResponseSchema.parse({ items: data.map((row) => ({ id: row.id, candidateId: row.candidate_id, roleProfileId: row.role_profile_id, status: row.status, createdAt: row.created_at, result: row.evaluation_result })) });
+      } catch (error) {
+        if (error instanceof HttpError) throw error;
+        throw unavailable();
+      }
+    },
+    async listRoleProfiles(auth) {
+      let client;
+      try { client = getClient(auth.accessToken); } catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Role profiles are not configured'); }
+      try {
+        const { data, error } = await client.from('role_profiles').select('id,name,description,weights').eq('owner_id', auth.userId).order('name', { ascending: true });
+        if (error || !data) throw unavailable();
+        return roleProfileListResponseSchema.parse({ items: data.map((profile) => {
+          const targetRole = roleIdSchema.safeParse(profile.name);
+          const weights = roleWeightsSchema.safeParse(profile.weights);
+          return {
+            id: profile.id,
+            name: profile.name,
+            description: profile.description,
+            usable: targetRole.success && weights.success,
+            ...(targetRole.success ? { targetRole: targetRole.data } : {}),
+            ...(weights.success ? { weights: weights.data } : {}),
+          };
+        }) });
+      } catch (error) {
+        if (error instanceof HttpError) throw error;
+        throw unavailable();
+      }
+    },
     async create(auth, candidateId, input) {
       let client;
       try { client = getClient(auth.accessToken); } catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Evaluation storage is not configured'); }

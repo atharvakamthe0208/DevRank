@@ -1,7 +1,9 @@
 import {
   candidatePlatformResponseSchema,
+  candidatePlatformDataResponseSchema,
   githubSyncResponseSchema,
   type CandidatePlatformResponse,
+  type CandidatePlatformDataResponse,
   type CandidatePlatformSubmission,
   type GitHubProfileResponse,
   type GitHubSyncResponse,
@@ -12,6 +14,7 @@ import { githubAdapter } from '../services/github-adapter.js';
 import type { AuthContext } from '../types/auth.js';
 
 export interface CandidatePlatformRepository {
+  getLatest(auth: AuthContext, candidateId: string): Promise<CandidatePlatformDataResponse>;
   submit(auth: AuthContext, candidateId: string, input: CandidatePlatformSubmission): Promise<CandidatePlatformResponse>;
   syncGitHub(auth: AuthContext, candidateId: string, profile: string): Promise<GitHubSyncResponse>;
 }
@@ -25,6 +28,49 @@ export function createCandidatePlatformRepository(
   getGitHubProfile: (profile: string) => Promise<GitHubProfileResponse> = (profile) => githubAdapter.getProfile(profile),
 ): CandidatePlatformRepository {
   return {
+    async getLatest(auth, candidateId) {
+      let client;
+      try { client = getClient(auth.accessToken); } catch {
+        throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Platform data storage is not configured');
+      }
+      try {
+        const { data: candidate, error: candidateError } = await client.from('candidates')
+          .select('id').eq('id', candidateId).eq('owner_id', auth.userId).is('archived_at', null).maybeSingle();
+        if (candidateError) unavailable('verify the candidate');
+        if (!candidate) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+        const { data, error } = await client.from('platform_evidence')
+          .select('id,candidate_id,source,availability,raw_evidence,normalized_evidence,created_at,observed_at')
+          .eq('candidate_id', candidateId).eq('owner_id', auth.userId).order('created_at', { ascending: false });
+        if (error || !data) unavailable('load platform data');
+        const latest = new Map<string, (typeof data)[number]>();
+        for (const row of data) if (!latest.has(row.source)) latest.set(row.source, row);
+        const items: Array<import('@devrank/contracts').CandidatePlatformResponse | GitHubSyncResponse> = [];
+        for (const row of latest.values()) {
+          if (row.source === 'github' && row.availability === 'available') {
+            const parsed = githubSyncResponseSchema.safeParse({
+              id: row.id, candidateId: row.candidate_id, source: 'github', availability: 'available',
+              provenance: 'github_api', syncedAt: row.observed_at ?? row.created_at,
+              profile: row.normalized_evidence,
+            });
+            if (parsed.success) items.push(parsed.data);
+            continue;
+          }
+          if ((row.source === 'leetcode' || row.source === 'hackerrank') && ['available', 'unavailable', 'not_provided'].includes(row.availability)) {
+            const raw = row.raw_evidence as Record<string, unknown>;
+            const parsed = candidatePlatformResponseSchema.safeParse({
+              id: row.id, candidateId: row.candidate_id, platform: row.source, availability: row.availability,
+              provenance: raw?.provenance, profileUrl: raw?.profileUrl, handle: raw?.handle,
+              statistics: raw?.statistics, submittedAt: row.created_at,
+            });
+            if (parsed.success) items.push(parsed.data);
+          }
+        }
+        return candidatePlatformDataResponseSchema.parse({ items });
+      } catch (error) {
+        if (error instanceof HttpError) throw error;
+        unavailable('load platform data');
+      }
+    },
     async submit(auth, candidateId, input) {
       let client;
       try {

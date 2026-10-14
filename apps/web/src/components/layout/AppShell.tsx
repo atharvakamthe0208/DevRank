@@ -16,7 +16,9 @@ export function AppShell() {
     ? 'Add candidate'
     : location.pathname.startsWith('/candidates/')
     ? 'Candidate profile'
-    : location.pathname.includes('candidates')
+    : location.pathname.includes('evaluations') || location.pathname.endsWith('/evaluate')
+      ? 'Evaluation'
+      : location.pathname.includes('candidates')
       ? 'Candidates'
       : location.pathname.includes('reports')
         ? 'Reports'
