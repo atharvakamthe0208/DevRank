@@ -6,7 +6,7 @@ const navItems = [
   { to: '/dashboard', label: 'Overview', icon: '⌂' },
   { to: '/dashboard/candidates', label: 'Candidates', icon: '♙' },
   { to: '/evaluations', label: 'Evaluations', icon: '◉' },
-  { to: '/dashboard/reports', label: 'Reports', icon: '▤' },
+  { to: '/dashboard/reports', label: 'Insights', icon: '▤' },
 ];
 
 export function AppShell() {
@@ -19,8 +19,8 @@ export function AppShell() {
     ? 'Candidate profile'
     : location.pathname.includes('candidates')
       ? 'Candidates'
-      : location.pathname.includes('reports')
-        ? 'Reports'
+        : location.pathname.includes('reports')
+          ? 'Insights'
         : location.pathname.includes('evaluations')
           ? 'Evaluations'
         : 'Overview';
@@ -31,7 +31,7 @@ export function AppShell() {
         <NavLink to="/dashboard" className="brand"><span className="brand-mark">d.</span><span>devrank<span className="brand-period">.</span></span></NavLink>
         <div className="workspace-label">WORKSPACE</div>
         <nav className="side-nav" aria-label="Main navigation">
-          {navItems.map((item) => <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><span className="nav-icon">{item.icon}</span>{item.label}</NavLink>)}
+          {navItems.map((item) => <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'} aria-label={item.label} title={item.label} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></NavLink>)}
         </nav>
         <div className="sidebar-bottom">
           <div className="upgrade-card"><span className="upgrade-spark">✦</span><strong>Better hiring starts here.</strong><p>Make confident decisions with candidate insights.</p><button type="button" className="text-button">Explore DevRank <span aria-hidden="true">↗</span></button></div>

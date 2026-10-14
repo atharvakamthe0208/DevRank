@@ -8,6 +8,7 @@ import { AdminRecruitersPage } from '../features/admin/AdminRecruitersPage';
 import { CandidateListPage } from '../features/candidates/CandidateListPage';
 import { AddCandidatePage } from '../features/candidates/AddCandidatePage';
 import { EvaluationPage } from '../features/evaluation/EvaluationPage';
+import { InsightsPage } from '../features/insights/InsightsPage';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh, signOut } = useAuth();
@@ -33,10 +34,6 @@ function ProtectedAdminRoutes() {
   return <main className="auth-state-page"><h1>Can’t verify administrator access</h1><p>{error || 'Administrator access is required.'}</p><button className="primary-button" onClick={() => void refresh()}>Try again</button></main>;
 }
 
-function SimplePage({ title }: { title: string }) {
-  return <section className="placeholder-page"><span className="placeholder-mark">✦</span><h1>{title}</h1><p>This screen is part of the DevRank workspace. Product data will appear here as the experience grows.</p><small>Demo workspace · Mock experience</small></section>;
-}
-
 function NotFoundPage() {
   return <div className="not-found-card"><span className="not-found-mark">404</span><h1>Page not found</h1><p>We couldn’t find the page you were looking for.</p><a className="primary-button link-button" href="/dashboard">Back to overview</a></div>;
 }
@@ -53,7 +50,7 @@ export const router = createBrowserRouter([
     { index: true, element: <Navigate to="/dashboard" replace /> },
     { path: 'dashboard', element: <DashboardPage /> },
     { path: 'dashboard/candidates', element: <CandidateListPage /> },
-    { path: 'dashboard/reports', element: <SimplePage title="Reports" /> },
+    { path: 'dashboard/reports', element: <InsightsPage /> },
     { path: 'evaluations', element: <EvaluationPage /> },
     { path: 'candidates/new', element: <AddCandidatePage /> },
     { path: 'candidates/:id', element: <CandidateDetailsPage /> },
