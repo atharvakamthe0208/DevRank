@@ -32,6 +32,56 @@ const roleNames: Record<EvaluationRole['id'], string> = {
 };
 const unavailable = () => new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to process the evaluation right now');
 
+type EvaluationOperation = 'candidate_lookup' | 'role_profile_lookup' | 'evidence_read' | 'evaluation_insert' | 'evaluation_read' | 'evaluation_processing';
+type DatabaseFailureSource = 'supabase_response' | 'thrown_exception';
+const knownColumns = new Set([
+  'evaluation_result', 'role_weights_snapshot', 'target_role', 'role_profile_id', 'status',
+  'owner_id', 'candidate_id', 'scoring_version', 'evidence_snapshot', 'overall_score',
+]);
+
+/** Log only bounded database metadata; never log provider messages or request/evaluation data. */
+function logDatabaseFailure(error: unknown, operation: EvaluationOperation, failureSource: DatabaseFailureSource) {
+  const records: object[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && typeof current === 'object' && current !== null && !records.includes(current); depth++) {
+    records.push(current);
+    current = 'cause' in current ? current.cause : undefined;
+  }
+  const code = records.map((item) => 'code' in item && typeof item.code === 'string' && /^[A-Z0-9_]{1,32}$/i.test(item.code) ? item.code : undefined).find(Boolean);
+  const message = records.map((item) => 'message' in item && typeof item.message === 'string' ? item.message : undefined).find(Boolean) ?? '';
+  const field = [...knownColumns].find((column) => new RegExp(`\\b${column}\\b`, 'i').test(message));
+  const constraintMatch = message.match(/constraint\s+["']([a-z][a-z0-9_]{0,62})["']/i);
+  const safeConstraint = constraintMatch?.[1];
+  const category = code === '42703' || code === '42P01' || code === 'PGRST204' || code === 'PGRST205'
+    ? 'schema'
+    : code === '23502' || code === '23503' || code === '23505' || code === '23514'
+      ? 'constraint'
+      : code === '42501' || code === 'PGRST301'
+        ? 'permission_or_rls'
+        : code?.startsWith('PGRST') ? 'postgrest_other' : 'connection_or_unknown';
+  console.error('Evaluation database operation failed', {
+    operation,
+    failureSource,
+    category,
+    ...(code ? { code } : {}),
+    ...(field ? { field } : {}),
+    ...(safeConstraint ? { constraint: safeConstraint } : {}),
+  });
+}
+
+function databaseFailure(error: unknown, operation: EvaluationOperation, failureSource: DatabaseFailureSource): never {
+  logDatabaseFailure(error, operation, failureSource);
+  throw unavailable();
+}
+
+async function databaseOperation<T>(operation: EvaluationOperation, action: () => PromiseLike<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    return databaseFailure(error, operation, 'thrown_exception');
+  }
+}
+
 function configuredRoles() {
   const configuration = loadRoleWeightConfiguration();
   return evaluationRolesResponseSchema.parse({
@@ -68,10 +118,11 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
   ) {
     const checkedWeights = roleWeightsSchema.safeParse(weights);
     if (!checkedWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define six valid weights totaling 100');
-    const { data: rows, error: evidenceError } = await client.from('platform_evidence')
+    const { data: rows, error: evidenceError } = await databaseOperation('evidence_read', () => client.from('platform_evidence')
       .select('id,source,availability,normalized_evidence,observed_at,created_at')
-      .eq('candidate_id', candidate.id).eq('owner_id', auth.userId).order('created_at', { ascending: true });
-    if (evidenceError || !rows) throw unavailable();
+      .eq('candidate_id', candidate.id).eq('owner_id', auth.userId).order('created_at', { ascending: true }));
+    if (evidenceError) databaseFailure(evidenceError, 'evidence_read', 'supabase_response');
+    if (!rows) throw unavailable();
 
     // Provider snapshots and raw metrics remain provenance; only explicit contract evidence is scoreable.
     const configuredScoring = loadRoleWeightConfiguration();
@@ -80,7 +131,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
       candidateId: candidate.id, targetRole, evidence: makeEvidence(rows as Array<Record<string, unknown>>),
     }, { roleWeights: configuration });
     const result = evaluationResponseSchema.parse(evaluation);
-    const { data: saved, error: insertError } = await client.from('evaluations').insert({
+    const { data: saved, error: insertError } = await databaseOperation('evaluation_insert', () => client.from('evaluations').insert({
       owner_id: auth.userId,
       candidate_id: candidate.id,
       role_profile_id: roleProfileId,
@@ -91,8 +142,9 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
       evidence_snapshot: result.evidence,
       role_weights_snapshot: result.roleWeightsUsed,
       evaluation_result: result,
-    }).select('id,candidate_id,role_profile_id,target_role,status,created_at,evaluation_result').single();
-    if (insertError || !saved) throw unavailable();
+    }).select('id,candidate_id,role_profile_id,target_role,status,created_at,evaluation_result').single());
+    if (insertError) databaseFailure(insertError, 'evaluation_insert', 'supabase_response');
+    if (!saved) throw unavailable();
     return {
       id: saved.id,
       candidateId: saved.candidate_id,
@@ -105,9 +157,9 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
   }
 
   async function ownedCandidate(client: ReturnType<typeof getSupabaseClient>, auth: AuthContext, candidateId: string) {
-    const { data, error } = await client.from('candidates').select('id,full_name')
-      .eq('id', candidateId).eq('owner_id', auth.userId).is('archived_at', null).maybeSingle();
-    if (error) throw unavailable();
+    const { data, error } = await databaseOperation('candidate_lookup', () => client.from('candidates').select('id,full_name')
+      .eq('id', candidateId).eq('owner_id', auth.userId).is('archived_at', null).maybeSingle());
+    if (error) databaseFailure(error, 'candidate_lookup', 'supabase_response');
     if (!data) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
     return data;
   }
@@ -136,7 +188,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         });
       } catch (error) {
         if (error instanceof HttpError) throw error;
-        throw unavailable();
+        databaseFailure(error, 'evaluation_processing', 'thrown_exception');
       }
     },
     async create(auth, candidateId, input) {
@@ -145,16 +197,16 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
       catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Evaluation storage is not configured'); }
       try {
         const candidate = await ownedCandidate(client, auth, candidateId);
-        const { data: role, error } = await client.from('role_profiles').select('id,name,weights')
-          .eq('id', input.roleProfileId).eq('owner_id', auth.userId).maybeSingle();
-        if (error) throw unavailable();
+        const { data: role, error } = await databaseOperation('role_profile_lookup', () => client.from('role_profiles').select('id,name,weights')
+          .eq('id', input.roleProfileId).eq('owner_id', auth.userId).maybeSingle());
+        if (error) databaseFailure(error, 'role_profile_lookup', 'supabase_response');
         if (!role) throw new HttpError(404, 'ROLE_PROFILE_NOT_FOUND', 'Role profile not found');
         const targetRole = roleIdSchema.safeParse(role.name);
         if (!targetRole.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'Role profile name must match a supported role identifier');
         return persistedEvaluationSchema.parse(await persist(client, auth, candidate, input.roleProfileId, targetRole.data, role.weights));
       } catch (error) {
         if (error instanceof HttpError) throw error;
-        throw unavailable();
+        databaseFailure(error, 'evaluation_processing', 'thrown_exception');
       }
     },
     async get(auth, id) {
@@ -162,10 +214,10 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
       try { client = getClient(auth.accessToken); }
       catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Evaluation storage is not configured'); }
       try {
-        const { data, error } = await client.from('evaluations')
+        const { data, error } = await databaseOperation('evaluation_read', () => client.from('evaluations')
           .select('id,candidate_id,role_profile_id,target_role,status,created_at,evaluation_result')
-          .eq('id', id).eq('owner_id', auth.userId).maybeSingle();
-        if (error) throw unavailable();
+          .eq('id', id).eq('owner_id', auth.userId).maybeSingle());
+        if (error) databaseFailure(error, 'evaluation_read', 'supabase_response');
         if (!data) throw new HttpError(404, 'NOT_FOUND', 'Evaluation not found');
         if (!data.target_role || !data.evaluation_result) {
           throw new HttpError(409, 'EVALUATION_RESULT_UNAVAILABLE', 'This evaluation predates the stored result format');
@@ -176,7 +228,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         });
       } catch (error) {
         if (error instanceof HttpError) throw error;
-        throw unavailable();
+        databaseFailure(error, 'evaluation_processing', 'thrown_exception');
       }
     },
   };
