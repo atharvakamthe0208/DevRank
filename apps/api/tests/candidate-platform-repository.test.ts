@@ -9,7 +9,7 @@ const evidenceId = 'ea574cd8-8d21-4586-a887-dc2a6fc7ba08';
 
 function query(maybeSingleResult: unknown, singleResult: unknown) {
   const builder: Record<string, any> = {};
-  for (const method of ['select', 'eq', 'is']) builder[method] = vi.fn(() => builder);
+  for (const method of ['select', 'eq', 'is', 'order']) builder[method] = vi.fn(() => builder);
   builder.insert = vi.fn(() => builder);
   builder.maybeSingle = vi.fn(async () => maybeSingleResult);
   builder.single = vi.fn(async () => singleResult);

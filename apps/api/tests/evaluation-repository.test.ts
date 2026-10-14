@@ -26,7 +26,7 @@ describe('evaluation persistence repository', () => {
         query.maybeSingle = vi.fn(async () => table === 'candidates'
           ? { data: { id: candidateId, full_name: 'Taylor Example' }, error: null }
           : table === 'role_profiles'
-            ? { data: { id: roleProfileId, name: 'software_developer', weights: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 } }, error: null }
+            ? { data: { id: roleProfileId, name: 'software_developer', weights: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 } }, error: null }
           : { data: legacy ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: null, status: 'pending', created_at: '2026-10-12T00:00:00.000Z', evaluation_result: null } : record ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: record.target_role, status: record.status, created_at: '2026-10-13T00:00:00.000Z', evaluation_result: record.evaluation_result } : null, error: null });
         query.insert = vi.fn((value: Record<string, unknown>) => { values = value; insert(value); return query; });
         query.single = vi.fn(async () => {
@@ -47,7 +47,7 @@ describe('evaluation persistence repository', () => {
       role_profile_id: null,
       target_role: 'software_developer',
       status: 'insufficient_evidence',
-      scoring_version: '1.0.0',
+      scoring_version: '2.0.0',
       evidence_snapshot: [],
       role_weights_snapshot: created.role.weights,
       evaluation_result: created.evaluation,
@@ -75,5 +75,32 @@ describe('evaluation persistence repository', () => {
     expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('private provider detail');
     expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('Could not find');
     diagnostic.mockRestore();
+  });
+
+  it('keeps a legacy six-weight profile unchanged and rejects it explicitly under v2', async () => {
+    const legacyWeights = {
+      technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20,
+      practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10,
+    };
+    const from = vi.fn((table: string) => {
+      const query: Record<string, any> = {};
+      for (const method of ['select', 'eq', 'is']) query[method] = vi.fn(() => query);
+      query.maybeSingle = vi.fn(async () => table === 'candidates'
+        ? { data: { id: candidateId, full_name: 'Taylor Example' }, error: null }
+        : { data: { id: roleProfileId, name: 'software_developer', weights: legacyWeights }, error: null });
+      return query;
+    });
+    const client = { from } as unknown as SupabaseClient;
+    const repository = createEvaluationRepository(() => client);
+
+    await expect(repository.create(auth, candidateId, { roleProfileId })).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'ROLE_PROFILE_REQUIRES_V2_WEIGHTS',
+    });
+    expect(legacyWeights).toEqual({
+      technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20,
+      practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10,
+    });
+    expect(from).not.toHaveBeenCalledWith('platform_evidence');
   });
 });

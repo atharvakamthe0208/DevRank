@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import { apiErrorSchema } from '@devrank/contracts';
-import { getSupabaseClient } from '../config/supabase.js';
+import { getSupabaseClient, SupabaseConfigurationError } from '../config/supabase.js';
 import type { AuthContext } from '../types/auth.js';
 
 export type VerifiedIdentity = Omit<AuthContext, 'accessToken'>;
@@ -10,7 +10,7 @@ type VerificationStage = 'configuration' | 'token_verification' | 'profile_looku
 type SupabaseClientFactory = typeof getSupabaseClient;
 
 class VerificationUnavailableError extends Error {
-  constructor(readonly stage: VerificationStage, readonly status?: number) {
+  constructor(readonly stage: VerificationStage, readonly status?: number, readonly configurationMissing = false) {
     super('Authentication verification is unavailable');
     this.name = 'VerificationUnavailableError';
   }
@@ -27,7 +27,10 @@ export function createSupabaseTokenVerifier(clientFactory: SupabaseClientFactory
     let client: ReturnType<SupabaseClientFactory>;
     try {
       client = clientFactory(token);
-    } catch {
+    } catch (cause) {
+      if (cause instanceof SupabaseConfigurationError) {
+        throw new VerificationUnavailableError('configuration', undefined, true);
+      }
       throw new VerificationUnavailableError('configuration');
     }
 
@@ -69,6 +72,7 @@ export function createSupabaseTokenVerifier(clientFactory: SupabaseClientFactory
 }
 
 export function createAuthenticate(verifyToken: TokenVerifier = createSupabaseTokenVerifier()): RequestHandler {
+  let lastUnavailableLogKey: string | undefined;
   return async (request, response, next) => {
     const authorization = request.get('authorization');
     const match = authorization?.match(/^Bearer\s+([^\s]+)$/i);
@@ -86,18 +90,29 @@ export function createAuthenticate(verifyToken: TokenVerifier = createSupabaseTo
       }
 
       request.auth = { ...identity, accessToken };
+      lastUnavailableLogKey = undefined;
       next();
     } catch (cause) {
       // Avoid exposing Supabase errors or credentials; distinguish outages from rejected tokens.
       const failure = cause instanceof VerificationUnavailableError
         ? cause
         : new VerificationUnavailableError('custom_verifier');
-      console.error('DevRank authentication verification unavailable', {
+      const logDetails = {
         stage: failure.stage,
         ...(failure.status ? { status: failure.status } : {}),
-      });
+      };
+      const logKey = `${failure.stage}:${failure.status ?? ''}:${failure.configurationMissing}`;
+      if (lastUnavailableLogKey !== logKey) {
+        console.error('DevRank authentication verification unavailable', logDetails);
+        lastUnavailableLogKey = logKey;
+      }
       response.status(503).json(apiErrorSchema.parse({
-        error: { code: 'AUTH_SERVICE_UNAVAILABLE', message: 'Authentication service is temporarily unavailable' },
+        error: failure.configurationMissing
+          ? {
+              code: 'AUTH_CONFIGURATION_MISSING',
+              message: 'Supabase API authentication is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in apps/api/.env, then restart the API.',
+            }
+          : { code: 'AUTH_SERVICE_UNAVAILABLE', message: 'Authentication service is temporarily unavailable' },
       }));
     }
   };

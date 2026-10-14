@@ -35,12 +35,12 @@ describe('API environment configuration', () => {
 
   it('requires both Supabase URL and anonymous key when database access is requested', () => {
     expect(() => assertSupabaseConfiguration({})).toThrow(
-      'Set SUPABASE_URL and SUPABASE_ANON_KEY before using database services.',
+      'Supabase API authentication requires SUPABASE_URL and SUPABASE_ANON_KEY.',
     );
     expect(() => assertSupabaseConfiguration({
       url: 'https://your-project.supabase.co',
       anonKey: 'your-public-anon-key',
-    })).toThrow('Set SUPABASE_URL and SUPABASE_ANON_KEY before using database services.');
+    })).toThrow('Supabase API authentication requires SUPABASE_URL and SUPABASE_ANON_KEY.');
   });
 });
 

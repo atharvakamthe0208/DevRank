@@ -22,9 +22,9 @@ describe('evaluation API routes', () => {
   let origin: string;
   const categories = scoringCategories.map(({ id, displayName }) => id);
   const created = { id: evaluationId, candidateId, roleProfileId, targetRole: 'software_developer', status: 'insufficient_evidence', createdAt: '2026-10-12T00:00:00.000Z', result: {
-    schemaVersion: '1.0.0', scoringVersion: '1.0.0', candidateId, targetRole: 'software_developer',
+    schemaVersion: '2.0.0', scoringVersion: '2.0.0', candidateId, targetRole: 'software_developer',
     categoryScores: scoringCategories.map(({ id, displayName }) => ({ categoryId: id, displayName, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' })),
-    roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+    roleWeightsUsed: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 },
     evidence: [], strengths: [], skillGaps: [], recommendations: ['Collect normalized evidence.'], missingEvidence: categories,
     calculationExplanation: 'No overall score without evidence.', evaluationStatus: 'insufficient_evidence',
     aiExplanation: { summary: 'No AI explanation.', strengths: [], skillGaps: [], recommendations: [] },
@@ -37,6 +37,8 @@ describe('evaluation API routes', () => {
   const analysis: AiAnalysisContent = { summary: 'Evidence supports the recorded scores.', summaryEvidenceReferences: ['evidence-technical_skills'], strengths: [{ text: 'Demonstrates relevant skills.', evidenceReferences: ['evidence-technical_skills'] }], weaknesses: [], roleRelevance: 'The evidence aligns with the selected role.', roleRelevanceEvidenceReferences: ['relevant_project_experience'], recommendations: [{ text: 'Gather more evidence from assessments.', evidenceReferences: ['practical_assessment_performance'] }] };
   const repository: EvaluationRepository = {
     listRoles: vi.fn(() => ({ roles: [role] })),
+    listRoleProfiles: vi.fn(async () => ({ items: [] })),
+    listForCandidate: vi.fn(async () => ({ items: [created] })),
     run: vi.fn(async () => runResult),
     create: vi.fn(async () => created),
     get: vi.fn(async () => created),
@@ -55,6 +57,7 @@ describe('evaluation API routes', () => {
     const controller = createEvaluationController(repository, aiService);
     const candidates = express.Router(); candidates.use(authMiddleware, requireApprovedRecruiter);
     candidates.post('/:id/evaluations', validateParams(candidateIdParamsSchema), validateBody(evaluationRequestSchema), controller.create);
+    candidates.get('/:id/evaluations', validateParams(candidateIdParamsSchema), controller.listForCandidate);
     const evaluations = createEvaluationsRouter(controller, authMiddleware);
     app.use('/api/candidates', candidates); app.use('/api/evaluations', evaluations); app.use(errorHandler);
     server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -79,6 +82,16 @@ describe('evaluation API routes', () => {
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual(runResult);
     expect(repository.run).toHaveBeenCalledWith(auth, { candidateId, roleId: role.id });
+  });
+  it('lists owner-scoped role profiles and candidate evaluation history', async () => {
+    vi.mocked(repository.listRoleProfiles).mockResolvedValueOnce({ items: [] });
+    const profiles = await fetch(`${origin}/api/evaluations/role-profiles`);
+    expect(profiles.status).toBe(200);
+    expect(await profiles.json()).toEqual({ items: [] });
+    const history = await fetch(`${origin}/api/candidates/${candidateId}/evaluations`);
+    expect(history.status).toBe(200);
+    expect(await history.json()).toEqual({ items: [created] });
+    expect(repository.listForCandidate).toHaveBeenCalledWith(auth, candidateId);
   });
   it('rejects invalid request bodies and IDs', async () => {
     const body = await fetch(`${origin}/api/candidates/${candidateId}/evaluations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roleProfileId, candidateId }) });

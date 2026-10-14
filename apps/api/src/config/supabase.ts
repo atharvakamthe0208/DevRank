@@ -6,11 +6,18 @@ type SupabaseConfiguration = {
   anonKey?: string;
 };
 
+export class SupabaseConfigurationError extends Error {
+  constructor() {
+    super('Supabase API authentication requires SUPABASE_URL and SUPABASE_ANON_KEY.');
+    this.name = 'SupabaseConfigurationError';
+  }
+}
+
 let anonymousClient: SupabaseClient | undefined;
 
 function assertConfigured(config: SupabaseConfiguration): asserts config is { url: string; anonKey: string } {
   if (!config.url || !config.anonKey || config.url.includes('your-project') || config.anonKey === 'your-public-anon-key') {
-    throw new Error('Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY before using database services.');
+    throw new SupabaseConfigurationError();
   }
 }
 

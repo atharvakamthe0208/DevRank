@@ -116,20 +116,23 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
         // Treat other-owner and missing IDs identically to avoid confirming their existence.
         if (rows.length !== input.evaluationIds.length) throw new HttpError(404, 'NOT_FOUND', 'One or more evaluations were not found');
         const byId = new Map(rows.map((row) => [row.id, row]));
-        const ordered = input.evaluationIds.map((id, index) => {
+        const eligibleRows = input.evaluationIds.map((id, index) => {
           const row = byId.get(id)!;
           if (row.candidate_id !== input.candidateIds[index]) throw new HttpError(400, 'VALIDATION_ERROR', 'Each evaluation must belong to its corresponding candidate');
           if (row.status !== 'completed' && row.status !== 'insufficient_evidence') {
             throw new HttpError(422, 'EVALUATION_INCOMPLETE', 'Comparison requires evaluations with a persisted result; pending, in-progress, and failed evaluations cannot be compared');
           }
+          return row;
+        });
+        const roles = new Set(eligibleRows.map(({ target_role }) => target_role));
+        const versions = new Set(eligibleRows.map(({ scoring_version }) => scoring_version));
+        if (roles.size !== 1) throw new HttpError(409, 'ROLE_VERSION_MISMATCH', 'Evaluations must use the same role to be compared');
+        if (versions.size !== 1) throw new HttpError(409, 'SCORING_VERSION_MISMATCH', 'Evaluations must use the same scoring version to be compared');
+        const ordered = eligibleRows.map((row) => {
           const result = validResult(row);
           if (!result) throw new HttpError(409, 'EVALUATION_RESULT_UNAVAILABLE', 'An evaluation has a missing, malformed, or inconsistent result snapshot');
           return { row, result, weightsKey: weightKey(result.roleWeightsUsed) };
         });
-        const roles = new Set(ordered.map(({ row }) => row.target_role));
-        const versions = new Set(ordered.map(({ row }) => row.scoring_version));
-        if (roles.size !== 1) throw new HttpError(409, 'ROLE_VERSION_MISMATCH', 'Evaluations must use the same role to be compared');
-        if (versions.size !== 1) throw new HttpError(409, 'SCORING_VERSION_MISMATCH', 'Evaluations must use the same scoring version to be compared');
         if (new Set(ordered.map(({ weightsKey }) => weightsKey)).size !== 1) throw new HttpError(409, 'ROLE_CONFIGURATION_MISMATCH', 'Evaluations must use the same role-weight snapshot to be compared');
         const payload = {
           roleId: ordered[0]!.row.target_role,

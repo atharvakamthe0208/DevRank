@@ -36,7 +36,6 @@ function completeRawCandidate(): Record<string, any> {
       rawEvidence({ evidenceId: 'raw-dsa', evidenceType: 'coding_assessment', originalValue: '3/4' }),
       rawEvidence({ evidenceId: 'raw-project', evidenceType: 'project', originalValue: 78 }),
       rawEvidence({ evidenceId: 'raw-practical', evidenceType: 'work_sample', originalValue: 82 }),
-      rawEvidence({ evidenceId: 'raw-communication', evidenceType: 'structured_interview', originalValue: 80 }),
       rawEvidence({ evidenceId: 'raw-learning', evidenceType: 'learning_record', originalValue: 72 }),
     ],
   };
@@ -53,7 +52,6 @@ const testNormalizationRules = {
   },
   project: (value: string | number | boolean) => Number(value),
   work_sample: (value: string | number | boolean) => Number(value),
-  structured_interview: (value: string | number | boolean) => Number(value),
   learning_record: (value: string | number | boolean) => Number(value),
 };
 
@@ -129,7 +127,6 @@ describe('evidence validation, normalization, mapping, and scoring integration',
       coding_assessment: 'problem_solving_dsa',
       project: 'relevant_project_experience',
       work_sample: 'practical_assessment_performance',
-      structured_interview: 'communication_skills',
       learning_record: 'learning_adaptability',
       portfolio: 'relevant_project_experience',
     };
@@ -140,6 +137,8 @@ describe('evidence validation, normalization, mapping, and scoring integration',
       if (result.mapped) expect(result.evidence.categoryId).toBe(categoryId);
     }
     expect(Object.values(expectedByType)).toEqual(expect.arrayContaining(scoringCategories.map(({ id }) => id)));
+    const interview = mapEvidenceCategory(rawEvidenceSchema.parse(rawEvidence({ evidenceType: 'structured_interview', normalizedValue: 80 })), mapping);
+    expect(interview).toMatchObject({ mapped: false, evidenceType: 'structured_interview', reason: expect.stringContaining('no configured category mapping') });
   });
 
   it('reports unmapped types and category conflicts instead of guessing', () => {
@@ -150,15 +149,28 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     expect(conflict).toMatchObject({ mapped: false, reason: expect.stringContaining('conflicts with configured category') });
   });
 
+  it('reports structured interview evidence as unmapped and excludes it from scoring', () => {
+    const interview = rawEvidence({ evidenceId: 'interview-unscored', evidenceType: 'structured_interview', normalizedValue: 94 });
+    const result = processCandidateEvidence({
+      candidateId: 'candidate-interview-only',
+      targetRole: 'software_developer',
+      evidence: [interview],
+    });
+    expect(result.unmappedEvidence).toEqual([expect.objectContaining({ evidenceId: 'interview-unscored', evidenceType: 'structured_interview' })]);
+    expect(result.evaluation.evidence).toEqual([]);
+    expect(result.evaluation.evaluationStatus).toBe('insufficient_evidence');
+    expect(result.evaluation.overallScore).toBeUndefined();
+  });
+
   it('processes complete raw data through normalization, mapping, Day 2 scoring, and the Day 1 response schema', () => {
     const result = processCandidateEvidence(completeRawCandidate(), { normalizationRules: testNormalizationRules });
     expect(result.rejectedEvidence).toEqual([]);
     expect(result.unmappedEvidence).toEqual([]);
     expect(result.unnormalizedEvidence).toEqual([]);
     expect(result.evaluation.categoryScores.map(({ categoryId }) => categoryId)).toEqual(scoringCategories.map(({ id }) => id));
-    expect(result.evaluation.categoryScores.map(({ score }) => score)).toEqual([80, 75, 78, 82, 80, 72]);
-    expect(result.evaluation.overallScore).toBe(78.1);
-    expect(result.evaluation.evidence.map(({ evidenceId }) => evidenceId)).toEqual(['raw-tech', 'raw-dsa', 'raw-project', 'raw-practical', 'raw-communication', 'raw-learning']);
+    expect(result.evaluation.categoryScores.map(({ score }) => score)).toEqual([80, 75, 78, 82, 72]);
+    expect(result.evaluation.overallScore).toBe(77.89);
+    expect(result.evaluation.evidence.map(({ evidenceId }) => evidenceId)).toEqual(['raw-tech', 'raw-dsa', 'raw-project', 'raw-practical', 'raw-learning']);
     expect(result.evaluation.evidence[0]).toMatchObject({ originalValue: '4/5', normalizedValue: 80, categoryId: 'technical_skills' });
     expect(evaluationResponseSchema.safeParse(result.evaluation).success).toBe(true);
   });
@@ -187,14 +199,18 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     expect(result.unmappedEvidence).toHaveLength(1);
     expect(result.unmappedEvidence[0].evidenceId).toBe('unmapped');
     expect(result.unnormalizedEvidence).toContainEqual(expect.objectContaining({ evidenceId: 'no-rule', reason: expect.stringContaining('No normalization rule') }));
-    expect(result.evaluation.overallScore).toBe(78.1);
+    expect(result.evaluation.overallScore).toBe(77.89);
     expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'invalid')).toBe(false);
     expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'unmapped')).toBe(false);
     expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'no-rule')).toBe(true);
   });
 
   it('returns explicit insufficient evidence for one, several, or all missing categories and empty input', () => {
-    for (const input of [candidates[3], candidates[4], { candidateId: 'empty', targetRole: 'software_developer', evidence: [] }]) {
+    const oneMissing = structuredClone(candidates[0]);
+    oneMissing.evidence = oneMissing.evidence.filter((item: Record<string, any>) => item.categoryId !== 'technical_skills');
+    const severalMissing = structuredClone(candidates[4]);
+    severalMissing.evidence = severalMissing.evidence.slice(0, 2);
+    for (const input of [oneMissing, severalMissing, candidates[4], { candidateId: 'empty', targetRole: 'software_developer', evidence: [] }]) {
       const result = processCandidateEvidence(input);
       expect(result.evaluation.evaluationStatus).toBe('insufficient_evidence');
       expect(result.evaluation.overallScore).toBeUndefined();
