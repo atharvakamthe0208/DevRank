@@ -3,69 +3,104 @@ import { describe, expect, it, vi } from 'vitest';
 import { createEvaluationRepository } from '../src/repositories/evaluation-repository.js';
 import { HttpError } from '../src/middleware/http-error.js';
 
+const userId = '1d4b1d45-e136-4f50-a46e-8ef29735ec26';
+const candidateId = 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c';
+const evaluationId = '8c649201-886d-4c46-b99f-8aa2afc0cd6c';
 const roleProfileId = 'e2c9bf0c-23d8-4d90-8cb5-8c33f0ef9084';
-const validWeights = { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 };
+const auth = { userId, email: 'r@example.com', emailConfirmed: true, accessToken: 'test', profile: { id: userId, display_name: 'R', role: 'recruiter' as const, approval_status: 'approved' as const } };
 
-describe('evaluation role profile listing', () => {
-  it('returns only a validation status for owner-scoped role profiles and preserves stored weights', async () => {
-    const result = { data: [
-      { id: roleProfileId, name: 'software_developer', description: 'Approved by team', weights: validWeights },
-      { id: 'df7e058f-6309-4b3b-8ea8-7827f6952ec2', name: 'unapproved_role', description: null, weights: validWeights },
-      { id: 'a2c72455-45cd-413d-a596-e9b66cfc0015', name: 'data_analyst', description: null, weights: { ...validWeights, communication_skills: 1 } },
-    ], error: null };
-    const builder: Record<string, any> = {};
-    for (const method of ['select', 'eq']) builder[method] = vi.fn(() => builder);
-    builder.order = vi.fn(async () => result);
-    const client = { from: vi.fn(() => builder) } as unknown as SupabaseClient;
-    const getClient = vi.fn(() => client);
-    const repository = createEvaluationRepository(getClient);
+describe('evaluation persistence repository', () => {
+  it('persists configured-role results and reads the stored snapshot back', async () => {
+    const insert = vi.fn();
+    let record: Record<string, unknown> | undefined;
+    let legacy = false;
+    let insertError: { code: string; message: string; details: string } | null = null;
+    const client = {
+      from: (table: string) => {
+        let values: Record<string, unknown> | undefined;
+        const query: Record<string, any> = {};
+        query.select = vi.fn(() => query);
+        query.eq = vi.fn(() => query);
+        query.is = vi.fn(() => query);
+        query.order = vi.fn(async () => ({ data: [], error: null }));
+        query.maybeSingle = vi.fn(async () => table === 'candidates'
+          ? { data: { id: candidateId, full_name: 'Taylor Example' }, error: null }
+          : table === 'role_profiles'
+            ? { data: { id: roleProfileId, name: 'software_developer', weights: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 } }, error: null }
+          : { data: legacy ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: null, status: 'pending', created_at: '2026-10-12T00:00:00.000Z', evaluation_result: null } : record ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: record.target_role, status: record.status, created_at: '2026-10-13T00:00:00.000Z', evaluation_result: record.evaluation_result } : null, error: null });
+        query.insert = vi.fn((value: Record<string, unknown>) => { values = value; insert(value); return query; });
+        query.single = vi.fn(async () => {
+          record = values;
+          return { data: insertError ? null : { id: evaluationId, candidate_id: candidateId, role_profile_id: values?.role_profile_id ?? null, target_role: values?.target_role, status: values?.status, created_at: '2026-10-13T00:00:00.000Z', evaluation_result: values?.evaluation_result }, error: insertError };
+        });
+        return query;
+      },
+    } as unknown as SupabaseClient;
+    const repository = createEvaluationRepository(() => client);
 
-    const response = await repository.listRoleProfiles({ userId: 'user-1', accessToken: 'verified-token' });
+    const created = await repository.run(auth, { candidateId, roleId: 'software_developer' });
+    expect(created.status).toBe('insufficient_evidence');
+    expect(created.evaluation).not.toHaveProperty('overallScore');
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      owner_id: userId,
+      candidate_id: candidateId,
+      role_profile_id: null,
+      target_role: 'software_developer',
+      status: 'insufficient_evidence',
+      scoring_version: '2.0.0',
+      evidence_snapshot: [],
+      role_weights_snapshot: created.role.weights,
+      evaluation_result: created.evaluation,
+    }));
 
-    expect(getClient).toHaveBeenCalledWith('verified-token');
-    expect(client.from).toHaveBeenCalledWith('role_profiles');
-    expect(builder.eq).toHaveBeenCalledWith('owner_id', 'user-1');
-    expect(response).toEqual({ items: [
-      { id: roleProfileId, name: 'software_developer', description: 'Approved by team', usable: true, targetRole: 'software_developer', weights: validWeights },
-      { id: 'df7e058f-6309-4b3b-8ea8-7827f6952ec2', name: 'unapproved_role', description: null, usable: false, weights: validWeights },
-      { id: 'a2c72455-45cd-413d-a596-e9b66cfc0015', name: 'data_analyst', description: null, usable: false, targetRole: 'data_analyst' },
-    ] });
+    insert.mockClear();
+    const ownerDefined = await repository.create(auth, candidateId, { roleProfileId });
+    expect(ownerDefined).toMatchObject({ roleProfileId, targetRole: 'software_developer', status: 'insufficient_evidence' });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      owner_id: userId, candidate_id: candidateId, role_profile_id: roleProfileId, target_role: 'software_developer',
+    }));
+
+    const retrieved = await repository.get(auth, evaluationId);
+    expect(retrieved).toMatchObject({ id: evaluationId, candidateId, roleProfileId: null, targetRole: 'software_developer', result: created.evaluation });
+    legacy = true;
+    await expect(repository.get(auth, evaluationId)).rejects.toMatchObject({ statusCode: 409, code: 'EVALUATION_RESULT_UNAVAILABLE' });
+
+    insertError = { code: 'PGRST204', message: "Could not find the 'target_role' column of 'evaluations' in the schema cache", details: 'private provider detail' };
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(repository.run(auth, { candidateId, roleId: 'software_developer' }))
+      .rejects.toMatchObject({ statusCode: 503, code: 'DATABASE_UNAVAILABLE', message: 'Unable to process the evaluation right now' });
+    expect(diagnostic).toHaveBeenCalledWith('Evaluation database operation failed', expect.objectContaining({
+      operation: 'evaluation_insert', failureSource: 'supabase_response', category: 'schema', code: 'PGRST204', field: 'target_role',
+    }));
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('private provider detail');
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('Could not find');
+    diagnostic.mockRestore();
   });
 
-  it('lists recent evaluation snapshots only after verifying candidate ownership', async () => {
-    const candidateId = 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c';
-    const saved = {
-      id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', candidateId,
-      roleProfileId, status: 'insufficient_evidence', createdAt: '2026-10-14T01:00:00.000Z',
-      result: { schemaVersion: '2.0.0', scoringVersion: '2.0.0', candidateId, targetRole: 'software_developer',
-        categoryScores: [
-          { categoryId: 'technical_skills', displayName: 'Technical Skills', status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' },
-          { categoryId: 'problem_solving_dsa', displayName: 'Problem-Solving / DSA', status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' },
-          { categoryId: 'relevant_project_experience', displayName: 'Relevant Project Experience', status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' },
-          { categoryId: 'practical_assessment_performance', displayName: 'Practical Assessment Performance', status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' },
-          { categoryId: 'learning_adaptability', displayName: 'Learning & Adaptability', status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' },
-        ], roleWeightsUsed: validWeights, evidence: [], strengths: [], skillGaps: [], recommendations: [],
-        missingEvidence: ['technical_skills', 'problem_solving_dsa', 'relevant_project_experience', 'practical_assessment_performance', 'learning_adaptability'],
-        calculationExplanation: 'No overall score.', evaluationStatus: 'insufficient_evidence',
-        aiExplanation: { summary: 'No analysis.', strengths: [], skillGaps: [], recommendations: [] },
-        decisionSupportNotice: 'Decision support only; not an automatic hiring decision.' },
+  it('keeps a legacy six-weight profile unchanged and rejects it explicitly under v2', async () => {
+    const legacyWeights = {
+      technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20,
+      practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10,
     };
-    const candidateQuery: Record<string, any> = {};
-    for (const method of ['select', 'eq', 'is']) candidateQuery[method] = vi.fn(() => candidateQuery);
-    candidateQuery.maybeSingle = vi.fn(async () => ({ data: { id: candidateId }, error: null }));
-    const evaluationsQuery: Record<string, any> = {};
-    for (const method of ['select', 'eq', 'order']) evaluationsQuery[method] = vi.fn(() => evaluationsQuery);
-    evaluationsQuery.limit = vi.fn(async () => ({ data: [{ id: saved.id, candidate_id: candidateId, role_profile_id: roleProfileId, status: saved.status, created_at: saved.createdAt, evaluation_result: saved.result }], error: null }));
-    const client = { from: vi.fn((table: string) => table === 'candidates' ? candidateQuery : evaluationsQuery) } as unknown as SupabaseClient;
+    const from = vi.fn((table: string) => {
+      const query: Record<string, any> = {};
+      for (const method of ['select', 'eq', 'is']) query[method] = vi.fn(() => query);
+      query.maybeSingle = vi.fn(async () => table === 'candidates'
+        ? { data: { id: candidateId, full_name: 'Taylor Example' }, error: null }
+        : { data: { id: roleProfileId, name: 'software_developer', weights: legacyWeights }, error: null });
+      return query;
+    });
+    const client = { from } as unknown as SupabaseClient;
     const repository = createEvaluationRepository(() => client);
-    const auth = { userId: 'user-1', accessToken: 'verified-token', email: 'recruiter@example.com', emailConfirmed: true, profile: { id: 'user-1', display_name: 'Recruiter', role: 'recruiter' as const, approval_status: 'approved' as const } };
 
-    await expect(repository.listForCandidate(auth, candidateId)).resolves.toEqual({ items: [saved] });
-    expect(candidateQuery.eq).toHaveBeenCalledWith('owner_id', auth.userId);
-    expect(evaluationsQuery.eq).toHaveBeenCalledWith('owner_id', auth.userId);
-    expect(evaluationsQuery.limit).toHaveBeenCalledWith(20);
-
-    candidateQuery.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
-    await expect(repository.listForCandidate(auth, candidateId)).rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
+    await expect(repository.create(auth, candidateId, { roleProfileId })).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'ROLE_PROFILE_REQUIRES_V2_WEIGHTS',
+    });
+    expect(legacyWeights).toEqual({
+      technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20,
+      practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10,
+    });
+    expect(from).not.toHaveBeenCalledWith('platform_evidence');
   });
 });

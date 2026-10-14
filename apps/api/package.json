@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "npm run build && concurrently -k -n compile,api \"tsc --watch -p tsconfig.json\" \"node --watch dist/server.js\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "test": "vitest run --passWithNoTests --config ../../vitest.config.ts",
@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@devrank/contracts": "0.1.0",
+    "@langchain/core": "^1.2.17",
+    "@langchain/groq": "^1.3.1",
     "@supabase/supabase-js": "^2.49.1",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",

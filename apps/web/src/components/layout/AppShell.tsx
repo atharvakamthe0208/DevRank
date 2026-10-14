@@ -5,6 +5,7 @@ import { useAuth } from '../../features/auth/AuthProvider';
 const navItems = [
   { to: '/dashboard', label: 'Overview', icon: '⌂' },
   { to: '/dashboard/candidates', label: 'Candidates', icon: '♙' },
+  { to: '/evaluations', label: 'Evaluations', icon: '◉' },
   { to: '/dashboard/reports', label: 'Reports', icon: '▤' },
 ];
 
@@ -22,6 +23,8 @@ export function AppShell() {
       ? 'Candidates'
       : location.pathname.includes('reports')
         ? 'Reports'
+        : location.pathname.includes('evaluations')
+          ? 'Evaluations'
         : 'Overview';
 
   return (

@@ -14,7 +14,7 @@ function PasswordField({ id, label, value, onChange, autoComplete, error }: { id
   const [visible, setVisible] = useState(false);
   return <label className="auth-field" htmlFor={id}><span>{label}</span><div className="auth-input-wrap"><input id={id} type={visible ? 'text' : 'password'} autoComplete={autoComplete} value={value} onChange={(event) => onChange(event.target.value)} aria-invalid={Boolean(error)} /><button type="button" className="password-toggle" aria-label={visible ? 'Hide password' : 'Show password'} onClick={() => setVisible(!visible)}>{visible ? 'Hide' : 'Show'}</button></div><FormError message={error}/></label>;
 }
-function ConfigMessage() { return !supabase ? <p className="form-feedback form-feedback-error" role="alert">Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable authentication.</p> : null; }
+function ConfigMessage() { return !supabase ? <p className="form-feedback form-feedback-error" role="alert">Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY (or legacy VITE_SUPABASE_ANON_KEY) to enable authentication.</p> : null; }
 
 export function LoginPage() {
   const { state, error: authError } = useAuth(); const navigate = useNavigate(); const location = useLocation();
