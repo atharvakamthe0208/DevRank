@@ -1,50 +1,50 @@
-import {
-  hackerRankSubmissionSchema,
-  leetCodeSubmissionSchema,
-  type CandidatePlatformSubmission,
-} from '@devrank/contracts';
+export type CandidateCodingPlatform = 'leetcode' | 'hackerrank';
 
-export type PlatformFormFields = {
-  handle: string;
-  availability: 'available' | 'unavailable' | 'not_provided';
-  statistics: Record<string, string>;
-};
-
-export type PlatformFormResult =
-  | { success: true; data: CandidatePlatformSubmission }
-  | { success: false; errors: Record<string, string> };
-
-const metricKeys = {
-  leetcode: ['problemsSolved', 'easySolved', 'mediumSolved', 'hardSolved'],
-  hackerrank: ['points', 'badges', 'certificates'],
+export const platformSyncCapabilities = {
+  leetcode: {
+    supported: false,
+    explanation: 'Automatic sync is unavailable. LeetCode prohibits crawling and scraping, and no authorized public-profile API is configured.',
+  },
+  hackerrank: {
+    supported: false,
+    explanation: 'Automatic sync is unavailable for public usernames. HackerRank’s documented APIs require a HackerRank for Work account and authorized API access.',
+  },
 } as const;
 
-export function validatePlatformForm(
-  platform: 'leetcode' | 'hackerrank',
-  fields: PlatformFormFields,
-): PlatformFormResult {
-  const statistics: Record<string, number> = {};
-  if (fields.availability === 'available') {
-    for (const key of metricKeys[platform]) {
-      const raw = fields.statistics[key]?.trim();
-      if (raw !== undefined && raw !== '') statistics[key] = Number(raw);
+export type NormalizedPlatformProfile =
+  | { success: true; handle: string }
+  | { success: false; message: string };
+
+const usernamePattern = /^[A-Za-z0-9_.-]{1,100}$/;
+
+export function normalizePlatformProfile(
+  platform: CandidateCodingPlatform,
+  input: string,
+): NormalizedPlatformProfile {
+  const value = input.trim();
+  if (!value) return { success: false, message: 'Enter a username or public profile URL.' };
+
+  let handle = value;
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value);
+      const expectedHost = platform === 'leetcode' ? 'leetcode.com' : 'hackerrank.com';
+      const hostAllowed = url.hostname.toLowerCase() === expectedHost
+        || url.hostname.toLowerCase() === `www.${expectedHost}`;
+      const segments = url.pathname.split('/').filter(Boolean);
+      const profileSegment = platform === 'leetcode' ? 'u' : 'profile';
+      if (url.protocol !== 'https:' || !hostAllowed || url.search || url.hash
+        || segments.length !== 2 || segments[0].toLowerCase() !== profileSegment) {
+        return { success: false, message: `Enter a valid ${platform === 'leetcode' ? 'LeetCode' : 'HackerRank'} profile URL.` };
+      }
+      handle = segments[1];
+    } catch {
+      return { success: false, message: 'Enter a valid HTTPS profile URL.' };
     }
   }
 
-  const submission = {
-    platform,
-    handle: fields.handle.trim(),
-    availability: fields.availability,
-    ...(Object.keys(statistics).length > 0 ? { statistics } : {}),
-  };
-  const schema = platform === 'leetcode' ? leetCodeSubmissionSchema : hackerRankSubmissionSchema;
-  const result = schema.safeParse(submission);
-  if (result.success) return { success: true, data: result.data };
-
-  const errors: Record<string, string> = {};
-  for (const issue of result.error.issues) {
-    const field = issue.path.join('.') || 'form';
-    errors[field] ??= issue.message;
+  if (!usernamePattern.test(handle)) {
+    return { success: false, message: 'Use a valid username or supported profile URL.' };
   }
-  return { success: false, errors };
+  return { success: true, handle };
 }

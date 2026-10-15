@@ -7,6 +7,7 @@ describe('API environment configuration', () => {
   it('supplies safe local defaults', () => {
     expect(parseEnv({})).toMatchObject({
       API_PORT: 3000,
+      API_HOST: '0.0.0.0',
       NODE_ENV: 'development',
       WEB_ORIGIN: 'http://localhost:5173',
     });
@@ -49,5 +50,11 @@ describe('CORS origin policy', () => {
   });
   it('supports requests without an Origin header', () => {
     expect(isCorsOriginAllowed(undefined, 'production', configured)).toBe(true);
+  });
+  it('allows explicit LAN frontend origins while keeping other origins blocked', () => {
+    const lan = 'http://192.168.148.1:5173';
+    expect(isCorsOriginAllowed(lan, 'development', configured, [lan])).toBe(true);
+    expect(isCorsOriginAllowed(lan, 'production', configured, [lan])).toBe(true);
+    expect(isCorsOriginAllowed('http://192.168.148.2:5173', 'development', configured, [lan])).toBe(false);
   });
 });

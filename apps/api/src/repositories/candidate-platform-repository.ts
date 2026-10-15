@@ -35,15 +35,22 @@ function safeDiagnostic(value: unknown): string | undefined {
     .slice(0, 300);
 }
 
-function githubSaveFailure(failure: unknown, logFailure: (diagnostics: Record<string, string | number>) => void): never {
+function githubSaveFailure(
+  failure: unknown,
+  logFailure: (diagnostics: Record<string, string | number>) => void,
+  stage: 'lookup' | 'save' = 'save',
+): never {
   const error = failure && typeof failure === 'object' ? failure as DatabaseFailure : {};
   const code = typeof error.code === 'string' && /^[A-Z0-9_-]{1,32}$/i.test(error.code) ? error.code : undefined;
   const status = typeof error.status === 'number' ? error.status : undefined;
   const message = safeDiagnostic(error.message);
   const hint = safeDiagnostic(error.hint);
-  logFailure({ ...(code ? { code } : {}), ...(message ? { message } : {}), ...(status ? { status } : {}), ...(hint ? { hint } : {}) });
+  logFailure({ stage, ...(code ? { code } : {}), ...(message ? { message } : {}), ...(status ? { status } : {}), ...(hint ? { hint } : {}) });
   if (code === '42501' || status === 403) {
     throw new HttpError(403, 'GITHUB_DATABASE_PERMISSION_DENIED', 'The database denied saving GitHub data. Check the candidate ownership and platform_evidence permissions.');
+  }
+  if (stage === 'lookup') {
+    throw new HttpError(503, 'GITHUB_DATA_LOOKUP_FAILED', 'Could not check the saved GitHub snapshot. Check the API logs and database permissions, then retry.');
   }
   throw new HttpError(503, 'GITHUB_DATA_SAVE_FAILED', 'GitHub data was retrieved, but the database could not save it. Check the API logs and database schema/permissions, then retry.');
 }
@@ -189,35 +196,63 @@ export function createCandidatePlatformRepository(
 
       // The adapter returns only the validated, public fields needed by the recruiter UI.
       const profileData = await getGitHubProfile(profile);
+      const syncedAt = new Date().toISOString();
+      let saved: { id: string; candidate_id: string; observed_at: string | null };
       try {
-        const { data, error } = await client
+        const { data: existing, error: lookupError } = await client
           .from('platform_evidence')
-          .insert({
-            candidate_id: candidateId,
-            owner_id: auth.userId,
-            source: 'github',
-            availability: 'available',
-            raw_evidence: { username: profileData.username, profileUrl: profileData.profileUrl },
-            normalized_evidence: profileData,
-            observed_at: new Date().toISOString(),
-          })
-          .select('id,candidate_id,created_at')
-          .single();
-        if (error) githubSaveFailure(error, logGitHubSaveFailure);
-        if (!data) githubSaveFailure({ message: 'Database returned no saved row after GitHub evidence insert' }, logGitHubSaveFailure);
-        return githubSyncResponseSchema.parse({
-          id: data.id,
-          candidateId: data.candidate_id,
+          .select('id')
+          .eq('candidate_id', candidateId)
+          .eq('owner_id', auth.userId)
+          .eq('source', 'github')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lookupError) githubSaveFailure(lookupError, logGitHubSaveFailure, 'lookup');
+
+        const snapshot = {
+          candidate_id: candidateId,
+          owner_id: auth.userId,
           source: 'github',
           availability: 'available',
-          provenance: 'github_api',
-          syncedAt: data.created_at,
-          profile: profileData,
-        });
+          raw_evidence: { username: profileData.username, profileUrl: profileData.profileUrl },
+          normalized_evidence: profileData,
+          observed_at: syncedAt,
+        };
+        const writeResult = existing?.id
+          ? await client.from('platform_evidence').update(snapshot)
+            .eq('id', existing.id)
+            .eq('candidate_id', candidateId)
+            .eq('owner_id', auth.userId)
+            .eq('source', 'github')
+            .select('id,candidate_id,observed_at')
+            .single()
+          : await client.from('platform_evidence').insert(snapshot)
+            .select('id,candidate_id,observed_at')
+            .single();
+        const { data, error } = writeResult;
+        if (error) githubSaveFailure(error, logGitHubSaveFailure);
+        if (!data) githubSaveFailure({ message: 'Database returned no saved row after GitHub evidence insert' }, logGitHubSaveFailure);
+        saved = data;
       } catch (error) {
         if (error instanceof HttpError) throw error;
         githubSaveFailure(error, logGitHubSaveFailure);
       }
+
+      const response = githubSyncResponseSchema.safeParse({
+        id: saved.id,
+        candidateId: saved.candidate_id,
+        source: 'github',
+        availability: 'available',
+        provenance: 'github_api',
+        syncedAt: saved.observed_at ?? syncedAt,
+        profile: profileData,
+      });
+      if (!response.success) {
+        logGitHubSaveFailure({ stage: 'response', message: safeDiagnostic(response.error.message) ?? 'Invalid GitHub sync response' });
+        throw new HttpError(502, 'GITHUB_RESPONSE_INVALID', 'GitHub data was saved, but the API could not format the saved response. Reload the candidate data or retry the sync.');
+      }
+      return response.data;
     },
   };
 }

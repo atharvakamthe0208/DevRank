@@ -1,7 +1,9 @@
 import { apiErrorSchema } from '@devrank/contracts';
 import { supabase } from '../supabase/client';
 
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
+// Use Vite's same-origin development proxy by default. This also works when the
+// browser opens the app over a LAN address instead of localhost.
+const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 export class ApiRequestError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string, readonly details?: unknown) { super(message); this.name = 'ApiRequestError'; }

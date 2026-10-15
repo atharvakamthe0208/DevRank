@@ -26,8 +26,10 @@ const optionalSecret = z.preprocess(
 
 const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(3000),
+  API_HOST: z.string().min(1).default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
+  WEB_ORIGINS: z.string().optional(),
   SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: optionalSecret,
   GITHUB_TOKEN: optionalSecret,
