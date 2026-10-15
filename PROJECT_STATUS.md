@@ -1,6 +1,6 @@
 # DevRank Project Status
 
-**Inspected:** 2026-10-14
+**Inspected:** 2026-10-15
 **Purpose:** Current code-based handover. Feature status describes repository implementation; it does not imply production deployment, approved hiring validity, or live external services.
 
 ## 1. Overview
@@ -18,7 +18,7 @@ No SRS was present in the repository during inspection. Consequently this report
 | `packages/contracts` | Shared schemas/types for auth, candidates, evidence, platform data, scoring, evaluations, AI analysis, comparison/ranking, and API errors. Current scoring contract is v2; a separate read-only v1 evaluation schema supports old snapshots. |
 | `supabase/migrations` | SQL migrations for base data model, candidate fields, recruiter auth, admin approval, and evaluation-result snapshots. These must be applied to a target Supabase project; application state is unknown. |
 | `config` and `fixtures` | Preliminary role weights, evidence mapping, synthetic candidates and expected v2 scores. |
-| `docs` | Setup, auth, API, database, scoring, AI and Day 1–6 implementation notes. Some day notes are historical. |
+| `docs` | Setup, auth, API, database, scoring, AI and Day 1–7 QA notes. Some day notes are historical. |
 
 ## 3. Feature status
 
@@ -74,6 +74,15 @@ The API `.env.example` names `API_PORT`, `NODE_ENV`, `WEB_ORIGIN`, `SUPABASE_URL
 - `npm run build` — contracts, API, and web production bundles passed. Vite reports the main JavaScript bundle is 692.33 kB minified (above its 500 kB advisory threshold).
 - `git diff --check` — passed. AI/provider tests use mocked calls; no live Groq, GitHub, or Supabase request was made. Live Supabase migration/configuration state remains unverified.
 
+## 8a. Day 7 QA verification on 2026-10-15
+
+- `npm test` — web 33/33 and contracts 10/10 passed; API 116 tests passed, while 55 HTTP-route tests could not connect to ephemeral `127.0.0.1` listeners because the sandbox returned `EACCES`.
+- `npm run typecheck` — passed for contracts, API, and web.
+- `npm run lint` — exited 0, but no workspace lint scripts are configured, so no linter ran.
+- `npm run build` — contracts/API builds and web TypeScript build passed; Vite bundling was blocked by sandbox `EPERM` while resolving `apps/web/src/features/auth/AuthProvider.tsx` with `realpath`.
+- `git diff --check` — passed. No live Supabase, recruiter session, GitHub, or Groq request was made.
+- Five-category scoring, partial-evidence behavior, optional AI failure behavior, and evaluation-result rendering are documented in [Day 7 QA](docs/day7-qa.md). Ranking remains unimplemented. The SRS, weight approval, live migration/database state, and authenticated browser-to-database workflow remain unverified.
+
 ## 9. Priority follow-up
 
 1. Locate/provide the approved SRS and reconcile the removal of Communication Skills.
@@ -83,6 +92,7 @@ The API `.env.example` names `API_PORT`, `NODE_ENV`, `WEB_ORIGIN`, `SUPABASE_URL
 5. Add role-profile management only after role weights are approved; the evaluation UI currently consumes existing valid stored profiles. Consider comparison/ranking only after policy decisions.
 6. Apply migrations to a controlled Supabase project and verify auth/RLS end-to-end, including cross-tenant access.
 7. Expand web interaction tests for loading, API failure, and retry states; address the Vite bundle-size advisory if appropriate.
+8. Run API HTTP integration suites and the Vite production bundle in an environment permitting ephemeral loopback TCP and filesystem `realpath`; perform browser-authenticated verification against a controlled Supabase project.
 
 ## 10. Ownership notes
 
