@@ -54,6 +54,8 @@ function createRepository(): CandidatePlatformRepository {
     syncGitHub: vi.fn(async (auth, id, profile): Promise<GitHubSyncResponse> => {
       if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       if (profile === 'missing-profile') throw new HttpError(404, 'GITHUB_USER_NOT_FOUND', 'GitHub user was not found');
+      if (profile === 'database-permission') throw new HttpError(403, 'GITHUB_DATABASE_PERMISSION_DENIED', 'The database denied saving GitHub data.');
+      if (profile === 'database-write-failed') throw new HttpError(503, 'GITHUB_DATA_SAVE_FAILED', 'GitHub data was retrieved, but the database could not save it.');
       return {
         id: 'ea574cd8-8d21-4586-a887-dc2a6fc7ba08', candidateId: id, source: 'github',
         availability: 'available', provenance: 'github_api', syncedAt: '2026-10-11T12:00:00.000Z',
@@ -126,6 +128,14 @@ describe('candidate platform data API', () => {
     const missing = await syncGitHub({ profile: 'missing-profile' }, 'owner-token');
     expect(missing.status).toBe(404);
     expect(await missing.json()).toMatchObject({ error: { code: 'GITHUB_USER_NOT_FOUND' } });
+
+    const permissionDenied = await syncGitHub({ profile: 'database-permission' }, 'owner-token');
+    expect(permissionDenied.status).toBe(403);
+    expect(await permissionDenied.json()).toMatchObject({ error: { code: 'GITHUB_DATABASE_PERMISSION_DENIED' } });
+
+    const saveFailure = await syncGitHub({ profile: 'database-write-failed' }, 'owner-token');
+    expect(saveFailure.status).toBe(503);
+    expect(await saveFailure.json()).toMatchObject({ error: { code: 'GITHUB_DATA_SAVE_FAILED' } });
   });
 
   it('returns persisted platform data only for the authorized candidate', async () => {
@@ -142,6 +152,13 @@ describe('candidate platform data API', () => {
     const invalid = await syncGitHub({ profile: '' }, 'owner-token');
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+
+    const invalidCandidateId = await fetch(`${origin}/api/candidates/invalid-id/platform-data/github-sync`, {
+      method: 'POST', headers: { Authorization: 'Bearer owner-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: 'octocat' }),
+    });
+    expect(invalidCandidateId.status).toBe(400);
+    expect(await invalidCandidateId.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
   });
 
   it('accepts candidate-provided LeetCode data and preserves an actual zero', async () => {

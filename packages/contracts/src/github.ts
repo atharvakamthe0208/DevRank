@@ -50,7 +50,8 @@ export const githubSyncResponseSchema = z.object({
   source: z.literal('github'),
   availability: z.literal('available'),
   provenance: z.literal('github_api'),
-  syncedAt: z.string().datetime(),
+  // Supabase/PostgREST may serialize timestamptz with an explicit +00:00 offset.
+  syncedAt: z.string().datetime({ offset: true }),
   profile: githubProfileResponseSchema,
 }).strict();
 

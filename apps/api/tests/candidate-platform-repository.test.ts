@@ -7,18 +7,20 @@ const ownerId = '1d4b1d45-e136-4f50-a46e-8ef29735ec26';
 const candidateId = 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c';
 const evidenceId = 'ea574cd8-8d21-4586-a887-dc2a6fc7ba08';
 
-function query(maybeSingleResult: unknown, singleResult: unknown) {
+function query(maybeSingleResult: unknown, singleResult: unknown, listResult: unknown = { data: [], error: null }) {
   const builder: Record<string, any> = {};
-  for (const method of ['select', 'eq', 'is', 'order']) builder[method] = vi.fn(() => builder);
+  for (const method of ['select', 'eq', 'is', 'order', 'limit']) builder[method] = vi.fn(() => builder);
   builder.insert = vi.fn(() => builder);
+  builder.update = vi.fn(() => builder);
   builder.maybeSingle = vi.fn(async () => maybeSingleResult);
   builder.single = vi.fn(async () => singleResult);
+  builder.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(listResult).then(resolve, reject);
   return builder;
 }
 
-function createClient(candidateResult: unknown, evidenceResult: unknown) {
-  const candidateQuery = query(candidateResult, undefined);
-  const evidenceQuery = query(undefined, evidenceResult);
+function createClient(candidateResult: unknown, evidenceResult: unknown, existingEvidenceResult: unknown = { data: null, error: null }, listEvidenceResult: unknown = { data: [], error: null }) {
+  const candidateQuery = query(candidateResult, undefined, candidateResult);
+  const evidenceQuery = query(existingEvidenceResult, evidenceResult, listEvidenceResult);
   const client = {
     from: vi.fn((table: string) => table === 'candidates' ? candidateQuery : evidenceQuery),
   } as unknown as SupabaseClient;
@@ -101,7 +103,7 @@ describe('candidate platform evidence repository', () => {
     };
     const { client, candidateQuery, evidenceQuery } = createClient(
       { data: { id: candidateId }, error: null },
-      { data: { id: evidenceId, candidate_id: candidateId, created_at: '2026-10-11T12:00:00.000Z' }, error: null },
+      { data: { id: evidenceId, candidate_id: candidateId, observed_at: '2026-10-11T12:00:00.000+00:00' }, error: null },
     );
     const getGitHubProfile = vi.fn(async () => profile);
     const repository = createCandidatePlatformRepository(() => client, getGitHubProfile);
@@ -118,7 +120,58 @@ describe('candidate platform evidence repository', () => {
       raw_evidence: { username: 'octocat', profileUrl: 'https://github.com/octocat' },
       normalized_evidence: profile,
     }));
-    expect(result).toMatchObject({ id: evidenceId, candidateId, provenance: 'github_api', profile });
+    expect(evidenceQuery.eq.mock.calls).toEqual(expect.arrayContaining([
+      ['candidate_id', candidateId], ['owner_id', ownerId], ['source', 'github'],
+    ]));
+    expect(result).toMatchObject({ id: evidenceId, candidateId, provenance: 'github_api', syncedAt: '2026-10-11T12:00:00.000+00:00', profile });
+  });
+
+  it('updates the latest owned GitHub snapshot on repeated syncs instead of inserting another row', async () => {
+    const profile = {
+      username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 0,
+      followers: 0, following: 0, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+    };
+    const existing = { data: { id: evidenceId }, error: null };
+    const { client, evidenceQuery } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: { id: evidenceId, candidate_id: candidateId, observed_at: '2026-10-11T12:00:00.000+00:00' }, error: null },
+      existing,
+    );
+    evidenceQuery.maybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce(existing);
+    const repository = createCandidatePlatformRepository(() => client, async () => profile);
+
+    await repository.syncGitHub(auth, candidateId, 'octocat');
+    await repository.syncGitHub(auth, candidateId, 'octocat');
+
+    expect(evidenceQuery.insert).toHaveBeenCalledTimes(1);
+    expect(evidenceQuery.update).toHaveBeenCalledTimes(1);
+    expect(evidenceQuery.update).toHaveBeenCalledWith(expect.objectContaining({
+      candidate_id: candidateId, owner_id: ownerId, source: 'github', normalized_evidence: profile,
+    }));
+    expect(evidenceQuery.eq).toHaveBeenCalledWith('id', evidenceId);
+  });
+
+  it('reloads a saved GitHub snapshot when PostgREST returns an offset timestamp', async () => {
+    const profile = {
+      username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 0,
+      followers: 0, following: 0, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+    };
+    const { client } = createClient(
+      { data: { id: candidateId }, error: null },
+      undefined,
+      undefined,
+      { data: [{
+        id: evidenceId, candidate_id: candidateId, owner_id: ownerId, source: 'github', availability: 'available',
+        raw_evidence: { username: 'octocat' }, normalized_evidence: profile, created_at: '2026-10-11T12:00:00.000+00:00',
+        observed_at: '2026-10-11T12:00:00.000+00:00',
+      }], error: null },
+    );
+    const repository = createCandidatePlatformRepository(() => client);
+    await expect(repository.getLatest(auth, candidateId)).resolves.toMatchObject({ items: [{
+      id: evidenceId, candidateId, source: 'github', syncedAt: '2026-10-11T12:00:00.000+00:00', profile,
+    }] });
   });
 
   it('does not call GitHub or write evidence for a candidate outside the recruiter scope', async () => {
@@ -128,5 +181,40 @@ describe('candidate platform evidence repository', () => {
     await expect(repository.syncGitHub(auth, candidateId, 'octocat')).rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
     expect(getGitHubProfile).not.toHaveBeenCalled();
     expect(client.from).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports GitHub persistence failures distinctly and logs sanitized database diagnostics', async () => {
+    const { client } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: null, error: { code: '42501', message: 'permission denied; bearer super-secret-token', status: 403, hint: 'Check RLS policy' } },
+    );
+    const log = vi.fn();
+    const repository = createCandidatePlatformRepository(() => client, async () => ({
+      username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 0,
+      followers: 0, following: 0, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+    }), log);
+    await expect(repository.syncGitHub(auth, candidateId, 'octocat')).rejects.toMatchObject({
+      statusCode: 403, code: 'GITHUB_DATABASE_PERMISSION_DENIED',
+    });
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({
+      code: '42501', status: 403, hint: 'Check RLS policy',
+      message: 'permission denied; bearer [redacted]',
+    }));
+    expect(JSON.stringify(log.mock.calls)).not.toContain('super-secret-token');
+  });
+
+  it('returns a distinct save failure when the database write throws or returns no row', async () => {
+    const { client, evidenceQuery } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: null, error: null },
+    );
+    evidenceQuery.single.mockRejectedValueOnce(new Error('connection refused'));
+    const repository = createCandidatePlatformRepository(() => client, async () => ({
+      username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 0,
+      followers: 0, following: 0, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+    }), vi.fn());
+    await expect(repository.syncGitHub(auth, candidateId, 'octocat')).rejects.toMatchObject({
+      statusCode: 503, code: 'GITHUB_DATA_SAVE_FAILED',
+    });
   });
 });

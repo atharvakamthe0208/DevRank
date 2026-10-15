@@ -14,7 +14,12 @@ import { insightsRouter } from './routes/insights.js';
 export const app = express();
 app.disable('x-powered-by');
 app.use(cors({
-  origin: (origin, callback) => callback(null, isCorsOriginAllowed(origin, env.NODE_ENV, env.WEB_ORIGIN) ? origin : false),
+  origin: (origin, callback) => callback(null, isCorsOriginAllowed(
+    origin,
+    env.NODE_ENV,
+    env.WEB_ORIGIN,
+    (env.WEB_ORIGINS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+  ) ? origin : false),
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type'],
   optionsSuccessStatus: 204,
