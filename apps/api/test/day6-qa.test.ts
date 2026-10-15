@@ -76,8 +76,8 @@ describe('Day 6 scoring and ranking QA', () => {
 
   it('represents tied rank values without requiring a fabricated ordinal distinction', () => {
     const tied = [
-      { candidateId: '00000000-0000-4000-8000-000000000001', rank: 1, score: 80 },
-      { candidateId: '00000000-0000-4000-8000-000000000002', rank: 1, score: 80 },
+      { candidateId: '00000000-0000-4000-8000-000000000001', rank: 1, score: 80, evaluationId: '10000000-0000-4000-8000-000000000001', evaluatedAt: '2026-10-14T00:00:00.000Z' },
+      { candidateId: '00000000-0000-4000-8000-000000000002', rank: 1, score: 80, evaluationId: '10000000-0000-4000-8000-000000000002', evaluatedAt: '2026-10-14T00:00:00.000Z' },
     ];
     expect(tied.map((item) => candidateRankingSchema.parse(item).rank)).toEqual([1, 1]);
   });

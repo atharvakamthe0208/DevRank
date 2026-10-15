@@ -18,10 +18,9 @@ function evaluation(complete: boolean): PersistedEvaluation & { result: Evaluati
     calculationExplanation: complete ? 'Weighted score calculated from all five categories.' : 'No overall score until all categories are available.',
     evaluationStatus: complete ? 'completed' : 'insufficient_evidence',
     aiExplanation: { summary: 'Legacy compatibility summary.', strengths: [], skillGaps: [], recommendations: [] },
-    aiAnalysis: { status: 'unavailable', reason: 'not_configured' },
     decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
   });
-  const persisted = persistedEvaluationSchema.parse({ id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', candidateId: candidate.id, roleProfileId: 'e2c9bf0c-23d8-4d90-8cb5-8c33f0ef9084', status: result.evaluationStatus, createdAt: '2026-10-14T01:00:00.000Z', result });
+  const persisted = persistedEvaluationSchema.parse({ id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', candidateId: candidate.id, roleProfileId: 'e2c9bf0c-23d8-4d90-8cb5-8c33f0ef9084', targetRole: 'software_developer', status: result.evaluationStatus, createdAt: '2026-10-14T01:00:00.000Z', result });
   return { ...persisted, result: evaluationResponseSchema.parse(persisted.result) };
 }
 
@@ -33,7 +32,7 @@ describe('evaluation result view', () => {
     expect(html).toContain('83.45');
     expect(html.match(/<progress/g)).toHaveLength(5);
     expect(html).not.toContain('Communication Skills');
-    expect(html).toContain('not configured');
+    expect(html).not.toContain('AI evidence summary');
   });
 
   it('shows missing evidence without a zero score or false overall result', () => {
