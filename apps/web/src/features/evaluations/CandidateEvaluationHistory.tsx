@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { candidateEvaluationsResponseSchema, type PersistedEvaluation } from '@devrank/contracts';
+import { candidateEvaluationsResponseSchema, type PersistedEvaluationRead } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import './evaluation.css';
@@ -11,7 +11,7 @@ function dateLabel(value: string): string { return new Intl.DateTimeFormat(undef
 
 export function CandidateEvaluationHistory({ candidateId }: { candidateId: string }) {
   const { session } = useAuth();
-  const [items, setItems] = useState<PersistedEvaluation[]>([]);
+  const [items, setItems] = useState<PersistedEvaluationRead[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const load = useCallback(async (signal?: AbortSignal) => {
