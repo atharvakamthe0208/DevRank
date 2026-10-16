@@ -1,10 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
+import { selectSupabasePublicKey } from './public-key';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const publicKey = selectSupabasePublicKey(
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+);
 
 function hasBrowserSafeConfiguration(projectUrl: string | undefined, publicKey: string | undefined): boolean {
-  if (!projectUrl || !publicKey || /your-project|your-public-anon-key|placeholder/i.test(`${projectUrl} ${publicKey}`)) return false;
+  if (!projectUrl || !publicKey || /your-project|your-public-anon-key|your-publishable-key|placeholder/i.test(`${projectUrl} ${publicKey}`)) return false;
   if (publicKey.startsWith('sb_secret_')) return false;
   const jwtPayload = publicKey.split('.')[1];
   if (jwtPayload) {
@@ -25,6 +29,6 @@ function hasBrowserSafeConfiguration(projectUrl: string | undefined, publicKey: 
 }
 
 // Browser code may only use the publishable/anon key. Never place a service-role key here.
-export const supabase = url && anonKey && hasBrowserSafeConfiguration(url, anonKey) ? createClient(url, anonKey, {
+export const supabase = url && publicKey && hasBrowserSafeConfiguration(url, publicKey) ? createClient(url, publicKey, {
   auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
 }) : null;

@@ -3,6 +3,7 @@ export * from './api-error.js';
 export * from './candidate.js';
 export * from './candidate-api.js';
 export * from './comparison.js';
+export * from './dashboard.js';
 export * from './evaluation.js';
 export * from './legacy-evaluation.js';
 export * from './evaluation-response.js';

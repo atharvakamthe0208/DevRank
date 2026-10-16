@@ -10,7 +10,16 @@ describe('API environment configuration', () => {
       API_HOST: '0.0.0.0',
       NODE_ENV: 'development',
       WEB_ORIGIN: 'http://localhost:5173',
+      GROQ_MODEL: 'openai/gpt-oss-120b',
+      AI_TIMEOUT_MS: 12000,
     });
+  });
+
+  it('keeps Groq configuration optional and validates its bounds', () => {
+    expect(parseEnv({ GROQ_API_KEY: 'test-key', GROQ_MODEL: 'test-model', AI_TIMEOUT_MS: '5000' })).toMatchObject({
+      GROQ_API_KEY: 'test-key', GROQ_MODEL: 'test-model', AI_TIMEOUT_MS: 5000,
+    });
+    expect(() => parseEnv({ AI_TIMEOUT_MS: '999' })).toThrow('Invalid API environment configuration');
   });
 
   it('rejects invalid ports without echoing environment values', () => {

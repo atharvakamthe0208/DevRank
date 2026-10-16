@@ -12,9 +12,11 @@
     "build": "npm run build --workspace @devrank/contracts && npm run build --workspace @devrank/api && npm run build --workspace @devrank/web",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run build --workspace @devrank/contracts && npm run typecheck --workspace @devrank/api && npm run typecheck --workspace @devrank/web"
+    "typecheck": "npm run build --workspace @devrank/contracts && npm run typecheck --workspace @devrank/api && npm run typecheck --workspace @devrank/web",
+    "test:migration:acl": "node scripts/test-evaluation-acl-migration.mjs"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.9",
     "concurrently": "^9.1.2"
   }
 }
