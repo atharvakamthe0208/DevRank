@@ -1,10 +1,13 @@
 import {
   candidateEvaluationsResponseSchema,
   evaluationResponseSchema,
+  scoringVersion as currentScoringVersion,
   evaluationRoleSchema,
   evaluationRolesResponseSchema,
   evaluationRunResponseSchema,
   persistedEvaluationSchema,
+  persistedEvaluationReadSchema,
+  legacyEvaluationResponseV1Schema,
   roleIdSchema,
   roleWeightsSchema,
   roleProfileListResponseSchema,
@@ -112,6 +115,45 @@ function makeEvidence(rows: Array<Record<string, unknown>>) {
   });
 }
 
+function readPersistedEvaluation(row: Record<string, unknown>) {
+  const value = {
+    id: row.id, candidateId: row.candidate_id, roleProfileId: row.role_profile_id,
+    targetRole: row.target_role, status: row.status, createdAt: row.created_at, result: row.evaluation_result,
+  };
+  const current = persistedEvaluationSchema.safeParse(value);
+  if (current.success && (!current.data.result.scoringVersion || current.data.result.scoringVersion === currentScoringVersion)) return current.data;
+
+  // Some older rows predate the denormalized target_role column. A validated
+  // immutable result snapshot is authoritative for its own role identifier.
+  const currentResult = evaluationResponseSchema.safeParse(row.evaluation_result);
+  if (currentResult.success && (!currentResult.data.scoringVersion || currentResult.data.scoringVersion === currentScoringVersion)) {
+    const compatible = persistedEvaluationSchema.safeParse({
+      ...value,
+      targetRole: row.target_role ?? currentResult.data.targetRole,
+      result: currentResult.data,
+    });
+    if (compatible.success) return compatible.data;
+  }
+
+  // V1 snapshots carry their own role and six-category scoring model. Preserve the
+  // snapshot as-is; never translate its scores into the current five-category model.
+  const historicalResult = legacyEvaluationResponseV1Schema.safeParse(row.evaluation_result);
+  if (historicalResult.success) {
+    const legacy = persistedEvaluationReadSchema.safeParse({
+      ...value,
+      targetRole: row.target_role ?? historicalResult.data.targetRole,
+      result: historicalResult.data,
+    });
+    if (legacy.success) return legacy.data;
+  }
+
+  const id = typeof row.id === 'string' ? row.id : 'unknown';
+  if (currentResult.success && currentResult.data.scoringVersion !== undefined && currentResult.data.scoringVersion !== currentScoringVersion) {
+    throw new HttpError(409, 'SCORING_VERSION_UNSUPPORTED', `Saved evaluation ${id} uses unsupported scoring version ${currentResult.data.scoringVersion}`);
+  }
+  throw new HttpError(409, 'EVALUATION_RESULT_UNAVAILABLE', `Saved evaluation ${id} has a missing, malformed, or unsupported result snapshot`);
+}
+
 export function createEvaluationRepository(getClient = getSupabaseClient): EvaluationRepository {
   async function persist(
     client: ReturnType<typeof getSupabaseClient>,
@@ -202,14 +244,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
       .eq('candidate_id', candidate.id).eq('owner_id', auth.userId).order('created_at', { ascending: false }).limit(20));
     if (error) databaseFailure(error, 'evaluation_read', 'supabase_response');
     if (!data) throw unavailable();
-    const items = data.map((row: Record<string, unknown>) => {
-      const parsed = persistedEvaluationSchema.safeParse({
-        id: row.id, candidateId: row.candidate_id, roleProfileId: row.role_profile_id,
-        targetRole: row.target_role, status: row.status, createdAt: row.created_at, result: row.evaluation_result,
-      });
-      if (!parsed.success) throw new HttpError(409, 'EVALUATION_RESULT_UNAVAILABLE', 'One or more saved evaluations use a legacy or unsupported result format');
-      return parsed.data;
-    });
+    const items = data.map((row: Record<string, unknown>) => readPersistedEvaluation(row));
     return candidateEvaluationsResponseSchema.parse({ items });
   }
 
@@ -275,15 +310,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
           .eq('id', id).eq('owner_id', auth.userId).maybeSingle());
         if (error) databaseFailure(error, 'evaluation_read', 'supabase_response');
         if (!data) throw new HttpError(404, 'NOT_FOUND', 'Evaluation not found');
-        if (!data.target_role || !data.evaluation_result) {
-          throw new HttpError(409, 'EVALUATION_RESULT_UNAVAILABLE', 'This evaluation predates the stored result format');
-        }
-        const parsed = persistedEvaluationSchema.safeParse({
-          id: data.id, candidateId: data.candidate_id, roleProfileId: data.role_profile_id,
-          targetRole: data.target_role, status: data.status, createdAt: data.created_at, result: data.evaluation_result,
-        });
-        if (!parsed.success) throw new HttpError(409, 'SCORING_VERSION_UNSUPPORTED', 'This saved evaluation uses a legacy or unsupported scoring version and was not recalculated');
-        return parsed.data;
+        return readPersistedEvaluation(data as Record<string, unknown>);
       } catch (error) {
         if (error instanceof HttpError) throw error;
         databaseFailure(error, 'evaluation_processing', 'thrown_exception');
