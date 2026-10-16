@@ -1,7 +1,7 @@
-﻿# Evaluation persistence migration: production-readiness audit
+# Evaluation persistence migration: production-readiness audit
 
-**Audit date:** 2026-10-14  
-**Intended environment:** Supabase project `vamxpxhhsoruuqeezxgs`, identified by the requester as **PRODUCTION**  
+**Audit date:** 2026-10-14
+**Intended environment:** Supabase project `vamxpxhhsoruuqeezxgs`, identified by the requester as **PRODUCTION**
 **Audit state:** Production was not queried. This is a local repository and test-runtime audit plus an operator-ready read-only SQL procedure. All production catalog/data conclusions below remain unverified except where explicitly identified as prior operator-supplied context.
 
 ## Executive result
