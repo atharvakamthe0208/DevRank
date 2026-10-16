@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { createEvaluationRepository } from '../src/repositories/evaluation-repository.js';
 import { HttpError } from '../src/middleware/http-error.js';
+import { legacyEvaluationResponseV1Schema } from '@devrank/contracts';
 
 const userId = '1d4b1d45-e136-4f50-a46e-8ef29735ec26';
 const candidateId = 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c';
@@ -9,11 +10,26 @@ const evaluationId = '8c649201-886d-4c46-b99f-8aa2afc0cd6c';
 const roleProfileId = 'e2c9bf0c-23d8-4d90-8cb5-8c33f0ef9084';
 const auth = { userId, email: 'r@example.com', emailConfirmed: true, accessToken: 'test', profile: { id: userId, display_name: 'R', role: 'recruiter' as const, approval_status: 'approved' as const } };
 
+const legacyResult = legacyEvaluationResponseV1Schema.parse({
+  schemaVersion: '1.0.0', candidateId, targetRole: 'software_developer',
+  categoryScores: ['technical_skills', 'problem_solving_dsa', 'relevant_project_experience', 'practical_assessment_performance', 'communication_skills', 'learning_adaptability'].map((categoryId) => ({
+    categoryId, displayName: categoryId.replaceAll('_', ' '), status: 'insufficient_evidence', evidenceRefs: [], explanation: 'Historical snapshot had insufficient evidence.',
+  })),
+  roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+  evidence: [], strengths: [], skillGaps: [], recommendations: [],
+  missingEvidence: ['technical_skills', 'problem_solving_dsa', 'relevant_project_experience', 'practical_assessment_performance', 'communication_skills', 'learning_adaptability'],
+  calculationExplanation: 'No overall score was calculated because evidence was incomplete.', evaluationStatus: 'insufficient_evidence',
+  aiExplanation: { summary: '', strengths: [], skillGaps: [], recommendations: [] },
+  decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
+});
+
 describe('evaluation persistence repository', () => {
   it('persists configured-role results and reads the stored snapshot back', async () => {
     const insert = vi.fn();
     let record: Record<string, unknown> | undefined;
     let legacy = false;
+    let omitTargetRole = false;
+    let evaluationRows: Array<Record<string, unknown>> = [];
     let insertError: { code: string; message: string; details: string } | null = null;
     const client = {
       from: (table: string) => {
@@ -22,12 +38,13 @@ describe('evaluation persistence repository', () => {
         query.select = vi.fn(() => query);
         query.eq = vi.fn(() => query);
         query.is = vi.fn(() => query);
-        query.order = vi.fn(async () => ({ data: [], error: null }));
+        query.order = vi.fn(() => table === 'evaluations' ? query : Promise.resolve({ data: [], error: null }));
+        query.limit = vi.fn(async () => ({ data: evaluationRows, error: null }));
         query.maybeSingle = vi.fn(async () => table === 'candidates'
           ? { data: { id: candidateId, full_name: 'Taylor Example' }, error: null }
           : table === 'role_profiles'
             ? { data: { id: roleProfileId, name: 'software_developer', weights: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 } }, error: null }
-          : { data: legacy ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: null, status: 'pending', created_at: '2026-10-12T00:00:00.000Z', evaluation_result: null } : record ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: record.target_role, status: record.status, created_at: '2026-10-13T00:00:00.000Z', evaluation_result: record.evaluation_result } : null, error: null });
+          : { data: legacy ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: null, status: 'insufficient_evidence', created_at: '2026-10-12T00:00:00.000Z', evaluation_result: legacyResult } : record ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: omitTargetRole ? null : record.target_role, status: record.status, created_at: '2026-10-13T00:00:00.000Z', evaluation_result: record.evaluation_result } : null, error: null });
         query.insert = vi.fn((value: Record<string, unknown>) => { values = value; insert(value); return query; });
         query.single = vi.fn(async () => {
           record = values;
@@ -62,8 +79,27 @@ describe('evaluation persistence repository', () => {
 
     const retrieved = await repository.get(auth, evaluationId);
     expect(retrieved).toMatchObject({ id: evaluationId, candidateId, roleProfileId: null, targetRole: 'software_developer', result: created.evaluation });
+    omitTargetRole = true;
+    await expect(repository.get(auth, evaluationId)).resolves.toMatchObject({ targetRole: 'software_developer', result: created.evaluation });
+    const { scoringVersion: _version, ...resultWithoutVersion } = created.evaluation;
+    record = { ...record!, target_role: 'software_developer', evaluation_result: resultWithoutVersion };
+    omitTargetRole = false;
+    const withoutScoringVersion = await repository.get(auth, evaluationId);
+    expect(withoutScoringVersion).toMatchObject({ result: { schemaVersion: '2.0.0' } });
+    expect(withoutScoringVersion).not.toHaveProperty('result.scoringVersion');
+    record = { ...record!, evaluation_result: { ...resultWithoutVersion, scoringVersion: '9.9.9' } };
+    await expect(repository.get(auth, evaluationId)).rejects.toMatchObject({ statusCode: 409, code: 'SCORING_VERSION_UNSUPPORTED' });
     legacy = true;
-    await expect(repository.get(auth, evaluationId)).rejects.toMatchObject({ statusCode: 409, code: 'EVALUATION_RESULT_UNAVAILABLE' });
+    const historical = await repository.get(auth, evaluationId);
+    expect(historical).toMatchObject({ targetRole: 'software_developer', status: 'insufficient_evidence', result: { schemaVersion: '1.0.0', evaluationStatus: 'insufficient_evidence' } });
+    expect(historical).not.toHaveProperty('result.overallScore');
+
+    const secondId = '9d649201-886d-4c46-b99f-8aa2afc0cd6c';
+    evaluationRows = [
+      { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: null, status: 'insufficient_evidence', created_at: '2026-10-12T00:00:00.000Z', evaluation_result: legacyResult },
+      { id: secondId, candidate_id: candidateId, role_profile_id: null, target_role: null, status: 'completed', created_at: '2026-10-11T00:00:00.000Z', evaluation_result: { schemaVersion: 'unknown' } },
+    ];
+    await expect(repository.listForCandidate(auth, candidateId)).rejects.toMatchObject({ statusCode: 409, code: 'EVALUATION_RESULT_UNAVAILABLE', message: expect.stringContaining(secondId) });
 
     insertError = { code: 'PGRST204', message: "Could not find the 'target_role' column of 'evaluations' in the schema cache", details: 'private provider detail' };
     const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);

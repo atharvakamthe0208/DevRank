@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { candidateEvaluationsResponseSchema, type PersistedEvaluation } from '@devrank/contracts';
+import { candidateEvaluationsResponseSchema, type PersistedEvaluationRead } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import './evaluation.css';
@@ -11,7 +11,7 @@ function dateLabel(value: string): string { return new Intl.DateTimeFormat(undef
 
 export function CandidateEvaluationHistory({ candidateId }: { candidateId: string }) {
   const { session } = useAuth();
-  const [items, setItems] = useState<PersistedEvaluation[]>([]);
+  const [items, setItems] = useState<PersistedEvaluationRead[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -30,7 +30,11 @@ export function CandidateEvaluationHistory({ candidateId }: { candidateId: strin
   return <section className="detail-section evaluation-history" aria-labelledby="evaluation-history-title"><div className="section-heading"><div><h2 id="evaluation-history-title">Evaluations</h2><p>Saved results for this candidate</p></div></div>
     {state === 'loading' ? <p className="evaluation-history-state" role="status">Loading saved evaluations…</p> : state === 'error' ? <div className="evaluation-history-state" role="alert"><p>{error}</p><button type="button" className="secondary-button" onClick={() => void load()}>Try again</button></div> : items.length === 0 ? <p className="evaluation-history-state">No evaluations have been saved yet.</p> : <ul className="evaluation-history-list">{items.map((item) => {
       const score = 'overallScore' in item.result ? item.result.overallScore : undefined;
-      return <li key={item.id}><Link to={`/evaluations/${item.id}`}><span><strong>{roleLabel(item.result.targetRole)}</strong><small>{dateLabel(item.createdAt)}</small></span><span className={`evaluation-status ${item.status === 'completed' ? 'is-complete' : 'is-incomplete'}`}>{item.status === 'completed' ? 'Completed' : 'Insufficient Evidence'}</span><strong className="history-score">{score === undefined ? 'No overall score' : `${score}/100`}</strong><span aria-hidden="true">→</span></Link></li>;
+      const statusLabel = 'evaluationStatus' in item.result
+        ? item.result.evaluationStatus === 'completed' ? 'Completed' : 'Insufficient Evidence'
+        : item.status.replaceAll('_', ' ');
+      const isComplete = statusLabel === 'Completed';
+      return <li key={item.id}><Link to={`/evaluations/${item.id}`}><span><strong>{roleLabel(item.result.targetRole)}</strong><small>{dateLabel(item.createdAt)}</small></span><span className={`evaluation-status ${isComplete ? 'is-complete' : 'is-incomplete'}`}>{statusLabel}</span><strong className="history-score">{score === undefined ? 'No overall score' : `${score}/100`}</strong><span aria-hidden="true">→</span></Link></li>;
     })}</ul>}
   </section>;
 }

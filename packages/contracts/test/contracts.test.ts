@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   candidateInputSchema, categoryScoreSchema, confidenceSchema, evaluationResponseSchema,
   evidenceSchema, legacyEvaluationResponseV1Schema, roleWeightConfigurationSchema, roleWeightsSchema, scoreSchema, scoringCategories,
+  persistedEvaluationReadSchema,
 } from '../src/index.js';
 
 const roleWeights = JSON.parse(readFileSync(new URL('../../../config/role-weights.json', import.meta.url), 'utf8')) as unknown;
@@ -115,5 +116,11 @@ describe('shared candidate evaluation contracts', () => {
     };
     expect(legacyEvaluationResponseV1Schema.safeParse(historical).success).toBe(true);
     expect(evaluationResponseSchema.safeParse(historical).success).toBe(false);
+    const { scoringVersion: _legacyVersion, ...legacyWithoutVersion } = historical;
+    expect(persistedEvaluationReadSchema.safeParse({
+      id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c',
+      roleProfileId: null, targetRole: historical.targetRole, status: historical.evaluationStatus,
+      createdAt: '2026-10-12T00:00:00.000Z', result: legacyWithoutVersion,
+    }).success).toBe(true);
   });
 });

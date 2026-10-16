@@ -5,6 +5,7 @@ import {
   evaluationRequestSchema,
   evaluationRunRequestSchema,
   persistedEvaluationSchema,
+  persistedEvaluationReadSchema,
 } from '@devrank/contracts';
 import type { Request } from 'express';
 import { HttpError } from '../middleware/http-error.js';
@@ -36,11 +37,14 @@ export function createEvaluationController(repository: EvaluationRepository = ev
     }),
     get: asyncHandler(async (request, response) => {
       const { id } = evaluationIdParamsSchema.parse(request.params);
-      response.json(persistedEvaluationSchema.parse(await repository.get(authContext(request), id)));
+      response.json(persistedEvaluationReadSchema.parse(await repository.get(authContext(request), id)));
     }),
     analyze: asyncHandler(async (request, response) => {
       const { id } = evaluationIdParamsSchema.parse(request.params);
-      const evaluation = persistedEvaluationSchema.parse(await repository.get(authContext(request), id));
+      const readEvaluation = persistedEvaluationReadSchema.parse(await repository.get(authContext(request), id));
+      const currentEvaluation = persistedEvaluationSchema.safeParse(readEvaluation);
+      if (!currentEvaluation.success) throw new HttpError(409, 'SCORING_VERSION_UNSUPPORTED', 'Historical v1 evaluations are read-only and cannot be analyzed using the current scoring model');
+      const evaluation = currentEvaluation.data;
       if (evaluation.status === 'insufficient_evidence' || evaluation.result.overallScore === undefined || evaluation.result.evidence.length === 0) {
         response.json(aiAnalysisResponseSchema.parse({ status: 'insufficient_evidence', evaluation, analysis: null }));
         return;
