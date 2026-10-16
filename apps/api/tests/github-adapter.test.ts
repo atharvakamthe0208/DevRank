@@ -61,6 +61,16 @@ describe('official GitHub REST adapter', () => {
     expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({ Authorization: 'Bearer test-token' });
   });
 
+  it('accepts the reported candidate username and queries the official public API endpoints', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ ...user, login: 'atharvakamthe0208', public_repos: 1 }))
+      .mockResolvedValueOnce(response([{ ...repo, full_name: 'atharvakamthe0208/hello-world' }]));
+    const profile = await createGitHubAdapter(fetcher).getProfile('atharvakamthe0208');
+    expect(profile.username).toBe('atharvakamthe0208');
+    expect(String(fetcher.mock.calls[0][0])).toBe('https://api.github.com/users/atharvakamthe0208');
+    expect(String(fetcher.mock.calls[1][0])).toContain('/users/atharvakamthe0208/repos?');
+  });
+
   it('returns a not-found error for an unknown username', async () => {
     const adapter = createGitHubAdapter(vi.fn<typeof fetch>().mockResolvedValue(response({}, 404)));
     await expect(adapter.getProfile('nobody')).rejects.toMatchObject({ statusCode: 404, code: 'GITHUB_USER_NOT_FOUND' });

@@ -1,56 +1,51 @@
 # DevRank
 
-DevRank is an MVP project for evaluating and ranking technical candidates using collected evidence, deterministic scoring, and AI-generated explanations. The repository is structured as a modular monolith with a React client, Express API, shared contracts, and version-controlled Supabase assets. Directories are scaffolding; they do not imply that product features or external integrations are implemented.
+DevRank is an MVP for recruiter-managed candidate records and evidence-based technical evaluation. The repository contains a React/Vite client, Express API, shared Zod contracts, Supabase Auth/PostgreSQL integration, deterministic five-category scoring, and optional server-side AI analysis. Comparison and ranking workflows remain future work.
 
 ## Stack
 
 - React, Vite, TypeScript
 - Node.js, Express, TypeScript
 - Supabase PostgreSQL and Auth
-- Zod shared contracts; LangChain/Groq behind a backend service boundary when implemented
-- Vitest for tests; npm workspaces and npm only
+- Zod shared contracts; optional Groq structured analysis behind the API
+- Vitest; npm workspaces
 
 ## Repository map
 
 ```text
-apps/web/             React application, organized by product feature
-apps/api/             Express modular monolith and isolated integrations
-packages/contracts/   Shared request, response, and evidence schemas
-supabase/             SQL migrations, seed data, and database notes
-docs/                 Architecture, interface, scoring, AI, setup, and workflow notes
-scripts/              Repository automation
-.github/workflows/    CI workflow location
+apps/web/             React application and recruiter/admin workflows
+apps/api/             Express API, auth, persistence, scoring, AI, integrations
+packages/contracts/   Shared request, response, evidence and evaluation schemas
+supabase/             SQL migrations and database notes
+docs/                 Architecture, API, setup, scoring, AI and day notes
 ```
 
-See [docs/setup.md](docs/setup.md) for setup and [docs/team-workflow.md](docs/team-workflow.md) for ownership and collaboration.
+See [docs/setup.md](docs/setup.md), [docs/authentication.md](docs/authentication.md), and [PROJECT_STATUS.md](PROJECT_STATUS.md) for current setup and implementation status. Role weights remain preliminary and require assessment-owner review. No SRS was found in the repository.
 
-## Prerequisites
+## Prerequisites and setup
 
 - Node.js 20 or newer (under 25)
 - npm 10 or newer recommended
-- A Supabase project is only needed when implementing database-backed flows
-
-## Install and run
 
 ```sh
 npm install
 ```
 
-Copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env`. The API loads its own workspace `.env` regardless of the shell's current directory; Vite loads the web workspace `.env`. Root `.env` is not used by the workspace servers. Replace placeholders locally; never commit populated environment files. Start both development servers with:
+Copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env`; configure local values without committing populated environment files. Supabase settings are required for authenticated/persisted workflows. Groq configuration is optional; without it deterministic evaluations still work. Start the development servers with:
 
 ```sh
 npm run dev
 ```
 
-The web app is served at `http://localhost:5173`; the API health endpoint is `http://localhost:3000/api/health`. Workspace commands are `npm run build`, `npm run lint`, `npm run test`, and `npm run typecheck`. Lint is not configured yet; API tests cover the health route, request validation, error conventions, and environment parsing.
+The web app is served at `http://localhost:5173`; API health is `http://localhost:3000/api/health`. Root commands include `npm run build`, `npm run typecheck`, and `npm test`. Lint is not configured.
+
+## Current implementation
+
+Recruiters can authenticate, manage candidates, submit LeetCode/HackerRank data as candidate-provided evidence, and sync public GitHub profile evidence through the official REST API. API evaluation creation validates evidence, scores five categories under scoring version `2.0.0`, stores a versioned snapshot, and supports separate evidence-grounded AI analysis. The web app provides configured-role and owner-defined-role evaluation flows with persisted history. Dashboard, comparison, and ranking APIs use shared contracts and enforce owner scope and scoring-version compatibility. Role weights remain preliminary and must be approved; legacy six-weight owner profiles are preserved but unavailable until explicitly updated. Database migration deployment remains separately blocked pending production catalog/history reconciliation and approval. See [evaluation UI documentation](docs/evaluation-ui.md) and [API contract](docs/api-contract.md).
 
 ## Team ownership
 
 - **Atharva:** `apps/api` and `supabase/` (excluding scoring and AI business logic); API setup, persistence, auth, integrations, deployment.
-- **Aryan:** `apps/web`; UI, routing, mock fixtures, and API client integration.
-- **Priya:** `apps/api/src/modules/scoring`, `apps/api/src/modules/ai`, and QA scenarios; coordinate changes to shared contracts.
-- **Shared:** `packages/contracts` changes are communicated to all; database migrations are reviewed with Atharva; each owner documents their interfaces.
-
-## Current scope and next steps
-
-The repository includes recruiter Supabase Auth flows, an API-backed candidate list/create/details workflow, a token-verifying API with recruiter approval gates, candidate CRUD, and migrations for approved-recruiter RLS and admin-managed applications. Candidate scores and role assignments are not part of the candidate CRUD model yet; scoring and AI remain in progress. Migrations are not applied automatically; configure Supabase using [docs/authentication.md](docs/authentication.md). See [docs/setup.md](docs/setup.md) for candidate routes and [docs/architecture.md](docs/architecture.md) for system boundaries.
+- **Aryan:** `apps/web`; UI, routing and API client integration.
+- **Priya:** `apps/api/src/modules/scoring`, `apps/api/src/modules/ai`, and QA scenarios; coordinate shared-contract changes.
+- **Shared:** Coordinate `packages/contracts` changes and migration reviews.

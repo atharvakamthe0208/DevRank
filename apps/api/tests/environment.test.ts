@@ -7,6 +7,7 @@ describe('API environment configuration', () => {
   it('supplies safe local defaults', () => {
     expect(parseEnv({})).toMatchObject({
       API_PORT: 3000,
+      API_HOST: '0.0.0.0',
       NODE_ENV: 'development',
       WEB_ORIGIN: 'http://localhost:5173',
       GROQ_MODEL: 'openai/gpt-oss-120b',
@@ -35,12 +36,12 @@ describe('API environment configuration', () => {
 
   it('requires both Supabase URL and anonymous key when database access is requested', () => {
     expect(() => assertSupabaseConfiguration({})).toThrow(
-      'Set SUPABASE_URL and SUPABASE_ANON_KEY before using database services.',
+      'Supabase API authentication requires SUPABASE_URL and SUPABASE_ANON_KEY.',
     );
     expect(() => assertSupabaseConfiguration({
       url: 'https://your-project.supabase.co',
       anonKey: 'your-public-anon-key',
-    })).toThrow('Set SUPABASE_URL and SUPABASE_ANON_KEY before using database services.');
+    })).toThrow('Supabase API authentication requires SUPABASE_URL and SUPABASE_ANON_KEY.');
   });
 });
 
@@ -58,5 +59,11 @@ describe('CORS origin policy', () => {
   });
   it('supports requests without an Origin header', () => {
     expect(isCorsOriginAllowed(undefined, 'production', configured)).toBe(true);
+  });
+  it('allows explicit LAN frontend origins while keeping other origins blocked', () => {
+    const lan = 'http://192.168.148.1:5173';
+    expect(isCorsOriginAllowed(lan, 'development', configured, [lan])).toBe(true);
+    expect(isCorsOriginAllowed(lan, 'production', configured, [lan])).toBe(true);
+    expect(isCorsOriginAllowed('http://192.168.148.2:5173', 'development', configured, [lan])).toBe(false);
   });
 });

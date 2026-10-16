@@ -13,7 +13,7 @@ Shared request and response schemas are exported by `@devrank/contracts`. Invali
 
 Comparison and ranking depend on persisted `target_role` and `evaluation_result` columns, along with persisted scoring version and completed/insufficient-evidence statuses. The production readiness audit for the evaluation persistence migrations is still unresolved, and the remote migration ledger was previously observed blank without proving what schema was applied. These endpoints return `503 EVALUATION_SCHEMA_UNAVAILABLE` if the required columns are missing. Do not use migration repair, remote push, or a manual ledger insertion without a separately reviewed catalog-versus-history reconciliation plan.
 
-The current service supports scoring version `1.0.0` only. Legacy snapshots with no scoring version, unsupported versions, result/row mismatches, and malformed results are excluded from rankings or rejected from comparisons. This feature does not recalculate historical scores or ask an LLM to score candidates. The dashboard's status totals reflect the statuses currently present in the schema and expose no fabricated result data.
+The current service supports scoring version `2.0.0` only. Historical six-category v1 snapshots, unsupported versions, result/row mismatches, and malformed results are excluded from rankings or rejected from comparisons. This feature does not recalculate historical scores or ask an LLM to score candidates. The dashboard's status totals reflect the statuses currently present in the schema and expose no fabricated result data.
 
 ## Verification
 

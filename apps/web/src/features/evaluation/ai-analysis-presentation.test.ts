@@ -13,19 +13,19 @@ const evaluation: PersistedEvaluation = {
   status: 'completed',
   createdAt: '2026-10-12T00:00:00.000Z',
   result: {
-    schemaVersion: '1.0.0',
-    scoringVersion: '1.0.0',
+    schemaVersion: '2.0.0',
+    scoringVersion: '2.0.0',
     candidateId,
     targetRole: 'software_developer',
     overallScore: 80,
     categoryScores: scoringCategories.map(({ id, displayName }, index) => ({
       categoryId: id, displayName, score: 80, status: 'scored', evidenceRefs: [`evidence-${index + 1}`], explanation: 'Supported by evidence.',
     })),
-    roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+    roleWeightsUsed: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 },
     evidence: scoringCategories.map(({ id }, index) => ({ evidenceId: `evidence-${index + 1}`, evidenceType: 'technical_screen', source: 'Technical screen', description: 'Completed a structured technical screen.', normalizedValue: 80, verificationStatus: 'verified', categoryId: id, availability: 'available' })),
     strengths: [], skillGaps: [], recommendations: [], missingEvidence: [],
     calculationExplanation: 'Deterministic scoring explanation.', evaluationStatus: 'completed',
-    aiExplanation: { summary: 'No AI explanation.', strengths: [], skillGaps: [], recommendations: [] },
+    aiExplanation: { summary: 'AI analysis not generated.', strengths: [], skillGaps: [], recommendations: [] },
     decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
   },
 };

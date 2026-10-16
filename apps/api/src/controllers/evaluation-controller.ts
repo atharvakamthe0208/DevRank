@@ -20,6 +20,7 @@ function authContext(request: Request) {
 export function createEvaluationController(repository: EvaluationRepository = evaluationRepository, aiService: AiAnalysisService = aiAnalysisService) {
   return {
     listRoles: asyncHandler(async (_request, response) => { response.json(repository.listRoles()); }),
+    listRoleProfiles: asyncHandler(async (request, response) => { response.json(await repository.listRoleProfiles(authContext(request))); }),
     run: asyncHandler(async (request, response) => {
       const input = evaluationRunRequestSchema.parse(request.body);
       response.status(201).json(await repository.run(authContext(request), input));
@@ -28,6 +29,10 @@ export function createEvaluationController(repository: EvaluationRepository = ev
       const { id } = candidateIdParamsSchema.parse(request.params);
       const input = evaluationRequestSchema.parse(request.body);
       response.status(201).json(persistedEvaluationSchema.parse(await repository.create(authContext(request), id, input)));
+    }),
+    listForCandidate: asyncHandler(async (request, response) => {
+      const { id } = candidateIdParamsSchema.parse(request.params);
+      response.json(await repository.listForCandidate(authContext(request), id));
     }),
     get: asyncHandler(async (request, response) => {
       const { id } = evaluationIdParamsSchema.parse(request.params);

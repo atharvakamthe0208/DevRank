@@ -37,6 +37,25 @@ describe('server-side role authorization', () => {
     expect(unconfirmed.json).toHaveBeenCalledWith(expect.objectContaining({ error: { code: 'EMAIL_NOT_CONFIRMED', message: expect.any(String) } }));
   });
 
+  it('denies a valid account without a recruiter profile and denies approved admins as recruiters', () => {
+    const missingProfileResponse = responseForTest();
+    const missingProfileRequest = {
+      auth: { userId: 'user-1', email: 'user@example.com', emailConfirmed: true, accessToken: 'test-token', profile: null },
+    } as unknown as Request;
+    requireApprovedRecruiter(missingProfileRequest, missingProfileResponse as unknown as Response, vi.fn());
+    expect(missingProfileResponse.status).toHaveBeenCalledWith(403);
+    expect(missingProfileResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.objectContaining({ code: 'PROFILE_MISSING' }),
+    }));
+
+    const adminResponse = responseForTest();
+    requireApprovedRecruiter(requestFor('admin', 'approved'), adminResponse as unknown as Response, vi.fn());
+    expect(adminResponse.status).toHaveBeenCalledWith(403);
+    expect(adminResponse.json).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.objectContaining({ code: 'RECRUITER_APPROVAL_REQUIRED' }),
+    }));
+  });
+
   it('allows only a confirmed, approved administrator to use admin APIs', () => {
     const next = vi.fn();
     requireAdmin(requestFor('admin', 'approved'), {} as Response, next);

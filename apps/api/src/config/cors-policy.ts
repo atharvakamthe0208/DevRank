@@ -5,9 +5,10 @@ export function isCorsOriginAllowed(
   origin: string | undefined,
   nodeEnv: 'development' | 'test' | 'production',
   configuredOrigin: string,
+  additionalOrigins: readonly string[] = [],
 ): boolean {
   // Requests without Origin are typically server-to-server or command-line clients.
-  if (!origin || origin === configuredOrigin) return true;
+  if (!origin || origin === configuredOrigin || additionalOrigins.includes(origin)) return true;
   if (nodeEnv === 'production') return false;
 
   try {

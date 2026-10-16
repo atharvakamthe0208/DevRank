@@ -31,12 +31,14 @@ export function createCandidatesRouter(
     validateBody(evaluationRequestSchema),
     evaluationController.create,
   );
+  router.get('/:id/evaluations', validateParams(candidateIdParamsSchema), evaluationController.listForCandidate);
   router.post(
     '/:id/platform-data',
     validateParams(candidateIdParamsSchema),
     validateBody(candidatePlatformSubmissionSchema),
     platformController.submit,
   );
+  router.get('/:id/platform-data', validateParams(candidateIdParamsSchema), platformController.getLatest);
   router.post(
     '/:id/platform-data/github-sync',
     validateParams(candidateIdParamsSchema),
