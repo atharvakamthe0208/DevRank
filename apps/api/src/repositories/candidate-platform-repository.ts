@@ -2,22 +2,26 @@ import {
   candidatePlatformResponseSchema,
   candidatePlatformDataResponseSchema,
   githubSyncResponseSchema,
+  leetCodeSyncResponseSchema,
   type CandidatePlatformResponse,
   type CandidatePlatformDataResponse,
   type CandidatePlatformSubmission,
   type GitHubProfileResponse,
   type GitHubSyncResponse,
+  type LeetCodeSyncResponse,
 } from '@devrank/contracts';
 import { getSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { HttpError } from '../middleware/http-error.js';
 import { githubAdapter } from '../services/github-adapter.js';
+import { leetCodeAdapter, type NormalizedLeetCodeProfile } from '../services/leetcode-adapter.js';
 import type { AuthContext } from '../types/auth.js';
 
 export interface CandidatePlatformRepository {
   getLatest(auth: AuthContext, candidateId: string): Promise<CandidatePlatformDataResponse>;
   submit(auth: AuthContext, candidateId: string, input: CandidatePlatformSubmission): Promise<CandidatePlatformResponse>;
   syncGitHub(auth: AuthContext, candidateId: string, profile: string): Promise<GitHubSyncResponse>;
+  syncLeetCode(auth: AuthContext, candidateId: string, profile: string): Promise<LeetCodeSyncResponse>;
 }
 
 function unavailable(operation: string): never {
@@ -61,6 +65,7 @@ export function createCandidatePlatformRepository(
   logGitHubSaveFailure: (diagnostics: Record<string, string | number>) => void = (diagnostics) => {
     if (env.NODE_ENV === 'development') console.error('DevRank GitHub profile persistence failed', diagnostics);
   },
+  getLeetCodeProfile: (profile: string) => Promise<NormalizedLeetCodeProfile> = (profile) => leetCodeAdapter.getProfile(profile),
 ): CandidatePlatformRepository {
   return {
     async getLatest(auth, candidateId) {
@@ -78,8 +83,12 @@ export function createCandidatePlatformRepository(
           .eq('candidate_id', candidateId).eq('owner_id', auth.userId).order('created_at', { ascending: false });
         if (error || !data) unavailable('load platform data');
         const latest = new Map<string, (typeof data)[number]>();
-        for (const row of data) if (!latest.has(row.source)) latest.set(row.source, row);
-        const items: Array<import('@devrank/contracts').CandidatePlatformResponse | GitHubSyncResponse> = [];
+        for (const row of data) {
+          const raw = row.raw_evidence as Record<string, unknown>;
+          const key = row.source === 'leetcode' && raw?.provenance === 'alfa_leetcode_api' ? 'leetcode_sync' : row.source;
+          if (!latest.has(key)) latest.set(key, row);
+        }
+        const items: Array<import('@devrank/contracts').CandidatePlatformResponse | GitHubSyncResponse | LeetCodeSyncResponse> = [];
         for (const row of latest.values()) {
           if (row.source === 'github' && row.availability === 'available') {
             const parsed = githubSyncResponseSchema.safeParse({
@@ -92,6 +101,17 @@ export function createCandidatePlatformRepository(
           }
           if ((row.source === 'leetcode' || row.source === 'hackerrank') && ['available', 'unavailable', 'not_provided'].includes(row.availability)) {
             const raw = row.raw_evidence as Record<string, unknown>;
+            if (row.source === 'leetcode' && raw?.provenance === 'alfa_leetcode_api') {
+              const parsed = leetCodeSyncResponseSchema.safeParse({
+                id: row.id, candidateId: row.candidate_id, platform: 'leetcode', availability: 'available',
+                provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api',
+                handle: raw.handle, profileUrl: raw.profileUrl,
+                statistics: (row.normalized_evidence as Record<string, unknown> | null)?.statistics,
+                syncedAt: row.observed_at ?? row.created_at,
+              });
+              if (parsed.success) items.push(parsed.data);
+              continue;
+            }
             const parsed = candidatePlatformResponseSchema.safeParse({
               id: row.id, candidateId: row.candidate_id, platform: row.source, availability: row.availability,
               provenance: raw?.provenance, profileUrl: raw?.profileUrl, handle: raw?.handle,
@@ -253,6 +273,47 @@ export function createCandidatePlatformRepository(
         throw new HttpError(502, 'GITHUB_RESPONSE_INVALID', 'GitHub data was saved, but the API could not format the saved response. Reload the candidate data or retry the sync.');
       }
       return response.data;
+    },
+    async syncLeetCode(auth, candidateId, profile) {
+      let client;
+      try { client = getClient(auth.accessToken); }
+      catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Platform data storage is not configured'); }
+
+      try {
+        const { data: candidate, error } = await client.from('candidates')
+          .select('id').eq('id', candidateId).eq('owner_id', auth.userId).is('archived_at', null).maybeSingle();
+        if (error) unavailable('verify the candidate');
+        if (!candidate) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+      } catch (error) {
+        if (error instanceof HttpError) throw error;
+        unavailable('verify the candidate');
+      }
+
+      // Fetch and validate before inserting so a failed refresh never replaces the last saved snapshot.
+      const profileData = await getLeetCodeProfile(profile);
+      const syncedAt = new Date().toISOString();
+      try {
+        const { data, error } = await client.from('platform_evidence').insert({
+          candidate_id: candidateId,
+          owner_id: auth.userId,
+          source: 'leetcode',
+          availability: 'available',
+          raw_evidence: { provenance: profileData.provenance, provider: profileData.provider, handle: profileData.handle, profileUrl: profileData.profileUrl },
+          normalized_evidence: profileData,
+          observed_at: syncedAt,
+        }).select('id,candidate_id,observed_at').single();
+        if (error || !data) unavailable('save LeetCode profile data');
+        return leetCodeSyncResponseSchema.parse({
+          id: data.id,
+          candidateId: data.candidate_id,
+          ...profileData,
+          availability: 'available',
+          syncedAt: data.observed_at ?? syncedAt,
+        });
+      } catch (error) {
+        if (error instanceof HttpError) throw error;
+        unavailable('save LeetCode profile data');
+      }
     },
   };
 }

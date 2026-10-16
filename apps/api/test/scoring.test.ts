@@ -50,21 +50,21 @@ describe('deterministic candidate scoring', () => {
     const category = output.categoryScores.find(({ categoryId }) => categoryId === 'technical_skills')!;
     expect(category.score).toBe(90);
     expect(category.evidenceRefs).toEqual(['c001-tech', 'c001-tech-second']);
-    expect(output.overallScore).toBe(80.67);
+    expect(output.overallScore).toBe(80.6);
   });
 
   it('uses configurable weights for each supported role', () => {
     const input = candidate(1);
-    expect(scoreCandidate(input).overallScore).toBe(84.22);
+    expect(scoreCandidate(input).overallScore).toBe(83.8);
     input.targetRole = 'software_developer';
-    expect(scoreCandidate(input).overallScore).toBe(83.44);
+    expect(scoreCandidate(input).overallScore).toBe(83.1);
     input.targetRole = 'data_analyst';
-    expect(scoreCandidate(input).overallScore).toBe(84.12);
+    expect(scoreCandidate(input).overallScore).toBe(83.5);
 
     const differentCandidate = candidate();
-    expect(scoreCandidate(differentCandidate).overallScore).toBe(77.89);
+    expect(scoreCandidate(differentCandidate).overallScore).toBe(78.1);
     differentCandidate.targetRole = 'ai_ml_engineer';
-    expect(scoreCandidate(differentCandidate).overallScore).toBe(77.72);
+    expect(scoreCandidate(differentCandidate).overallScore).toBe(77.95);
   });
 
   it('returns the same result for identical inputs and configuration', () => {
@@ -77,25 +77,25 @@ describe('deterministic candidate scoring', () => {
   });
 
   it('records the supported scoring version and the matching configuration on every result', () => {
-    const config = loadRoleWeightConfiguration('2.0.0');
-    expect(SUPPORTED_SCORING_VERSIONS).toEqual(['2.0.0']);
-    expect(config.scoringVersion).toBe('2.0.0');
+    const config = loadRoleWeightConfiguration('3.0.0');
+    expect(SUPPORTED_SCORING_VERSIONS).toEqual(['3.0.0']);
+    expect(config.scoringVersion).toBe('3.0.0');
     expect(config.roles).toEqual({
-      software_developer: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 },
-      ai_ml_engineer: { technical_skills: 27.78, problem_solving_dsa: 16.67, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 16.66 },
-      data_analyst: { technical_skills: 23.53, problem_solving_dsa: 17.65, relevant_project_experience: 23.53, practical_assessment_performance: 17.65, learning_adaptability: 17.64 },
+      software_developer: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+      ai_ml_engineer: { technical_skills: 25, problem_solving_dsa: 15, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 15 },
+      data_analyst: { technical_skills: 20, problem_solving_dsa: 15, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 15, learning_adaptability: 15 },
     });
-    expect(scoreCandidate(candidate(), config, '2.0.0').scoringVersion).toBe(config.scoringVersion);
-    expect(scoreCandidate(candidate(4), config, '2.0.0').scoringVersion).toBe('2.0.0');
+    expect(scoreCandidate(candidate(), config, '3.0.0').scoringVersion).toBe(config.scoringVersion);
+    expect(scoreCandidate(candidate(4), config, '3.0.0').scoringVersion).toBe('3.0.0');
   });
 
   it('rejects unsupported versions and never applies the current formula under a different identifier', () => {
     expect(() => loadRoleWeightConfiguration('9.9.9')).toThrow(/unsupported scoring version "9.9.9"/i);
     expect(() => loadRoleWeightConfiguration('1.0.0')).toThrow(/unsupported scoring version "1.0.0"/i);
     expect(() => scoreCandidate(candidate(), sharedWeights, '9.9.9')).toThrow(/unsupported scoring version "9.9.9"/i);
-    expect(() => scoreCandidate(candidate(), sharedWeights, '1.0.0')).toThrow(/unsupported scoring version "1.0.0"/i);
-    expect(() => scoreCandidate(candidate(), { ...sharedWeights, scoringVersion: '3.0.0' })).toThrow(/unsupported scoring version "3.0.0"/i);
-    expect(() => scoreCandidate(candidate(), { ...sharedWeights, scoringVersion: '3.0.0' }, '2.0.0')).toThrow(/does not match the supplied configuration version/i);
+    expect(() => scoreCandidate(candidate(), sharedWeights, '2.0.0')).toThrow(/unsupported scoring version "2.0.0"/i);
+    expect(() => scoreCandidate(candidate(), { ...sharedWeights, scoringVersion: '4.0.0' })).toThrow(/unsupported scoring version "4.0.0"/i);
+    expect(() => scoreCandidate(candidate(), { ...sharedWeights, scoringVersion: '4.0.0' }, '3.0.0')).toThrow(/does not match the supplied configuration version/i);
   });
 
   it('does not mutate candidate evidence or shared role weights while scoring', () => {
@@ -133,7 +133,7 @@ describe('deterministic candidate scoring', () => {
     expect(allMissing.evaluationStatus).toBe('insufficient_evidence');
     expect(allMissing.overallScore).toBeUndefined();
     expect(allMissing.categoryScores.every(({ status, score }) => status === 'insufficient_evidence' && score === undefined)).toBe(true);
-    expect(allMissing.missingEvidence).toHaveLength(5);
+    expect(allMissing.missingEvidence).toHaveLength(6);
   });
 
   it('keeps available raw evidence without a normalized value unscored', () => {
@@ -157,11 +157,11 @@ describe('deterministic candidate scoring', () => {
 
   it('accepts minimum and maximum valid weight values and validates them before scoring', () => {
     const extremeWeights = {
-      schemaVersion: '2.0.0', scoringVersion: '2.0.0', preliminary: true,
+      schemaVersion: '3.0.0', scoringVersion: '3.0.0', preliminary: true,
       roles: {
-        software_developer: { technical_skills: 100, problem_solving_dsa: 0, relevant_project_experience: 0, practical_assessment_performance: 0, learning_adaptability: 0 },
-        ai_ml_engineer: { technical_skills: 0, problem_solving_dsa: 100, relevant_project_experience: 0, practical_assessment_performance: 0, learning_adaptability: 0 },
-        data_analyst: { technical_skills: 0, problem_solving_dsa: 0, relevant_project_experience: 0, practical_assessment_performance: 0, learning_adaptability: 100 },
+        software_developer: { technical_skills: 100, problem_solving_dsa: 0, relevant_project_experience: 0, practical_assessment_performance: 0, communication_skills: 0, learning_adaptability: 0 },
+        ai_ml_engineer: { technical_skills: 0, problem_solving_dsa: 100, relevant_project_experience: 0, practical_assessment_performance: 0, communication_skills: 0, learning_adaptability: 0 },
+        data_analyst: { technical_skills: 0, problem_solving_dsa: 0, relevant_project_experience: 0, practical_assessment_performance: 0, communication_skills: 0, learning_adaptability: 100 },
       },
     };
     expect(roleWeightConfigurationSchema.safeParse(extremeWeights).success).toBe(true);
@@ -174,7 +174,7 @@ describe('deterministic candidate scoring', () => {
     const input = candidate();
     input.evidence = input.evidence.filter((item: Record<string, any>) => item.categoryId !== 'learning_adaptability');
     const config = structuredClone(sharedWeights);
-    config.roles.software_developer = { technical_skills: 0, problem_solving_dsa: 0, relevant_project_experience: 0, practical_assessment_performance: 0, learning_adaptability: 100 };
+    config.roles.software_developer = { technical_skills: 0, problem_solving_dsa: 0, relevant_project_experience: 0, practical_assessment_performance: 0, communication_skills: 0, learning_adaptability: 100 };
     const output = scoreCandidate(input, config);
     expect(output.evaluationStatus).toBe('insufficient_evidence');
     expect(output.overallScore).toBeUndefined();
@@ -215,25 +215,20 @@ describe('deterministic candidate scoring', () => {
     const input = candidate();
     const output = scoreCandidate(input);
     expect(evaluationResponseSchema.safeParse(output).success).toBe(true);
-    expect(output.schemaVersion).toBe('2.0.0');
-    expect(output.scoringVersion).toBe('2.0.0');
+    expect(output.schemaVersion).toBe('3.0.0');
+    expect(output.scoringVersion).toBe('3.0.0');
     expect(output.categoryScores.map(({ categoryId }) => categoryId)).toEqual(scoringCategories.map(({ id }) => id));
     expect(output.categoryScores.flatMap(({ evidenceRefs }) => evidenceRefs)).toEqual(input.evidence.map(({ evidenceId }: Record<string, any>) => evidenceId));
     expect(output.evidence).toEqual(input.evidence);
     expect(output.aiExplanation.summary).toContain('No AI-generated explanation');
   });
 
-  it('uses exactly five active categories and cannot score a communication category', () => {
+  it('scores the canonical six categories, including structured interview communication evidence', () => {
     expect(scoringCategories.map(({ id }) => id)).toEqual([
       'technical_skills', 'problem_solving_dsa', 'relevant_project_experience',
-      'practical_assessment_performance', 'learning_adaptability',
+      'practical_assessment_performance', 'communication_skills', 'learning_adaptability',
     ]);
-    const invalidInput = candidate();
-    invalidInput.evidence.push({
-      evidenceId: 'old-interview-category', evidenceType: 'structured_interview',
-      source: 'Historical fixture', description: 'Old v1 category must not be active',
-      normalizedValue: 99, verificationStatus: 'unverified', categoryId: 'communication_skills', availability: 'available',
-    });
-    expect(() => scoreCandidate(invalidInput)).toThrow(/invalid candidate input/i);
+    const output = scoreCandidate(candidate());
+    expect(output.categoryScores.find(({ categoryId }) => categoryId === 'communication_skills')).toMatchObject({ score: 80, status: 'scored', evidenceRefs: ['c001-communication'] });
   });
 });

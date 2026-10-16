@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
-export const schemaVersion = '2.0.0' as const;
-export const scoringVersion = '2.0.0' as const;
+export const schemaVersion = '3.0.0' as const;
+export const scoringVersion = '3.0.0' as const;
 export const scoringVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/, 'Scoring version must use semantic version format (major.minor.patch).');
 export const scoringCategories = [
   { id: 'technical_skills', displayName: 'Technical Skills', description: 'Demonstrated proficiency in role-relevant languages, tools, and engineering concepts.' },
   { id: 'problem_solving_dsa', displayName: 'Problem-Solving / DSA', description: 'Ability to reason through problems, select algorithms, and explain trade-offs.' },
   { id: 'relevant_project_experience', displayName: 'Relevant Project Experience', description: 'Depth, relevance, and verifiable impact of work on related projects.' },
   { id: 'practical_assessment_performance', displayName: 'Practical Assessment Performance', description: 'Performance on a completed, role-relevant practical assessment.' },
+  { id: 'communication_skills', displayName: 'Communication Skills', description: 'Clarity and structure in technical explanation and collaboration.' },
   { id: 'learning_adaptability', displayName: 'Learning & Adaptability', description: 'Evidence of learning new tools or concepts and adapting to changing constraints.' },
 ] as const;
 
@@ -21,7 +22,7 @@ export const roleIdSchema = z.enum(roleIds);
 export const roleWeightsSchema = z.record(scoringCategorySchema, z.number().finite().min(0).max(100))
   .superRefine((weights, context) => {
     const keys = Object.keys(weights);
-    if (keys.length !== scoringCategories.length) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Every role must define exactly five category weights.' });
+    if (keys.length !== scoringCategories.length) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Every role must define exactly six category weights.' });
     const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
     if (Math.abs(total - 100) > 1e-8) context.addIssue({ code: z.ZodIssueCode.custom, message: `Role weights must total 100; received ${total}.` });
   });

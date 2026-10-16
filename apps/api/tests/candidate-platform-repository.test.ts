@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { candidatePlatformSubmissionSchema } from '@devrank/contracts';
 import { createCandidatePlatformRepository } from '../src/repositories/candidate-platform-repository.js';
+import type { NormalizedLeetCodeProfile } from '../src/services/leetcode-adapter.js';
 
 const ownerId = '1d4b1d45-e136-4f50-a46e-8ef29735ec26';
 const candidateId = 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c';
@@ -216,5 +217,104 @@ describe('candidate platform evidence repository', () => {
     await expect(repository.syncGitHub(auth, candidateId, 'octocat')).rejects.toMatchObject({
       statusCode: 503, code: 'GITHUB_DATA_SAVE_FAILED',
     });
+  });
+
+  it('checks candidate ownership before provider calls and appends a validated LeetCode snapshot', async () => {
+    const profile: NormalizedLeetCodeProfile = {
+      platform: 'leetcode', provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example',
+      profileUrl: 'https://leetcode.com/u/example/', statistics: { problemsSolved: 12, easySolved: 0 },
+    };
+    const { client, candidateQuery, evidenceQuery } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: { id: evidenceId, candidate_id: candidateId, observed_at: '2026-10-15T12:00:00.000Z' }, error: null },
+    );
+    const getProfile = vi.fn(async () => profile);
+    const repository = createCandidatePlatformRepository(() => client, undefined, undefined, getProfile);
+    const result = await repository.syncLeetCode(auth, candidateId, 'example');
+    expect(candidateQuery.eq.mock.calls).toEqual([['id', candidateId], ['owner_id', ownerId]]);
+    expect(getProfile).toHaveBeenCalledWith('example');
+    expect(evidenceQuery.insert).toHaveBeenCalledWith(expect.objectContaining({
+      candidate_id: candidateId, owner_id: ownerId, source: 'leetcode', availability: 'available',
+      raw_evidence: expect.objectContaining({ provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example' }),
+      normalized_evidence: profile,
+    }));
+    expect(result).toMatchObject({ id: evidenceId, candidateId, provenance: 'alfa_leetcode_api', statistics: { problemsSolved: 12, easySolved: 0 } });
+    expect(result).not.toHaveProperty('score');
+  });
+
+  it('does not fetch or persist for another owner and leaves previous evidence alone when the provider fails', async () => {
+    const { client } = createClient({ data: null, error: null }, undefined);
+    const getProfile = vi.fn();
+    const repository = createCandidatePlatformRepository(() => client, undefined, undefined, getProfile);
+    await expect(repository.syncLeetCode(auth, candidateId, 'example')).rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
+    expect(getProfile).not.toHaveBeenCalled();
+    expect(client.from).toHaveBeenCalledTimes(1);
+
+    const { client: ownedClient, evidenceQuery } = createClient({ data: { id: candidateId }, error: null }, undefined);
+    const failingRepository = createCandidatePlatformRepository(() => ownedClient, undefined, undefined, async () => { throw new Error('provider unavailable'); });
+    await expect(failingRepository.syncLeetCode(auth, candidateId, 'example')).rejects.toThrow('provider unavailable');
+    expect(evidenceQuery.insert).not.toHaveBeenCalled();
+  });
+
+  it('returns a controlled persistence failure after a successful fetch without updating existing evidence', async () => {
+    const { client, evidenceQuery } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: null, error: { code: '42501', message: 'sensitive database detail' } },
+    );
+    const repository = createCandidatePlatformRepository(() => client, undefined, undefined, async () => ({
+      platform: 'leetcode', provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example',
+      profileUrl: 'https://leetcode.com/u/example/', statistics: { problemsSolved: 12 },
+    }));
+    await expect(repository.syncLeetCode(auth, candidateId, 'example')).rejects.toMatchObject({
+      statusCode: 503, code: 'DATABASE_UNAVAILABLE', message: 'Unable to save LeetCode profile data right now',
+    });
+    expect(evidenceQuery.insert).toHaveBeenCalledTimes(1);
+    expect(evidenceQuery.update).not.toHaveBeenCalled();
+  });
+
+  it('returns LeetCode sync provenance and retrieval time from owner-scoped saved evidence', async () => {
+    const normalized = {
+      platform: 'leetcode', provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example',
+      profileUrl: 'https://leetcode.com/u/example/', statistics: { problemsSolved: 15 },
+    };
+    const { client } = createClient(
+      { data: { id: candidateId }, error: null }, undefined, undefined,
+      { data: [{
+        id: evidenceId, candidate_id: candidateId, owner_id: ownerId, source: 'leetcode', availability: 'available',
+        raw_evidence: { provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example', profileUrl: normalized.profileUrl },
+        normalized_evidence: normalized, created_at: '2026-10-15T12:00:00.000Z', observed_at: '2026-10-15T12:00:00.000Z',
+      }], error: null },
+    );
+    const repository = createCandidatePlatformRepository(() => client);
+    await expect(repository.getLatest(auth, candidateId)).resolves.toMatchObject({ items: [{
+      id: evidenceId, candidateId, provenance: 'alfa_leetcode_api', syncedAt: '2026-10-15T12:00:00.000Z', statistics: { problemsSolved: 15 },
+    }] });
+  });
+
+  it('retains candidate-reported LeetCode evidence alongside the most recent provider snapshot', async () => {
+    const { client } = createClient(
+      { data: { id: candidateId }, error: null }, undefined, undefined,
+      { data: [
+        {
+          id: evidenceId, candidate_id: candidateId, owner_id: ownerId, source: 'leetcode', availability: 'available',
+          raw_evidence: { provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example', profileUrl: 'https://leetcode.com/u/example/' },
+          normalized_evidence: { platform: 'leetcode', provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example', profileUrl: 'https://leetcode.com/u/example/', statistics: { problemsSolved: 15 } },
+          created_at: '2026-10-15T12:00:00.000Z', observed_at: '2026-10-15T12:00:00.000Z',
+        },
+        {
+          id: 'fe574cd8-8d21-4586-a887-dc2a6fc7ba09', candidate_id: candidateId, owner_id: ownerId, source: 'leetcode', availability: 'available',
+          raw_evidence: { provenance: 'candidate_provided', handle: 'example', statistics: { problemsSolved: 14 } },
+          normalized_evidence: { platform: 'leetcode', provenance: 'candidate_provided', handle: 'example', statistics: { problemsSolved: 14 } },
+          created_at: '2026-10-14T12:00:00.000Z', observed_at: null,
+        },
+      ], error: null },
+    );
+    const repository = createCandidatePlatformRepository(() => client);
+    const result = await repository.getLatest(auth, candidateId);
+    expect(result.items).toHaveLength(2);
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provenance: 'alfa_leetcode_api', statistics: { problemsSolved: 15 } }),
+      expect.objectContaining({ provenance: 'candidate_provided', statistics: { problemsSolved: 14 } }),
+    ]));
   });
 });

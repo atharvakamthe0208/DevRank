@@ -43,7 +43,7 @@ export function createEvaluationController(repository: EvaluationRepository = ev
       const { id } = evaluationIdParamsSchema.parse(request.params);
       const readEvaluation = persistedEvaluationReadSchema.parse(await repository.get(authContext(request), id));
       const currentEvaluation = persistedEvaluationSchema.safeParse(readEvaluation);
-      if (!currentEvaluation.success) throw new HttpError(409, 'SCORING_VERSION_UNSUPPORTED', 'Historical v1 evaluations are read-only and cannot be analyzed using the current scoring model');
+      if (!currentEvaluation.success) throw new HttpError(409, 'SCORING_VERSION_UNSUPPORTED', 'Historical v1/v2 evaluations are read-only and cannot be analyzed using the current scoring model');
       const evaluation = currentEvaluation.data;
       if (evaluation.status === 'insufficient_evidence' || evaluation.result.overallScore === undefined || evaluation.result.evidence.length === 0) {
         response.json(aiAnalysisResponseSchema.parse({ status: 'insufficient_evidence', evaluation, analysis: null }));

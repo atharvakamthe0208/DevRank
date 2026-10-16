@@ -36,6 +36,7 @@ function completeRawCandidate(): Record<string, any> {
       rawEvidence({ evidenceId: 'raw-dsa', evidenceType: 'coding_assessment', originalValue: '3/4' }),
       rawEvidence({ evidenceId: 'raw-project', evidenceType: 'project', originalValue: 78 }),
       rawEvidence({ evidenceId: 'raw-practical', evidenceType: 'work_sample', originalValue: 82 }),
+      rawEvidence({ evidenceId: 'raw-communication', evidenceType: 'structured_interview', originalValue: 80 }),
       rawEvidence({ evidenceId: 'raw-learning', evidenceType: 'learning_record', originalValue: 72 }),
     ],
   };
@@ -52,6 +53,7 @@ const testNormalizationRules = {
   },
   project: (value: string | number | boolean) => Number(value),
   work_sample: (value: string | number | boolean) => Number(value),
+  structured_interview: (value: string | number | boolean) => Number(value),
   learning_record: (value: string | number | boolean) => Number(value),
 };
 
@@ -127,6 +129,7 @@ describe('evidence validation, normalization, mapping, and scoring integration',
       coding_assessment: 'problem_solving_dsa',
       project: 'relevant_project_experience',
       work_sample: 'practical_assessment_performance',
+      structured_interview: 'communication_skills',
       learning_record: 'learning_adaptability',
       portfolio: 'relevant_project_experience',
     };
@@ -138,7 +141,7 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     }
     expect(Object.values(expectedByType)).toEqual(expect.arrayContaining(scoringCategories.map(({ id }) => id)));
     const interview = mapEvidenceCategory(rawEvidenceSchema.parse(rawEvidence({ evidenceType: 'structured_interview', normalizedValue: 80 })), mapping);
-    expect(interview).toMatchObject({ mapped: false, evidenceType: 'structured_interview', reason: expect.stringContaining('no configured category mapping') });
+    expect(interview).toMatchObject({ mapped: true, evidence: { categoryId: 'communication_skills' } });
   });
 
   it('reports unmapped types and category conflicts instead of guessing', () => {
@@ -149,15 +152,16 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     expect(conflict).toMatchObject({ mapped: false, reason: expect.stringContaining('conflicts with configured category') });
   });
 
-  it('reports structured interview evidence as unmapped and excludes it from scoring', () => {
+  it('maps structured interview evidence to communication without inventing other category scores', () => {
     const interview = rawEvidence({ evidenceId: 'interview-unscored', evidenceType: 'structured_interview', normalizedValue: 94 });
     const result = processCandidateEvidence({
       candidateId: 'candidate-interview-only',
       targetRole: 'software_developer',
       evidence: [interview],
     });
-    expect(result.unmappedEvidence).toEqual([expect.objectContaining({ evidenceId: 'interview-unscored', evidenceType: 'structured_interview' })]);
-    expect(result.evaluation.evidence).toEqual([]);
+    expect(result.unmappedEvidence).toEqual([]);
+    expect(result.evaluation.evidence).toEqual([expect.objectContaining({ evidenceId: 'interview-unscored', categoryId: 'communication_skills' })]);
+    expect(result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'communication_skills')?.score).toBe(94);
     expect(result.evaluation.evaluationStatus).toBe('insufficient_evidence');
     expect(result.evaluation.overallScore).toBeUndefined();
   });
@@ -168,9 +172,9 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     expect(result.unmappedEvidence).toEqual([]);
     expect(result.unnormalizedEvidence).toEqual([]);
     expect(result.evaluation.categoryScores.map(({ categoryId }) => categoryId)).toEqual(scoringCategories.map(({ id }) => id));
-    expect(result.evaluation.categoryScores.map(({ score }) => score)).toEqual([80, 75, 78, 82, 72]);
-    expect(result.evaluation.overallScore).toBe(77.89);
-    expect(result.evaluation.evidence.map(({ evidenceId }) => evidenceId)).toEqual(['raw-tech', 'raw-dsa', 'raw-project', 'raw-practical', 'raw-learning']);
+    expect(result.evaluation.categoryScores.map(({ score }) => score)).toEqual([80, 75, 78, 82, 80, 72]);
+    expect(result.evaluation.overallScore).toBeDefined();
+    expect(result.evaluation.evidence.map(({ evidenceId }) => evidenceId)).toEqual(['raw-tech', 'raw-dsa', 'raw-project', 'raw-practical', 'raw-communication', 'raw-learning']);
     expect(result.evaluation.evidence[0]).toMatchObject({ originalValue: '4/5', normalizedValue: 80, categoryId: 'technical_skills' });
     expect(evaluationResponseSchema.safeParse(result.evaluation).success).toBe(true);
   });
@@ -199,7 +203,8 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     expect(result.unmappedEvidence).toHaveLength(1);
     expect(result.unmappedEvidence[0].evidenceId).toBe('unmapped');
     expect(result.unnormalizedEvidence).toContainEqual(expect.objectContaining({ evidenceId: 'no-rule', reason: expect.stringContaining('No normalization rule') }));
-    expect(result.evaluation.overallScore).toBe(77.89);
+    expect(result.evaluation.evaluationStatus).toBe('completed');
+    expect(result.evaluation.overallScore).toBe(78.1);
     expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'invalid')).toBe(false);
     expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'unmapped')).toBe(false);
     expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'no-rule')).toBe(true);

@@ -6,6 +6,7 @@ import {
   candidatePlatformSubmissionSchema,
   candidateUpdateSchema,
   githubSyncRequestSchema,
+  leetCodeSyncRequestSchema,
 } from '@devrank/contracts';
 import { createCandidateController } from '../controllers/candidate-controller.js';
 import { authenticate, requireApprovedRecruiter } from '../middleware/authenticate.js';
@@ -44,6 +45,12 @@ export function createCandidatesRouter(
     validateParams(candidateIdParamsSchema),
     validateBody(githubSyncRequestSchema),
     platformController.syncGitHub,
+  );
+  router.post(
+    '/:id/platform-data/leetcode-sync',
+    validateParams(candidateIdParamsSchema),
+    validateBody(leetCodeSyncRequestSchema),
+    platformController.syncLeetCode,
   );
   router.get('/:id', validateParams(candidateIdParamsSchema), controller.get);
   router.patch('/:id', validateParams(candidateIdParamsSchema), validateBody(candidateUpdateSchema), controller.update);

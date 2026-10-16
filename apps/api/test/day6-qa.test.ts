@@ -11,7 +11,7 @@ function completeInput(candidateId: string, values: number[], evidencePrefix = c
     targetRole: 'software_developer',
     evidence: scoringCategories.map(({ id }, index) => ({
       evidenceId: `${evidencePrefix}-${index}`,
-      evidenceType: ['technical_screen', 'coding_assessment', 'project', 'work_sample', 'learning_record'][index],
+      evidenceType: ['technical_screen', 'coding_assessment', 'project', 'work_sample', 'structured_interview', 'learning_record'][index],
       source: 'Synthetic Day 6 QA fixture',
       description: `Synthetic ${id} result`,
       normalizedValue: values[index],
@@ -27,15 +27,15 @@ function equalWeights() {
     ...weights,
     roles: {
       ...weights.roles,
-      software_developer: Object.fromEntries(scoringCategories.map(({ id }) => [id, 20])),
+      software_developer: { technical_skills: 20, problem_solving_dsa: 20, relevant_project_experience: 15, practical_assessment_performance: 15, communication_skills: 15, learning_adaptability: 15 },
     },
   };
 }
 
 describe('Day 6 scoring and ranking QA', () => {
   it('preserves equal overall scores for two candidates without inventing a score tie-break', () => {
-    const first = scoreCandidate(completeInput('candidate-1', [80, 80, 80, 80, 80]));
-    const secondInput = completeInput('candidate-2', [80, 80, 80, 80, 80]);
+    const first = scoreCandidate(completeInput('candidate-1', [80, 80, 80, 80, 80, 80]));
+    const secondInput = completeInput('candidate-2', [80, 80, 80, 80, 80, 80]);
     secondInput.evidence.push({
       ...secondInput.evidence[0], evidenceId: 'candidate-2-extra-unavailable', availability: 'missing', normalizedValue: undefined,
     });
@@ -48,9 +48,9 @@ describe('Day 6 scoring and ranking QA', () => {
   it('preserves three-way overall ties even when category scores differ', () => {
     const config = equalWeights();
     const outcomes = [
-      scoreCandidate(completeInput('candidate-a', [100, 50, 50, 50, 50]), config),
-      scoreCandidate(completeInput('candidate-b', [50, 62.5, 62.5, 62.5, 62.5]), config),
-      scoreCandidate(completeInput('candidate-c', [60, 60, 60, 60, 60]), config),
+      scoreCandidate(completeInput('candidate-a', [100, 50, 50, 50, 50, 50]), config),
+      scoreCandidate(completeInput('candidate-b', [50, 62.5, 62.5, 62.5, 62.5, 62.5]), config),
+      scoreCandidate(completeInput('candidate-c', [60, 60, 60, 60, 60, 60]), config),
     ];
     expect(outcomes.map(({ overallScore }) => overallScore)).toEqual([60, 60, 60]);
     expect(outcomes[0].categoryScores.map(({ score }) => score)).not.toEqual(outcomes[1].categoryScores.map(({ score }) => score));
@@ -58,9 +58,9 @@ describe('Day 6 scoring and ranking QA', () => {
 
   it('does not alter equal numeric results when candidate input order is permuted', () => {
     const inputs = [
-      completeInput('candidate-a', [70, 70, 70, 70, 70]),
-      completeInput('candidate-b', [70, 70, 70, 70, 70]),
-      completeInput('candidate-c', [70, 70, 70, 70, 70]),
+      completeInput('candidate-a', [70, 70, 70, 70, 70, 70]),
+      completeInput('candidate-b', [70, 70, 70, 70, 70, 70]),
+      completeInput('candidate-c', [70, 70, 70, 70, 70, 70]),
     ];
     const scoreById = (values: typeof inputs) => Object.fromEntries(values.map((input) => [input.candidateId, scoreCandidate(input).overallScore]));
     expect(scoreById(inputs)).toEqual(scoreById([...inputs].reverse()));
@@ -68,9 +68,9 @@ describe('Day 6 scoring and ranking QA', () => {
   });
 
   it('rounds scores at the established two-decimal boundary without creating artificial rank separation', () => {
-    const a = scoreCandidate(completeInput('round-a', [80.004, 80.004, 80.004, 80.004, 80.004]));
-    const b = scoreCandidate(completeInput('round-b', [80, 80, 80, 80, 80]));
-    expect(a.categoryScores.map(({ score }) => score)).toEqual([80, 80, 80, 80, 80]);
+    const a = scoreCandidate(completeInput('round-a', [80.004, 80.004, 80.004, 80.004, 80.004, 80.004]));
+    const b = scoreCandidate(completeInput('round-b', [80, 80, 80, 80, 80, 80]));
+    expect(a.categoryScores.map(({ score }) => score)).toEqual([80, 80, 80, 80, 80, 80]);
     expect(a.overallScore).toBe(b.overallScore);
   });
 
@@ -84,8 +84,8 @@ describe('Day 6 scoring and ranking QA', () => {
 
   it('reports one or multiple missing categories and never renormalizes weights into an overall score', () => {
     for (const missingCount of [1, 3, 5]) {
-      const input = completeInput(`missing-${missingCount}`, [90, 80, 70, 60, 50]);
-      input.evidence = input.evidence.slice(0, 5 - missingCount);
+      const input = completeInput(`missing-${missingCount}`, [90, 80, 70, 60, 50, 40]);
+      input.evidence = input.evidence.slice(0, 6 - missingCount);
       const result = scoreCandidate(input);
       expect(result.evaluationStatus).toBe('insufficient_evidence');
       expect(result.overallScore).toBeUndefined();
@@ -95,7 +95,7 @@ describe('Day 6 scoring and ranking QA', () => {
   });
 
   it('ignores unavailable and unnormalized evidence while retaining usable category scores', () => {
-    const input = completeInput('mixed-availability', [90, 80, 70, 60, 50]);
+    const input = completeInput('mixed-availability', [90, 80, 70, 60, 50, 40]);
     input.evidence[0].availability = 'missing';
     input.evidence[0].normalizedValue = undefined;
     input.evidence[1].normalizedValue = undefined;
@@ -108,7 +108,7 @@ describe('Day 6 scoring and ranking QA', () => {
   });
 
   it('validates and scores the usable part of evidence while reporting rejected and unavailable sources', () => {
-    const complete = completeInput('pipeline-candidate', [91, 81, 71, 61, 51]);
+    const complete = completeInput('pipeline-candidate', [91, 81, 71, 61, 51, 41]);
     const result = processCandidateEvidence({
       ...complete,
       evidence: [

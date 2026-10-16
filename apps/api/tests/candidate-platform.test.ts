@@ -2,7 +2,7 @@ import { once } from 'node:events';
 import type { Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { CandidatePlatformResponse, GitHubSyncResponse } from '@devrank/contracts';
+import type { CandidatePlatformResponse, GitHubSyncResponse, LeetCodeSyncResponse } from '@devrank/contracts';
 import { createCandidatePlatformController } from '../src/controllers/candidate-platform-controller.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
 import { HttpError } from '../src/middleware/http-error.js';
@@ -65,6 +65,19 @@ function createRepository(): CandidatePlatformRepository {
         },
       };
     }),
+    syncLeetCode: vi.fn(async (auth, id, profile): Promise<LeetCodeSyncResponse> => {
+      if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+      if (profile === 'missing-profile') throw new HttpError(404, 'LEETCODE_USER_NOT_FOUND', 'LeetCode user was not found');
+      if (profile === 'provider-failed') throw new HttpError(503, 'LEETCODE_PROVIDER_UNAVAILABLE', 'LeetCode statistics provider is temporarily unavailable');
+      if (profile === 'save-failed') throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to save LeetCode profile data right now');
+      const handle = profile.startsWith('https://') ? new URL(profile).pathname.split('/').filter(Boolean).at(-1)! : profile;
+      return {
+        id: 'ea574cd8-8d21-4586-a887-dc2a6fc7ba08', candidateId: id, platform: 'leetcode', availability: 'available',
+        provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle,
+        profileUrl: `https://leetcode.com/u/${handle}/`, statistics: { problemsSolved: 12, easySolved: 0 },
+        syncedAt: '2026-10-15T12:00:00.000Z',
+      };
+    }),
   };
 }
 
@@ -114,6 +127,13 @@ describe('candidate platform data API', () => {
     });
   }
 
+  async function syncLeetCode(body: unknown, token?: string) {
+    return fetch(`${origin}/api/candidates/${candidateId}/platform-data/leetcode-sync`, {
+      method: 'POST', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
   it('syncs GitHub profile data for an approved recruiter and reports source failures', async () => {
     const success = await syncGitHub({ profile: 'octocat' }, 'owner-token');
     expect(success.status).toBe(201);
@@ -136,6 +156,25 @@ describe('candidate platform data API', () => {
     const saveFailure = await syncGitHub({ profile: 'database-write-failed' }, 'owner-token');
     expect(saveFailure.status).toBe(503);
     expect(await saveFailure.json()).toMatchObject({ error: { code: 'GITHUB_DATA_SAVE_FAILED' } });
+  });
+
+  it('syncs LeetCode only for an authenticated approved recruiter and handles provider/storage errors', async () => {
+    const success = await syncLeetCode({ profile: 'https://leetcode.com/u/example/' }, 'owner-token');
+    expect(success.status).toBe(201);
+    expect(await success.json()).toMatchObject({
+      candidateId, platform: 'leetcode', availability: 'available', provenance: 'alfa_leetcode_api',
+      provider: 'alfa-leetcode-api', handle: 'example', statistics: { problemsSolved: 12, easySolved: 0 },
+    });
+    expect(repository.syncLeetCode).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: ownerId, accessToken: 'owner-token' }), candidateId, 'https://leetcode.com/u/example/',
+    );
+    expect((await syncLeetCode({ profile: 'missing-profile' }, 'owner-token')).status).toBe(404);
+    expect((await syncLeetCode({ profile: 'provider-failed' }, 'owner-token')).status).toBe(503);
+    expect((await syncLeetCode({ profile: 'save-failed' }, 'owner-token')).status).toBe(503);
+    expect((await syncLeetCode({ profile: 'example' })).status).toBe(401);
+    expect((await syncLeetCode({ profile: 'example' }, 'other-owner-token')).status).toBe(404);
+    expect((await syncLeetCode({ profile: '' }, 'owner-token')).status).toBe(400);
+    expect((await syncLeetCode({ profile: 'example', unexpected: true }, 'owner-token')).status).toBe(400);
   });
 
   it('returns persisted platform data only for the authorized candidate', async () => {

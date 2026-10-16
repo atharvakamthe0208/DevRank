@@ -1,6 +1,7 @@
 import {
   candidateIdParamsSchema,
   githubSyncRequestSchema,
+  leetCodeSyncRequestSchema,
   type CandidatePlatformSubmission,
 } from '@devrank/contracts';
 import type { Request } from 'express';
@@ -28,6 +29,11 @@ export function createCandidatePlatformController(repository: CandidatePlatformR
       const { id } = candidateIdParamsSchema.parse(request.params);
       const { profile } = githubSyncRequestSchema.parse(request.body);
       response.status(201).json(await repository.syncGitHub(authContext(request), id, profile));
+    }),
+    syncLeetCode: asyncHandler(async (request, response) => {
+      const { id } = candidateIdParamsSchema.parse(request.params);
+      const { profile } = leetCodeSyncRequestSchema.parse(request.body);
+      response.status(201).json(await repository.syncLeetCode(authContext(request), id, profile));
     }),
   };
 }
