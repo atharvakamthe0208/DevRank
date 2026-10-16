@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { schemaVersion, scoringVersionSchema, roleIdSchema, roleWeightsSchema, scoringCategorySchema, scoringCategories, scoreSchema, confidenceSchema, categoryScoreSchema } from './scoring.js';
 import { evidenceSchema } from './evidence.js';
+import { platformEvaluationEvidenceSchema } from './platform-data.js';
 
 export const candidateInputSchema = z.object({ candidateId: z.string().min(1), targetRole: roleIdSchema, evidence: z.array(evidenceSchema) });
 export const evaluationResponseSchema = z.object({
@@ -12,6 +13,7 @@ export const evaluationResponseSchema = z.object({
   categoryScores: z.array(categoryScoreSchema).length(scoringCategories.length),
   roleWeightsUsed: roleWeightsSchema,
   evidence: z.array(evidenceSchema),
+  platformEvidence: z.array(platformEvaluationEvidenceSchema).optional(),
   confidence: confidenceSchema.optional(),
   strengths: z.array(z.string()),
   skillGaps: z.array(z.string()),

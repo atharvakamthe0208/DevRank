@@ -10,6 +10,7 @@ describe('API environment configuration', () => {
       API_HOST: '0.0.0.0',
       NODE_ENV: 'development',
       WEB_ORIGIN: 'http://localhost:5173',
+      LEETCODE_API_BASE_URL: 'http://localhost:3001',
       GROQ_MODEL: 'openai/gpt-oss-120b',
       AI_TIMEOUT_MS: 12000,
     });
@@ -20,6 +21,10 @@ describe('API environment configuration', () => {
       GROQ_API_KEY: 'test-key', GROQ_MODEL: 'test-model', AI_TIMEOUT_MS: 5000,
     });
     expect(() => parseEnv({ AI_TIMEOUT_MS: '999' })).toThrow('Invalid API environment configuration');
+  });
+
+  it('accepts a separate optional server-only GitHub contribution token', () => {
+    expect(parseEnv({ GITHUB_PUBLIC_CONTRIBUTIONS_TOKEN: 'public-scope-token' }).GITHUB_PUBLIC_CONTRIBUTIONS_TOKEN).toBe('public-scope-token');
   });
 
   it('rejects invalid ports without echoing environment values', () => {

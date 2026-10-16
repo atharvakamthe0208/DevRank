@@ -74,7 +74,7 @@ export function EvaluationCreatePage() {
         {chosen && chosen.weights && <><div className="role-weight-preview"><h3>Saved category weights</h3><ul>{Object.entries(chosen.weights).map(([key, value]) => <li key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}%</strong></li>)}</ul><p>This profile’s role weights are stored as preliminary; confirm your organization has approved them before use.</p></div><button className="primary-button" type="submit" disabled={submitting}>{submitting ? 'Calculating evaluation…' : 'Calculate evaluation'}</button></>}
         {error && <p className="evaluation-error" role="alert">{error}</p>}
       </form>}
-      {profiles.some((profile) => !profile.usable) && <details className="invalid-role-details"><summary>Some saved profiles are unavailable</summary><p>Only profiles with a supported role name and exactly five valid category weights totaling 100 can be used. Update these records in the database after weight approval.</p></details>}
+      {profiles.some((profile) => !profile.usable) && <details className="invalid-role-details"><summary>Some saved profiles are unavailable</summary><p>Only profiles with a supported role name and exactly six valid category weights totaling 100 can be used. Previous five-category profiles must be explicitly updated; no weight is inferred for Communication Skills.</p></details>}
     </section>
   </main>;
 }

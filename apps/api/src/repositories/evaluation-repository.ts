@@ -8,6 +8,9 @@ import {
   persistedEvaluationSchema,
   persistedEvaluationReadSchema,
   legacyEvaluationResponseV1Schema,
+  previousEvaluationResponseV2Schema,
+  platformEvaluationEvidenceSchema,
+  proposedRubricId,
   roleIdSchema,
   roleWeightsSchema,
   roleProfileListResponseSchema,
@@ -115,6 +118,175 @@ function makeEvidence(rows: Array<Record<string, unknown>>) {
   });
 }
 
+function makePlatformEvidence(candidateId: string, rows: Array<Record<string, unknown>>) {
+  const latestBySource = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const raw = row.raw_evidence && typeof row.raw_evidence === 'object' && !Array.isArray(row.raw_evidence)
+      ? row.raw_evidence as Record<string, unknown> : {};
+    const provenance = row.source === 'github' ? 'github_api' : raw.provenance;
+    if (!['github_api', 'alfa_leetcode_api', 'candidate_provided'].includes(String(provenance))) continue;
+    const key = `${String(row.source)}:${String(provenance)}`;
+    latestBySource.set(key, row); // Rows arrive oldest first; retain one current saved snapshot per source/provenance.
+  }
+
+  const output = [];
+  for (const row of latestBySource.values()) {
+    const raw = row.raw_evidence && typeof row.raw_evidence === 'object' && !Array.isArray(row.raw_evidence)
+      ? row.raw_evidence as Record<string, unknown> : {};
+    const normalized = row.normalized_evidence && typeof row.normalized_evidence === 'object' && !Array.isArray(row.normalized_evidence)
+      ? row.normalized_evidence as Record<string, unknown> : {};
+    const source = row.source;
+    const provenance = source === 'github' ? 'github_api' : raw.provenance;
+    const observedAt = typeof row.observed_at === 'string' ? row.observed_at : row.created_at;
+    if (typeof observedAt !== 'string') continue;
+    const available = row.availability === 'available';
+    if (source === 'github' && provenance === 'github_api') {
+      const repos = Array.isArray(normalized.repositories) ? normalized.repositories.filter((repo): repo is Record<string, unknown> => Boolean(repo && typeof repo === 'object' && !Array.isArray(repo))) : [];
+      const repositories = repos.slice(0, 10).map((repo) => ({
+        name: repo.name, description: repo.description, primaryLanguage: repo.primaryLanguage,
+        stars: repo.stars, forks: repo.forks, updatedAt: repo.updatedAt,
+      }));
+      output.push(platformEvaluationEvidenceSchema.parse({
+        evidenceId: `${String(row.id)}:github`, candidateId, source: 'github', evidenceType: 'repository_snapshot',
+        availability: available ? 'available' : 'unavailable', observedAt,
+        normalizedValue: {
+          publicRepositoryCount: normalized.publicRepositoryCount,
+          followers: normalized.followers, following: normalized.following,
+          repositories,
+        }, verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
+        limitations: [
+          'Public profile data does not verify candidate identity.',
+          'Stars, forks, followers, and repository count are context only and are not scoring inputs.',
+          'Only the ten most recently updated repositories are included in evaluation context; this snapshot alone does not establish development activity or collaboration.',
+          'Snapshot age has no approved freshness threshold.',
+        ],
+        categoryMappings: [
+          ...(repositories.length ? [{ categoryId: 'relevant_project_experience', relation: 'supporting' }] : []),
+          ...(repositories.some((repo) => typeof repo.primaryLanguage === 'string') ? [{ categoryId: 'technical_skills', relation: 'supporting' }] : []),
+          ...(repositories.length ? [{ rubricId: proposedRubricId, categoryId: 'project_portfolio', relation: 'supporting' }] : []),
+          ...(repositories.some((repo) => typeof repo.primaryLanguage === 'string') ? [{ rubricId: proposedRubricId, categoryId: 'technical_skills', relation: 'supporting' }] : []),
+        ],
+      }));
+
+      const insights = normalized.insights && typeof normalized.insights === 'object' && !Array.isArray(normalized.insights)
+        ? normalized.insights as Record<string, unknown> : {};
+      const currentYear = insights.currentYearContributions && typeof insights.currentYearContributions === 'object'
+        ? insights.currentYearContributions as Record<string, unknown> : undefined;
+      const activity = insights.developmentActivity && typeof insights.developmentActivity === 'object'
+        ? insights.developmentActivity as Record<string, unknown> : undefined;
+      const collaboration = insights.collaboration && typeof insights.collaboration === 'object'
+        ? insights.collaboration as Record<string, unknown> : undefined;
+      const proposedMapping = (categoryId: string) => [{ rubricId: proposedRubricId, categoryId, relation: 'supporting' }];
+      const availabilityFor = (value: Record<string, unknown> | undefined) => value?.status === 'available'
+        ? 'available' as const : value?.status === 'partial' ? 'partial' as const : 'unavailable' as const;
+      const commonLimitations = [
+        'GitHub account attribution is not identity verification and contribution volume does not establish code quality or engineering competence.',
+        'These are context metrics only. Proposed weights are unapproved and these values do not affect the active v3 score.',
+        'The public-only token scope is an operator configuration requirement and is not inspected by the API; incomplete provider responses remain marked partial or unavailable.',
+      ];
+      if (currentYear) {
+        const weekly = Array.isArray(currentYear.weeklyContributions) ? currentYear.weeklyContributions : undefined;
+        const contributionTypes = currentYear.contributionTypes && typeof currentYear.contributionTypes === 'object'
+          ? currentYear.contributionTypes : undefined;
+        output.push(platformEvaluationEvidenceSchema.parse({
+          evidenceId: `${String(row.id)}:github:current-year`, candidateId, source: 'github', evidenceType: 'current_year_contributions',
+          availability: availabilityFor(currentYear), observedAt,
+          normalizedValue: {
+            year: currentYear.year, timezone: currentYear.timezone, periodStart: currentYear.periodStart,
+            periodEnd: currentYear.periodEnd, observedThrough: currentYear.observedThrough,
+            totalContributions: currentYear.totalContributions,
+            observedWeeks: currentYear.observedWeeks, activeWeeks: currentYear.activeWeeks,
+            activeWeekCoveragePercent: currentYear.activeWeekCoveragePercent,
+            contributionsPerObservedWeek: currentYear.contributionsPerObservedWeek,
+            weeklyContributionDistribution: weekly?.map((item) => {
+              if (!item || typeof item !== 'object' || Array.isArray(item)) return undefined;
+              const value = item as Record<string, unknown>;
+              return { weekStart: value.weekStart, contributionCount: value.contributionCount };
+            }).filter(Boolean),
+            contributionTypes,
+            reasons: currentYear.reasons,
+          },
+          verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
+          limitations: [...commonLimitations, 'Volume is the GitHub calendar total; type breakdowns are shown separately and are never added to that total.', 'Volume is expressed per observed UTC calendar week, and distribution as active observed UTC weeks divided by observed weeks; these rates are descriptive, not rubric scores.'],
+          categoryMappings: proposedMapping('current_year_contributions'),
+        }));
+      }
+      if (activity) output.push(platformEvaluationEvidenceSchema.parse({
+        evidenceId: `${String(row.id)}:github:development-activity`, candidateId, source: 'github', evidenceType: 'development_activity',
+        availability: availabilityFor(activity), observedAt,
+        normalizedValue: {
+          totalCommitContributions: activity.totalCommitContributions,
+          activeCommitDays: activity.activeCommitDays,
+          activeCommitWeeks: activity.activeCommitWeeks,
+          repositoriesWithCommitContributions: activity.repositoriesWithCommitContributions,
+          duplicateDailyRecords: activity.duplicateDailyRecords, reasons: activity.reasons,
+        },
+        verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
+        limitations: [...commonLimitations, 'Commit counts and temporal patterns do not measure code quality, complexity, or engineering competence.'],
+        categoryMappings: proposedMapping('development_activity'),
+      }));
+      if (collaboration) output.push(platformEvaluationEvidenceSchema.parse({
+        evidenceId: `${String(row.id)}:github:collaboration`, candidateId, source: 'github', evidenceType: 'collaboration_activity',
+        availability: availabilityFor(collaboration), observedAt,
+        normalizedValue: {
+          pullRequestsOpened: collaboration.pullRequestsOpened,
+          issuesOpened: collaboration.issuesOpened,
+          reviewsSubmitted: collaboration.reviewsSubmitted,
+          reasons: collaboration.reasons,
+        },
+        verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
+        limitations: [...commonLimitations, 'Counts do not establish review quality, communication quality, or collaboration outcomes; counts across types are not summed.'],
+        categoryMappings: proposedMapping('collaboration'),
+      }));
+    } else if (source === 'leetcode' && (provenance === 'alfa_leetcode_api' || provenance === 'candidate_provided')) {
+      const stats = provenance === 'candidate_provided' ? raw.statistics : normalized.statistics;
+      const supportedStats = stats && typeof stats === 'object' && !Array.isArray(stats) ? stats as Record<string, unknown> : {};
+      const availability = row.availability === 'not_provided' ? 'not_provided' : available ? 'available' : 'unavailable';
+      const limitations = [
+        provenance === 'candidate_provided' ? 'These metrics were entered by the recruiter and are not provider-verified.' : 'Provider statistics do not verify candidate identity or problem-solving process.',
+        'Raw counts are contextual only; no approved normalization thresholds exist, so these values do not produce category scores.',
+        'Language, skill, and historical activity values are not inferred when absent.',
+        'Snapshot age has no approved freshness threshold.',
+      ];
+      if (provenance === 'candidate_provided') {
+        if (Object.keys(supportedStats).length) output.push(platformEvaluationEvidenceSchema.parse({
+          evidenceId: `${String(row.id)}:leetcode:${String(provenance)}`, candidateId, source: 'leetcode',
+          evidenceType: 'candidate_reported_statistics', availability, observedAt,
+          normalizedValue: { statistics: supportedStats }, verificationStatus: 'unverified', provenance, freshness: 'unassessed',
+          limitations, categoryMappings: [
+            { categoryId: 'problem_solving_dsa', relation: 'supporting' },
+            { rubricId: proposedRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
+          ],
+        }));
+        continue;
+      }
+
+      const solvedKeys = ['problemsSolved', 'easySolved', 'mediumSolved', 'hardSolved'];
+      const contestKeys = ['contestsAttended', 'contestRating', 'contestGlobalRanking', 'contestParticipants', 'contestTopPercentage'];
+      const pickPresent = (keys: string[]) => Object.fromEntries(keys.filter((key) => supportedStats[key] !== undefined).map((key) => [key, supportedStats[key]]));
+      const solvedStatistics = pickPresent(solvedKeys);
+      if (Object.keys(solvedStatistics).length) output.push(platformEvaluationEvidenceSchema.parse({
+        evidenceId: `${String(row.id)}:leetcode:${String(provenance)}:solved`, candidateId, source: 'leetcode', evidenceType: 'solved_statistics',
+        availability, observedAt, normalizedValue: { statistics: solvedStatistics }, verificationStatus: 'unverified', provenance, freshness: 'unassessed',
+        limitations, categoryMappings: [
+          { categoryId: 'problem_solving_dsa', relation: 'supporting' },
+          { rubricId: proposedRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
+        ],
+      }));
+      const contestStatistics = pickPresent(contestKeys);
+      if (Object.keys(contestStatistics).length) output.push(platformEvaluationEvidenceSchema.parse({
+        evidenceId: `${String(row.id)}:leetcode:${String(provenance)}:contest`, candidateId, source: 'leetcode', evidenceType: 'contest_statistics',
+        availability, observedAt, normalizedValue: { statistics: contestStatistics }, verificationStatus: 'unverified', provenance, freshness: 'unassessed',
+        limitations, categoryMappings: [
+          { categoryId: 'problem_solving_dsa', relation: 'supporting' },
+          { rubricId: proposedRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
+        ],
+      }));
+    }
+  }
+  return output;
+}
+
 function readPersistedEvaluation(row: Record<string, unknown>) {
   const value = {
     id: row.id, candidateId: row.candidate_id, roleProfileId: row.role_profile_id,
@@ -122,6 +294,16 @@ function readPersistedEvaluation(row: Record<string, unknown>) {
   };
   const current = persistedEvaluationSchema.safeParse(value);
   if (current.success && (!current.data.result.scoringVersion || current.data.result.scoringVersion === currentScoringVersion)) return current.data;
+
+  const previousV2Result = previousEvaluationResponseV2Schema.safeParse(row.evaluation_result);
+  if (previousV2Result.success) {
+    const previous = persistedEvaluationReadSchema.safeParse({
+      ...value,
+      targetRole: row.target_role ?? previousV2Result.data.targetRole,
+      result: previousV2Result.data,
+    });
+    if (previous.success) return previous.data;
+  }
 
   // Some older rows predate the denormalized target_role column. A validated
   // immutable result snapshot is authoritative for its own role identifier.
@@ -136,7 +318,7 @@ function readPersistedEvaluation(row: Record<string, unknown>) {
   }
 
   // V1 snapshots carry their own role and six-category scoring model. Preserve the
-  // snapshot as-is; never translate its scores into the current five-category model.
+  // snapshot as-is; never translate its scores into the current v3 model.
   const historicalResult = legacyEvaluationResponseV1Schema.safeParse(row.evaluation_result);
   if (historicalResult.success) {
     const legacy = persistedEvaluationReadSchema.safeParse({
@@ -164,7 +346,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
     weights: unknown,
   ) {
     const checkedWeights = roleWeightsSchema.safeParse(weights);
-    if (!checkedWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define five valid v2 category weights totaling 100');
+    if (!checkedWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define six valid v3 category weights totaling 100');
     const { data: rows, error: evidenceError } = await databaseOperation('evidence_read', () => client.from('platform_evidence')
       .select('id,source,availability,normalized_evidence,observed_at,created_at')
       .eq('candidate_id', candidate.id).eq('owner_id', auth.userId).order('created_at', { ascending: true }));
@@ -177,7 +359,10 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
     const { evaluation } = processCandidateEvidence({
       candidateId: candidate.id, targetRole, evidence: makeEvidence(rows as Array<Record<string, unknown>>),
     }, { roleWeights: configuration });
-    const result = evaluationResponseSchema.parse(evaluation);
+    const result = evaluationResponseSchema.parse({
+      ...evaluation,
+      platformEvidence: makePlatformEvidence(candidate.id, rows as Array<Record<string, unknown>>),
+    });
     const { data: saved, error: insertError } = await databaseOperation('evaluation_insert', () => client.from('evaluations').insert({
       owner_id: auth.userId,
       candidate_id: candidate.id,
@@ -290,10 +475,11 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         const targetRole = roleIdSchema.safeParse(role.name);
         if (!targetRole.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'Role profile name must match a supported role identifier');
         const profileWeights = roleWeightsSchema.safeParse(role.weights);
-        if (!profileWeights.success && typeof role.weights === 'object' && role.weights !== null && 'communication_skills' in role.weights) {
-          throw new HttpError(422, 'ROLE_PROFILE_REQUIRES_V2_WEIGHTS', 'This saved role profile uses the legacy six-category scoring model. Update it to five approved v2 category weights before evaluating; its stored configuration has not been modified.');
+        if (!profileWeights.success && typeof role.weights === 'object' && role.weights !== null && !Array.isArray(role.weights)
+          && Object.keys(role.weights).length === 5) {
+          throw new HttpError(422, 'ROLE_PROFILE_REQUIRES_V3_WEIGHTS', 'This saved role profile uses the previous five-category scoring model. Update it to six v3 category weights before evaluating; its stored configuration has not been modified.');
         }
-        if (!profileWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define five valid v2 category weights totaling 100');
+        if (!profileWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define six valid v3 category weights totaling 100');
         return persistedEvaluationSchema.parse(await persist(client, auth, candidate, input.roleProfileId, targetRole.data, role.weights));
       } catch (error) {
         if (error instanceof HttpError) throw error;

@@ -19,10 +19,10 @@ describe('coding platform profile links', () => {
     expect(normalizePlatformProfile('hackerrank', 'https://hackerrank.com/user').success).toBe(false);
   });
 
-  it('clearly marks username-based syncing unavailable for both platforms', () => {
-    expect(platformSyncCapabilities.leetcode.supported).toBe(false);
+  it('marks the configured LeetCode provider as syncable while HackerRank remains unavailable', () => {
+    expect(platformSyncCapabilities.leetcode.supported).toBe(true);
     expect(platformSyncCapabilities.hackerrank.supported).toBe(false);
-    expect(platformSyncCapabilities.leetcode.explanation).toContain('unavailable');
+    expect(platformSyncCapabilities.leetcode.explanation).toContain('alfa-leetcode-api');
     expect(platformSyncCapabilities.hackerrank.explanation).toContain('unavailable');
   });
 });

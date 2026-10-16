@@ -36,6 +36,25 @@ describe('AI analysis service', () => {
     expect(JSON.parse(providerInput)).toMatchObject({ overallScore: 75, scoringVersion: '1.0.0' });
   });
 
+  it('passes proposal-only GitHub context to explanations without proposed weights or scoring authority', async () => {
+    const withPlatform = structuredClone(evaluation);
+    withPlatform.result.platformEvidence = [{
+      evidenceId: 'github-row:current-year', candidateId: evaluation.candidateId, source: 'github',
+      evidenceType: 'current_year_contributions', availability: 'partial', observedAt: '2026-10-17T00:00:00.000Z',
+      normalizedValue: { year: 2026, timezone: 'UTC', totalContributions: 18, contributionsPerObservedWeek: 0.6 },
+      verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
+      limitations: ['Contribution volume does not establish engineering competence.'],
+      categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions', relation: 'supporting' }],
+    }];
+    let providerInput = '';
+    await createAiAnalysisService(configured, async (input) => { providerInput = input; return validOutput; }).analyze(withPlatform);
+    const payload = JSON.parse(providerInput) as { proposedRubric: { status: string; categories: Array<{ id: string; proposedWeight?: number }> }; platformEvidence: Array<{ availability: string; categoryMappings: Array<{ rubricId?: string; categoryId: string }> }> };
+    expect(payload.proposedRubric.status).toBe('proposed');
+    expect(payload.proposedRubric.categories.map(({ id }) => id)).toContain('current_year_contributions');
+    expect(payload.proposedRubric.categories.every(({ proposedWeight }) => proposedWeight === undefined)).toBe(true);
+    expect(payload.platformEvidence).toMatchObject([{ availability: 'partial', categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions' }] }]);
+  });
+
   it('rejects malformed, excessive, and unsupported provider output', async () => {
     const malformed = createAiAnalysisService(configured, async () => ({ ...validOutput, extra: true }));
     await expect(malformed.analyze(evaluation)).rejects.toMatchObject({ code: 'AI_INVALID_RESPONSE' });

@@ -2,8 +2,8 @@ export type CandidateCodingPlatform = 'leetcode' | 'hackerrank';
 
 export const platformSyncCapabilities = {
   leetcode: {
-    supported: false,
-    explanation: 'Automatic sync is unavailable. LeetCode prohibits crawling and scraping, and no authorized public-profile API is configured.',
+    supported: true,
+    explanation: 'Public statistics are fetched through the configured alfa-leetcode-api provider. They are informational and do not verify candidate identity or affect evaluation scores.',
   },
   hackerrank: {
     supported: false,

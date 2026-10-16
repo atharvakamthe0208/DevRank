@@ -30,6 +30,29 @@ describe('evaluation persistence repository', () => {
     let legacy = false;
     let omitTargetRole = false;
     let evaluationRows: Array<Record<string, unknown>> = [];
+    const platformRows: Array<Record<string, unknown>> = [
+      {
+        id: 'github-row', source: 'github', availability: 'available', created_at: '2026-10-14T12:00:00.000Z', observed_at: '2026-10-14T12:00:00.000Z',
+        raw_evidence: { username: 'example', profileUrl: 'https://github.com/example' },
+        normalized_evidence: { username: 'example', profileUrl: 'https://github.com/example', publicRepositoryCount: 3, followers: 2, following: 1, repositories: [{ id: 1, name: 'sample', description: 'Sample project', primaryLanguage: 'TypeScript', stars: 0, forks: 0, updatedAt: '2026-10-14T00:00:00.000Z' }], insights: {
+          requestedLogin: 'example', attributedLogin: 'example', attributionStatus: 'matched',
+          currentYearContributions: { status: 'partial', year: 2026, timezone: 'UTC', periodStart: '2026-01-01T00:00:00.000Z', periodEnd: '2026-12-31T23:59:59.999Z', observedThrough: '2026-10-14T12:00:00.000Z', observedAt: '2026-10-14T12:00:00.000Z', totalContributions: 40, observedWeeks: 42, activeWeeks: 8, activeWeekCoveragePercent: 19.05, contributionsPerObservedWeek: 0.95, contributionTypes: { commits: 10, pullRequestsOpened: 2, issuesOpened: 1, reviewsSubmitted: 3 }, reasons: ['partial_response'] },
+          developmentActivity: { status: 'available', totalCommitContributions: 10, activeCommitDays: 8, activeCommitWeeks: 5, repositoriesWithCommitContributions: 2, duplicateDailyRecords: 0, reasons: [] },
+          collaboration: { status: 'available', pullRequestsOpened: 2, issuesOpened: 1, reviewsSubmitted: 3, reasons: [] },
+          limitations: ['Unverified GitHub account context.'],
+        } },
+      },
+      {
+        id: 'leetcode-provider-row', source: 'leetcode', availability: 'available', created_at: '2026-10-14T13:00:00.000Z', observed_at: '2026-10-14T13:00:00.000Z',
+        raw_evidence: { provenance: 'alfa_leetcode_api', handle: 'example', profileUrl: 'https://leetcode.com/u/example/' },
+        normalized_evidence: { platform: 'leetcode', provenance: 'alfa_leetcode_api', statistics: { problemsSolved: 12, easySolved: 5, contestsAttended: 2, contestRating: 1400 } },
+      },
+      {
+        id: 'leetcode-candidate-row', source: 'leetcode', availability: 'available', created_at: '2026-10-14T11:00:00.000Z', observed_at: null,
+        raw_evidence: { provenance: 'candidate_provided', handle: 'example', statistics: { problemsSolved: 10 } },
+        normalized_evidence: { platform: 'leetcode', provenance: 'candidate_provided', statistics: { problemsSolved: 10 } },
+      },
+    ];
     let insertError: { code: string; message: string; details: string } | null = null;
     const client = {
       from: (table: string) => {
@@ -38,12 +61,12 @@ describe('evaluation persistence repository', () => {
         query.select = vi.fn(() => query);
         query.eq = vi.fn(() => query);
         query.is = vi.fn(() => query);
-        query.order = vi.fn(() => table === 'evaluations' ? query : Promise.resolve({ data: [], error: null }));
+        query.order = vi.fn(() => table === 'evaluations' ? query : Promise.resolve({ data: table === 'platform_evidence' ? platformRows : [], error: null }));
         query.limit = vi.fn(async () => ({ data: evaluationRows, error: null }));
         query.maybeSingle = vi.fn(async () => table === 'candidates'
           ? { data: { id: candidateId, full_name: 'Taylor Example' }, error: null }
           : table === 'role_profiles'
-            ? { data: { id: roleProfileId, name: 'software_developer', weights: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 } }, error: null }
+            ? { data: { id: roleProfileId, name: 'software_developer', weights: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 } }, error: null }
           : { data: legacy ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: null, status: 'insufficient_evidence', created_at: '2026-10-12T00:00:00.000Z', evaluation_result: legacyResult } : record ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: omitTargetRole ? null : record.target_role, status: record.status, created_at: '2026-10-13T00:00:00.000Z', evaluation_result: record.evaluation_result } : null, error: null });
         query.insert = vi.fn((value: Record<string, unknown>) => { values = value; insert(value); return query; });
         query.single = vi.fn(async () => {
@@ -58,13 +81,24 @@ describe('evaluation persistence repository', () => {
     const created = await repository.run(auth, { candidateId, roleId: 'software_developer' });
     expect(created.status).toBe('insufficient_evidence');
     expect(created.evaluation).not.toHaveProperty('overallScore');
+    expect(created.evaluation.platformEvidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: 'github', provenance: 'github_api', verificationStatus: 'unverified', freshness: 'unassessed', categoryMappings: expect.arrayContaining([{ categoryId: 'relevant_project_experience', relation: 'supporting' }]) }),
+      expect.objectContaining({ source: 'github', evidenceType: 'current_year_contributions', availability: 'partial', categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions', relation: 'supporting' }] }),
+      expect.objectContaining({ source: 'github', evidenceType: 'development_activity', categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'development_activity', relation: 'supporting' }] }),
+      expect.objectContaining({ source: 'github', evidenceType: 'collaboration_activity', categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'collaboration', relation: 'supporting' }] }),
+      expect.objectContaining({ source: 'leetcode', provenance: 'alfa_leetcode_api', evidenceType: 'solved_statistics', normalizedValue: { statistics: { problemsSolved: 12, easySolved: 5 } }, categoryMappings: expect.arrayContaining([{ categoryId: 'problem_solving_dsa', relation: 'supporting' }, { rubricId: 'github_leetcode_proposal_v1', categoryId: 'problem_solving_dsa', relation: 'supporting' }]) }),
+      expect.objectContaining({ source: 'leetcode', provenance: 'alfa_leetcode_api', evidenceType: 'contest_statistics', normalizedValue: { statistics: { contestsAttended: 2, contestRating: 1400 } } }),
+      expect.objectContaining({ source: 'leetcode', provenance: 'candidate_provided', evidenceType: 'candidate_reported_statistics' }),
+    ]));
+    expect(created.evaluation.platformEvidence).toHaveLength(7);
+    expect(created.evaluation.categoryScores.map(({ categoryId }) => categoryId)).not.toContain('current_year_contributions');
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       owner_id: userId,
       candidate_id: candidateId,
       role_profile_id: null,
       target_role: 'software_developer',
       status: 'insufficient_evidence',
-      scoring_version: '2.0.0',
+      scoring_version: '3.0.0',
       evidence_snapshot: [],
       role_weights_snapshot: created.role.weights,
       evaluation_result: created.evaluation,
@@ -85,7 +119,7 @@ describe('evaluation persistence repository', () => {
     record = { ...record!, target_role: 'software_developer', evaluation_result: resultWithoutVersion };
     omitTargetRole = false;
     const withoutScoringVersion = await repository.get(auth, evaluationId);
-    expect(withoutScoringVersion).toMatchObject({ result: { schemaVersion: '2.0.0' } });
+    expect(withoutScoringVersion).toMatchObject({ result: { schemaVersion: '3.0.0' } });
     expect(withoutScoringVersion).not.toHaveProperty('result.scoringVersion');
     record = { ...record!, evaluation_result: { ...resultWithoutVersion, scoringVersion: '9.9.9' } };
     await expect(repository.get(auth, evaluationId)).rejects.toMatchObject({ statusCode: 409, code: 'SCORING_VERSION_UNSUPPORTED' });
@@ -113,10 +147,10 @@ describe('evaluation persistence repository', () => {
     diagnostic.mockRestore();
   });
 
-  it('keeps a legacy six-weight profile unchanged and rejects it explicitly under v2', async () => {
+  it('keeps a previous v2 five-weight profile unchanged and rejects it explicitly under v3', async () => {
     const legacyWeights = {
-      technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20,
-      practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10,
+      technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22,
+      practical_assessment_performance: 16.67, learning_adaptability: 11.11,
     };
     const from = vi.fn((table: string) => {
       const query: Record<string, any> = {};
@@ -131,11 +165,11 @@ describe('evaluation persistence repository', () => {
 
     await expect(repository.create(auth, candidateId, { roleProfileId })).rejects.toMatchObject({
       statusCode: 422,
-      code: 'ROLE_PROFILE_REQUIRES_V2_WEIGHTS',
+      code: 'ROLE_PROFILE_REQUIRES_V3_WEIGHTS',
     });
     expect(legacyWeights).toEqual({
-      technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20,
-      practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10,
+      technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22,
+      practical_assessment_performance: 16.67, learning_adaptability: 11.11,
     });
     expect(from).not.toHaveBeenCalledWith('platform_evidence');
   });

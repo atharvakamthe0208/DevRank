@@ -6,11 +6,34 @@ import {
 import { z } from 'zod';
 import { env } from '../config/env.js';
 import { HttpError } from '../middleware/http-error.js';
+import { currentUtcCalendarRange, normalizeGitHubInsights } from './github-contribution-normalizer.js';
 
 const githubUsernamePattern = /^(?!-)(?!.*--)[A-Za-z0-9-]{1,39}(?<!-)$/;
 const maxRepositoryPages = 2;
 const repositoryPageSize = 50;
 const requestTimeoutMs = 8_000;
+const contributionQuery = `query CandidateContributionEvidence($login: String!, $from: DateTime!, $to: DateTime!) {
+  user(login: $login) {
+    login
+    contributionsCollection(from: $from, to: $to) {
+      contributionCalendar {
+        totalContributions
+        weeks { contributionDays { date contributionCount } }
+      }
+      totalCommitContributions
+      totalPullRequestContributions
+      totalIssueContributions
+      totalPullRequestReviewContributions
+      commitContributionsByRepository(maxRepositories: 100) {
+        repository { nameWithOwner }
+        contributions(first: 100) {
+          nodes { occurredAt commitCount }
+          pageInfo { hasNextPage }
+        }
+      }
+    }
+  }
+}`;
 
 export function normalizeGitHubUsername(input: string): string {
   const value = input.trim();
@@ -35,7 +58,11 @@ export function normalizeGitHubUsername(input: string): string {
 
 type FetchLike = typeof fetch;
 
-export function createGitHubAdapter(fetcher: FetchLike = fetch, token: string | undefined = env.GITHUB_TOKEN) {
+export function createGitHubAdapter(
+  fetcher: FetchLike = fetch,
+  token: string | undefined = env.GITHUB_TOKEN,
+  contributionToken: string | undefined = env.GITHUB_PUBLIC_CONTRIBUTIONS_TOKEN,
+) {
   async function getJson(url: URL): Promise<unknown> {
     let response: Response;
     try {
@@ -78,10 +105,46 @@ export function createGitHubAdapter(fetcher: FetchLike = fetch, token: string | 
     }
   }
 
+  async function getContributionInsights(username: string) {
+    const now = new Date();
+    const range = currentUtcCalendarRange(now);
+    if (!contributionToken) return normalizeGitHubInsights({ errors: [{ message: 'not configured' }] }, username, now);
+    let response: Response;
+    try {
+      response = await fetcher('https://api.github.com/graphql', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'DevRank-API',
+          Authorization: `Bearer ${contributionToken}`,
+        },
+        body: JSON.stringify({ query: contributionQuery, variables: { login: username, from: range.from, to: range.to } }),
+        signal: AbortSignal.timeout(requestTimeoutMs),
+      });
+    } catch (error) {
+      const reason = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError') ? 'provider timeout' : 'provider unavailable';
+      return normalizeGitHubInsights({ errors: [{ message: reason }] }, username, now);
+    }
+    if (!response.ok) {
+      const rateLimited = response.status === 429 || (response.status === 403 && (
+        response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after')
+      ));
+      return normalizeGitHubInsights({ errors: [{ message: rateLimited ? 'rate limit' : 'provider error' }] }, username, now);
+    }
+    try {
+      return normalizeGitHubInsights(await response.json() as unknown, username, now);
+    } catch {
+      return normalizeGitHubInsights({ errors: [{ message: 'malformed response' }] }, username, now);
+    }
+  }
+
   return {
     async getProfile(profile: string): Promise<GitHubProfileResponse> {
       const username = normalizeGitHubUsername(profile);
       const apiRoot = 'https://api.github.com';
+      const insightsPromise = getContributionInsights(username);
       const rawProfile = await getJson(new URL(`${apiRoot}/users/${encodeURIComponent(username)}`));
       const profileResult = githubUserSchema.safeParse(rawProfile);
       if (!profileResult.success) throw new HttpError(502, 'GITHUB_INVALID_RESPONSE', 'GitHub returned incomplete profile data');
@@ -113,6 +176,7 @@ export function createGitHubAdapter(fetcher: FetchLike = fetch, token: string | 
       }
 
       const truncated = user.public_repos > repositories.length;
+      const insights = await insightsPromise;
       return githubProfileResponseSchema.parse({
         username: user.login,
         profileUrl: user.html_url,
@@ -122,6 +186,7 @@ export function createGitHubAdapter(fetcher: FetchLike = fetch, token: string | 
         repositories,
         repositoriesReturned: repositories.length,
         repositoriesTruncated: truncated,
+        insights,
       });
     },
   };
