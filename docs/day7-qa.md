@@ -1,6 +1,6 @@
 # Day 7 — Scoring, partial evidence, AI, and recruiter workflow QA
 
-**QA date:** 2026-10-15  
+**QA date:** 2026-10-15
 **Scope:** Existing implementation and automated checks. No scoring policy, role weights, API contracts, or application code were changed for this QA pass.
 
 ## Project and requirements inspection
