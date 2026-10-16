@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { roleIdSchema, roleWeightsSchema } from './scoring.js';
 import { evaluationResponseSchema } from './evaluation-response.js';
+import { legacyEvaluationResponseV1Schema } from './legacy-evaluation.js';
 
 export const evaluationRoleSchema = z.object({
   id: roleIdSchema,
@@ -46,11 +47,21 @@ export const persistedEvaluationSchema = z.object({
   targetRole: roleIdSchema, status: z.enum(['completed', 'insufficient_evidence']),
   createdAt: z.string().datetime({ offset: true }), result: evaluationResponseSchema,
 });
-export const candidateEvaluationsResponseSchema = z.object({ items: z.array(persistedEvaluationSchema).max(20) }).strict();
+/** Read contract for persisted rows. V1 snapshots remain explicitly legacy and are never fed to v2 scoring. */
+export const persistedEvaluationReadSchema = z.union([
+  persistedEvaluationSchema,
+  z.object({
+    id: z.string().uuid(), candidateId: z.string().uuid(), roleProfileId: z.string().uuid().nullable(),
+    targetRole: roleIdSchema, status: evaluationStatusSchema,
+    createdAt: z.string().datetime({ offset: true }), result: legacyEvaluationResponseV1Schema,
+  }).strict(),
+]);
+export const candidateEvaluationsResponseSchema = z.object({ items: z.array(persistedEvaluationReadSchema).max(20) }).strict();
 export type EvaluationRequest = z.infer<typeof evaluationRequestSchema>;
 export type RoleProfileOption = z.infer<typeof roleProfileOptionSchema>;
 export type Evaluation = z.infer<typeof evaluationSchema>;
 export type PersistedEvaluation = z.infer<typeof persistedEvaluationSchema>;
+export type PersistedEvaluationRead = z.infer<typeof persistedEvaluationReadSchema>;
 export type EvaluationRole = z.infer<typeof evaluationRoleSchema>;
 export type EvaluationRolesResponse = z.infer<typeof evaluationRolesResponseSchema>;
 export type EvaluationRunRequest = z.infer<typeof evaluationRunRequestSchema>;
