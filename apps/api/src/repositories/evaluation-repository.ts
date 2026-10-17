@@ -2,6 +2,7 @@ import {
   candidateEvaluationsResponseSchema,
   evaluationResponseSchema,
   scoringVersion as currentScoringVersion,
+  scoringCategories,
   evaluationRoleSchema,
   evaluationRolesResponseSchema,
   evaluationRunResponseSchema,
@@ -9,8 +10,11 @@ import {
   persistedEvaluationReadSchema,
   legacyEvaluationResponseV1Schema,
   previousEvaluationResponseV2Schema,
+  previousEvaluationResponseV3Schema,
   platformEvaluationEvidenceSchema,
-  proposedRubricId,
+  finalRubricId,
+  buildFinalEvaluationReport,
+  parseProposedPlatformEvidence,
   roleIdSchema,
   roleWeightsSchema,
   roleProfileListResponseSchema,
@@ -23,8 +27,7 @@ import {
 } from '@devrank/contracts';
 import { getSupabaseClient } from '../config/supabase.js';
 import { HttpError } from '../middleware/http-error.js';
-import { processCandidateEvidence } from '../modules/evidence-processing/index.js';
-import { loadRoleWeightConfiguration } from '../modules/scoring/index.js';
+import { loadRoleWeightConfiguration, scoreCandidate } from '../modules/scoring/index.js';
 import type { AuthContext } from '../types/auth.js';
 
 export interface EvaluationRepository {
@@ -45,6 +48,7 @@ const unavailable = () => new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to 
 
 type EvaluationOperation = 'candidate_lookup' | 'role_profile_lookup' | 'evidence_read' | 'evaluation_insert' | 'evaluation_read' | 'evaluation_processing';
 type DatabaseFailureSource = 'supabase_response' | 'thrown_exception';
+type EvaluationProcessingStage = 'candidate_lookup' | 'role_lookup' | 'role_configuration' | 'evidence_read' | 'evidence_normalization' | 'report_build' | 'scoring' | 'response_validation' | 'evaluation_insert' | 'persisted_response_validation' | 'evaluation_read';
 const knownColumns = new Set([
   'evaluation_result', 'role_weights_snapshot', 'target_role', 'role_profile_id', 'status',
   'owner_id', 'candidate_id', 'scoring_version', 'evidence_snapshot', 'overall_score',
@@ -85,6 +89,34 @@ function databaseFailure(error: unknown, operation: EvaluationOperation, failure
   throw unavailable();
 }
 
+/** Unexpected application/contract failures are not database outages. Log only stable, non-sensitive diagnostics. */
+function logEvaluationProcessingFailure(error: unknown, stage: EvaluationProcessingStage) {
+  const record = typeof error === 'object' && error !== null ? error as Record<string, unknown> : undefined;
+  const errorName = record && typeof record.name === 'string' && /^(Error|TypeError|RangeError|ReferenceError|SyntaxError|ZodError)$/.test(record.name)
+    ? record.name : 'UnknownError';
+  const issues = record && Array.isArray(record.issues) ? record.issues : [];
+  const allowedPathParts = new Set([...knownColumns, 'categoryScores', 'roleWeightsUsed', 'overallScore', 'finalReport', 'platformEvidence', 'status', 'scoringVersion', 'evaluationStatus', 'schemaVersion']);
+  const validationIssues = issues.slice(0, 8).flatMap((issue) => {
+    if (typeof issue !== 'object' || issue === null) return [];
+    const item = issue as Record<string, unknown>;
+    const code = typeof item.code === 'string' && /^[a-z_]{1,32}$/i.test(item.code) ? item.code : undefined;
+    const path = Array.isArray(item.path)
+      ? item.path.map((part) => typeof part === 'number' ? String(part) : typeof part === 'string' && allowedPathParts.has(part) ? part : '[field]').join('.')
+      : undefined;
+    return [{ ...(code ? { code } : {}), ...(path ? { path } : {}) }];
+  });
+  console.error('Evaluation processing failed', {
+    stage,
+    errorType: errorName,
+    ...(validationIssues.length ? { validationIssues } : {}),
+  });
+}
+
+function evaluationProcessingFailure(error: unknown, stage: EvaluationProcessingStage): never {
+  logEvaluationProcessingFailure(error, stage);
+  throw new HttpError(500, 'EVALUATION_PROCESSING_FAILED', 'Unable to prepare the evaluation right now');
+}
+
 async function databaseOperation<T>(operation: EvaluationOperation, action: () => PromiseLike<T>): Promise<T> {
   try {
     return await action();
@@ -102,20 +134,9 @@ function configuredRoles() {
   });
 }
 
-function makeEvidence(rows: Array<Record<string, unknown>>) {
-  return rows.flatMap((row) => {
-    const value = row.normalized_evidence;
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-    const item = value as Record<string, unknown>;
-    if (!('evidenceId' in item && 'evidenceType' in item)) return [];
-    return [{
-      ...item,
-      evidenceId: row.id,
-      source: row.source,
-      availability: row.availability === 'available' ? 'available' : 'missing',
-      ...(typeof row.observed_at === 'string' ? { observedAt: row.observed_at } : {}),
-    }];
-  });
+function matchesActiveRoleWeights(roleId: EvaluationRole['id'], weights: Record<string, number>) {
+  const active = loadRoleWeightConfiguration().roles[roleId];
+  return active !== undefined && scoringCategories.every(({ id }) => weights[id] === active[id]);
 }
 
 function makePlatformEvidence(candidateId: string, rows: Array<Record<string, unknown>>) {
@@ -163,10 +184,14 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
           'Snapshot age has no approved freshness threshold.',
         ],
         categoryMappings: [
-          ...(repositories.length ? [{ categoryId: 'relevant_project_experience', relation: 'supporting' }] : []),
-          ...(repositories.some((repo) => typeof repo.primaryLanguage === 'string') ? [{ categoryId: 'technical_skills', relation: 'supporting' }] : []),
-          ...(repositories.length ? [{ rubricId: proposedRubricId, categoryId: 'project_portfolio', relation: 'supporting' }] : []),
-          ...(repositories.some((repo) => typeof repo.primaryLanguage === 'string') ? [{ rubricId: proposedRubricId, categoryId: 'technical_skills', relation: 'supporting' }] : []),
+          ...(repositories.length ? [
+            { categoryId: 'project_portfolio', relation: 'supporting' },
+            { rubricId: finalRubricId, categoryId: 'project_portfolio', relation: 'supporting' },
+          ] : []),
+          ...(repositories.some((repo) => typeof repo.primaryLanguage === 'string') ? [
+            { categoryId: 'technical_skills', relation: 'supporting' },
+            { rubricId: finalRubricId, categoryId: 'technical_skills', relation: 'supporting' },
+          ] : []),
         ],
       }));
 
@@ -178,12 +203,15 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
         ? insights.developmentActivity as Record<string, unknown> : undefined;
       const collaboration = insights.collaboration && typeof insights.collaboration === 'object'
         ? insights.collaboration as Record<string, unknown> : undefined;
-      const proposedMapping = (categoryId: string) => [{ rubricId: proposedRubricId, categoryId, relation: 'supporting' }];
+      const proposedMapping = (categoryId: string) => [
+        { categoryId, relation: 'supporting' },
+        { rubricId: finalRubricId, categoryId, relation: 'supporting' },
+      ];
       const availabilityFor = (value: Record<string, unknown> | undefined) => value?.status === 'available'
         ? 'available' as const : value?.status === 'partial' ? 'partial' as const : 'unavailable' as const;
       const commonLimitations = [
         'GitHub account attribution is not identity verification and contribution volume does not establish code quality or engineering competence.',
-        'These are context metrics only. Proposed weights are unapproved and these values do not affect the active v3 score.',
+        'This source contributes only through the versioned deterministic v4 evidence-index formulas; account attribution is not identity verification and activity volume is not quality.',
         'The public-only token scope is an operator configuration requirement and is not inspected by the API; incomplete provider responses remain marked partial or unavailable.',
       ];
       if (currentYear) {
@@ -246,7 +274,7 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
       const availability = row.availability === 'not_provided' ? 'not_provided' : available ? 'available' : 'unavailable';
       const limitations = [
         provenance === 'candidate_provided' ? 'These metrics were entered by the recruiter and are not provider-verified.' : 'Provider statistics do not verify candidate identity or problem-solving process.',
-        'Raw counts are contextual only; no approved normalization thresholds exist, so these values do not produce category scores.',
+        'The DSA index is a bounded solved-volume measure, not a competency score; provider statistics do not verify identity or problem-solving process.',
         'Language, skill, and historical activity values are not inferred when absent.',
         'Snapshot age has no approved freshness threshold.',
       ];
@@ -257,7 +285,7 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
           normalizedValue: { statistics: supportedStats }, verificationStatus: 'unverified', provenance, freshness: 'unassessed',
           limitations, categoryMappings: [
             { categoryId: 'problem_solving_dsa', relation: 'supporting' },
-            { rubricId: proposedRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
+            { rubricId: finalRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
           ],
         }));
         continue;
@@ -272,7 +300,7 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
         availability, observedAt, normalizedValue: { statistics: solvedStatistics }, verificationStatus: 'unverified', provenance, freshness: 'unassessed',
         limitations, categoryMappings: [
           { categoryId: 'problem_solving_dsa', relation: 'supporting' },
-          { rubricId: proposedRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
+          { rubricId: finalRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
         ],
       }));
       const contestStatistics = pickPresent(contestKeys);
@@ -281,7 +309,7 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
         availability, observedAt, normalizedValue: { statistics: contestStatistics }, verificationStatus: 'unverified', provenance, freshness: 'unassessed',
         limitations, categoryMappings: [
           { categoryId: 'problem_solving_dsa', relation: 'supporting' },
-          { rubricId: proposedRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
+          { rubricId: finalRubricId, categoryId: 'problem_solving_dsa', relation: 'supporting' },
         ],
       }));
     }
@@ -296,6 +324,12 @@ function readPersistedEvaluation(row: Record<string, unknown>) {
   };
   const current = persistedEvaluationSchema.safeParse(value);
   if (current.success && (!current.data.result.scoringVersion || current.data.result.scoringVersion === currentScoringVersion)) return current.data;
+
+  const previousV3Result = previousEvaluationResponseV3Schema.safeParse(row.evaluation_result);
+  if (previousV3Result.success) {
+    const previous = persistedEvaluationReadSchema.safeParse({ ...value, targetRole: row.target_role ?? previousV3Result.data.targetRole, result: previousV3Result.data });
+    if (previous.success) return previous.data;
+  }
 
   const previousV2Result = previousEvaluationResponseV2Schema.safeParse(row.evaluation_result);
   if (previousV2Result.success) {
@@ -346,25 +380,63 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
     roleProfileId: string | null,
     targetRole: EvaluationRole['id'],
     weights: unknown,
+    markStage: (stage: EvaluationProcessingStage) => void,
   ) {
+    markStage('role_configuration');
     const checkedWeights = roleWeightsSchema.safeParse(weights);
-    if (!checkedWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define six valid v3 category weights totaling 100');
+    if (!checkedWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define six valid v4 GitHub and LeetCode category weights totaling 100');
+    markStage('evidence_read');
     const { data: rows, error: evidenceError } = await databaseOperation('evidence_read', () => client.from('platform_evidence')
-      .select('id,source,availability,normalized_evidence,observed_at,created_at')
+      .select('id,source,availability,raw_evidence,normalized_evidence,observed_at,created_at')
       .eq('candidate_id', candidate.id).eq('owner_id', auth.userId).order('created_at', { ascending: true }));
     if (evidenceError) databaseFailure(evidenceError, 'evidence_read', 'supabase_response');
     if (!rows) throw unavailable();
 
-    // Provider snapshots and raw metrics remain provenance; only explicit contract evidence is scoreable.
+    // The approved v4 indexes are derived only from saved platform snapshots. Missing or partial signals stay unscored.
+    markStage('evidence_normalization');
     const configuredScoring = loadRoleWeightConfiguration();
     const configuration = { ...configuredScoring, roles: { [targetRole]: checkedWeights.data } };
-    const { evaluation } = processCandidateEvidence({
-      candidateId: candidate.id, targetRole, evidence: makeEvidence(rows as Array<Record<string, unknown>>),
-    }, { roleWeights: configuration });
+    const platformEvidence = makePlatformEvidence(candidate.id, rows as Array<Record<string, unknown>>);
+    markStage('report_build');
+    const report = buildFinalEvaluationReport(parseProposedPlatformEvidence(platformEvidence));
+    const scoringEvidence = report.categories.flatMap((category) => {
+      if (category.score === undefined) return [];
+      const snapshots = platformEvidence.filter((snapshot) => snapshot.categoryMappings.some((mapping) =>
+        mapping.rubricId === finalRubricId && mapping.categoryId === category.categoryId));
+      if (snapshots.length === 0) return [];
+      // The provider snapshot is preferred for DSA when present. Recruiter-entered
+      // LeetCode figures remain separately available as fallback evidence only.
+      const snapshot = category.categoryId === 'problem_solving_dsa'
+        ? snapshots.find(({ evidenceType }) => evidenceType === 'solved_statistics')
+          ?? snapshots.find(({ evidenceType }) => evidenceType === 'candidate_reported_statistics')
+        : snapshots[snapshots.length - 1];
+      if (!snapshot) return [];
+      return [{
+        evidenceId: `v4-index:${category.categoryId}`,
+        evidenceType: category.categoryId === 'problem_solving_dsa' ? 'coding_assessment' as const : category.categoryId === 'project_portfolio' ? 'portfolio' as const : 'other' as const,
+        source: `${snapshot.source} · ${snapshot.provenance}`,
+        description: `${category.displayName} index from a saved ${snapshot.evidenceType.replaceAll('_', ' ')} snapshot using the v4 formula. This is an evidence-volume/breadth index, not a measure of engineering competence or quality.`,
+        normalizedValue: category.score,
+        verificationStatus: 'unverified' as const,
+        categoryId: category.categoryId,
+        availability: 'available' as const,
+      }];
+    });
+    markStage('scoring');
+    const evaluation = scoreCandidate({ candidateId: candidate.id, targetRole, evidence: scoringEvidence }, configuration, currentScoringVersion);
+    markStage('response_validation');
     const result = evaluationResponseSchema.parse({
       ...evaluation,
-      platformEvidence: makePlatformEvidence(candidate.id, rows as Array<Record<string, unknown>>),
+      platformEvidence,
+      finalReport: report,
+      calculationExplanation: report.overallScore === undefined
+        ? `Each available category uses its deterministic v4 source-specific formula. Missing or partial source data is not scored as zero. Overall score is withheld until all six category indexes are available. ${report.notice}`
+        : `Each category uses its deterministic v4 source-specific formula. The overall score is the weighted sum using the saved v4 role weights. These indexes describe evidence volume or breadth, not engineering quality or hiring suitability. ${report.notice}`,
+      recommendations: report.overallScore === undefined
+        ? ['Complete the missing GitHub and LeetCode syncs with attributable, usable source data before an overall score can be calculated.']
+        : [],
     });
+    markStage('evaluation_insert');
     const { data: saved, error: insertError } = await databaseOperation('evaluation_insert', () => client.from('evaluations').insert({
       owner_id: auth.userId,
       candidate_id: candidate.id,
@@ -379,6 +451,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
     }).select('id,candidate_id,role_profile_id,target_role,status,created_at,evaluation_result').single());
     if (insertError) databaseFailure(insertError, 'evaluation_insert', 'supabase_response');
     if (!saved) throw unavailable();
+    markStage('persisted_response_validation');
     return {
       id: saved.id,
       candidateId: saved.candidate_id,
@@ -413,7 +486,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         id: profile.id,
         name: profile.name,
         description: profile.description,
-        usable: targetRole.success && weights.success,
+        usable: targetRole.success && weights.success && matchesActiveRoleWeights(targetRole.data, weights.data),
         ...(targetRole.success ? { targetRole: targetRole.data } : {}),
         ...(weights.success ? { weights: weights.data } : {}),
       };
@@ -443,11 +516,15 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
       let client;
       try { client = getClient(auth.accessToken); }
       catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Evaluation storage is not configured'); }
+      let stage: EvaluationProcessingStage = 'candidate_lookup';
       try {
         const candidate = await ownedCandidate(client, auth, input.candidateId);
+        stage = 'role_lookup';
         const role = configuredRoles().roles.find(({ id }) => id === input.roleId);
         if (!role) throw new HttpError(400, 'VALIDATION_ERROR', 'Select a supported role');
-        const stored = persistedEvaluationSchema.parse(await persist(client, auth, candidate, null, role.id, role.weights));
+        stage = 'role_configuration';
+        const stored = persistedEvaluationSchema.parse(await persist(client, auth, candidate, null, role.id, role.weights, (next) => { stage = next; }));
+        stage = 'response_validation';
         return evaluationRunResponseSchema.parse({
           id: stored.id,
           status: stored.status,
@@ -461,15 +538,17 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         });
       } catch (error) {
         if (error instanceof HttpError) throw error;
-        databaseFailure(error, 'evaluation_processing', 'thrown_exception');
+        evaluationProcessingFailure(error, stage);
       }
     },
     async create(auth, candidateId, input) {
       let client;
       try { client = getClient(auth.accessToken); }
       catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Evaluation storage is not configured'); }
+      let stage: EvaluationProcessingStage = 'candidate_lookup';
       try {
         const candidate = await ownedCandidate(client, auth, candidateId);
+        stage = 'role_lookup';
         const { data: role, error } = await databaseOperation('role_profile_lookup', () => client.from('role_profiles').select('id,name,weights')
           .eq('id', input.roleProfileId).eq('owner_id', auth.userId).maybeSingle());
         if (error) databaseFailure(error, 'role_profile_lookup', 'supabase_response');
@@ -477,21 +556,29 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         const targetRole = roleIdSchema.safeParse(role.name);
         if (!targetRole.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'Role profile name must match a supported role identifier');
         const profileWeights = roleWeightsSchema.safeParse(role.weights);
-        if (!profileWeights.success && typeof role.weights === 'object' && role.weights !== null && !Array.isArray(role.weights)
-          && Object.keys(role.weights).length === 5) {
-          throw new HttpError(422, 'ROLE_PROFILE_REQUIRES_V3_WEIGHTS', 'This saved role profile uses the previous five-category scoring model. Update it to six v3 category weights before evaluating; its stored configuration has not been modified.');
+        const savedWeightKeys = typeof role.weights === 'object' && role.weights !== null && !Array.isArray(role.weights) ? Object.keys(role.weights) : [];
+        const previousCategoryKeys = new Set(['technical_skills', 'problem_solving_dsa', 'relevant_project_experience', 'practical_assessment_performance', 'communication_skills', 'learning_adaptability']);
+        if (!profileWeights.success && savedWeightKeys.length > 0 && savedWeightKeys.every((key) => previousCategoryKeys.has(key))) {
+          throw new HttpError(422, 'ROLE_PROFILE_REQUIRES_V4_WEIGHTS', 'This saved role profile uses a historical category set. Reconfigure all six weights for the active v4 rubric before evaluating; its stored configuration has not been modified.');
         }
-        if (!profileWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define six valid v3 category weights totaling 100');
-        return persistedEvaluationSchema.parse(await persist(client, auth, candidate, input.roleProfileId, targetRole.data, role.weights));
+        if (!profileWeights.success) throw new HttpError(422, 'ROLE_CONFIGURATION_INVALID', 'The selected role must define six valid v4 GitHub and LeetCode category weights totaling 100');
+        if (!matchesActiveRoleWeights(targetRole.data, profileWeights.data)) {
+          throw new HttpError(422, 'ROLE_PROFILE_REQUIRES_V4_WEIGHTS', 'This role profile uses different weights from the active v4 rubric. Reconfigure it to 20/20/15/10/10/25 before evaluating; its stored configuration has not been modified.');
+        }
+        stage = 'role_configuration';
+        const result = await persist(client, auth, candidate, input.roleProfileId, targetRole.data, role.weights, (next) => { stage = next; });
+        stage = 'persisted_response_validation';
+        return persistedEvaluationSchema.parse(result);
       } catch (error) {
         if (error instanceof HttpError) throw error;
-        databaseFailure(error, 'evaluation_processing', 'thrown_exception');
+        evaluationProcessingFailure(error, stage);
       }
     },
     async get(auth, id) {
       let client;
       try { client = getClient(auth.accessToken); }
       catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Evaluation storage is not configured'); }
+      let stage: EvaluationProcessingStage = 'evaluation_read';
       try {
         const { data, error } = await databaseOperation('evaluation_read', () => client.from('evaluations')
           .select('id,candidate_id,role_profile_id,target_role,status,created_at,evaluation_result')
@@ -501,7 +588,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
         return readPersistedEvaluation(data as Record<string, unknown>);
       } catch (error) {
         if (error instanceof HttpError) throw error;
-        databaseFailure(error, 'evaluation_processing', 'thrown_exception');
+        evaluationProcessingFailure(error, stage);
       }
     },
   };

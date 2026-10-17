@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
-export const schemaVersion = '3.0.0' as const;
-export const scoringVersion = '3.0.0' as const;
+export const schemaVersion = '4.0.0' as const;
+export const scoringVersion = '4.0.0' as const;
 export const scoringVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/, 'Scoring version must use semantic version format (major.minor.patch).');
 export const scoringCategories = [
-  { id: 'technical_skills', displayName: 'Technical Skills', description: 'Demonstrated proficiency in role-relevant languages, tools, and engineering concepts.' },
-  { id: 'problem_solving_dsa', displayName: 'Problem-Solving / DSA', description: 'Ability to reason through problems, select algorithms, and explain trade-offs.' },
-  { id: 'relevant_project_experience', displayName: 'Relevant Project Experience', description: 'Depth, relevance, and verifiable impact of work on related projects.' },
-  { id: 'practical_assessment_performance', displayName: 'Practical Assessment Performance', description: 'Performance on a completed, role-relevant practical assessment.' },
-  { id: 'communication_skills', displayName: 'Communication Skills', description: 'Clarity and structure in technical explanation and collaboration.' },
-  { id: 'learning_adaptability', displayName: 'Learning & Adaptability', description: 'Evidence of learning new tools or concepts and adapting to changing constraints.' },
+  { id: 'project_portfolio', displayName: 'Project Portfolio', description: 'GitHub public repository count proxy; does not measure quality.' },
+  { id: 'technical_skills', displayName: 'Technical Skills', description: 'Distinct languages in saved GitHub repository metadata; breadth proxy only.' },
+  { id: 'development_activity', displayName: 'Development Activity', description: 'Attributable commit volume proxy; does not measure code quality.' },
+  { id: 'collaboration', displayName: 'Collaboration', description: 'GitHub pull request, issue, and review volume proxies; volume is not quality.' },
+  { id: 'current_year_contributions', displayName: 'Current-Year Contributions', description: 'Active observed UTC calendar-week coverage for the current year.' },
+  { id: 'problem_solving_dsa', displayName: 'DSA & Problem-Solving', description: 'LeetCode difficulty-weighted solved-problem evidence; not reasoning quality.' },
 ] as const;
 
 export const scoringCategorySchema = z.enum(scoringCategories.map(({ id }) => id) as [string, ...string[]]);
@@ -27,7 +27,7 @@ export const roleWeightsSchema = z.record(scoringCategorySchema, z.number().fini
     if (Math.abs(total - 100) > 1e-8) context.addIssue({ code: z.ZodIssueCode.custom, message: `Role weights must total 100; received ${total}.` });
   });
 
-export const roleWeightConfigurationSchema = z.object({ schemaVersion: z.literal(schemaVersion), scoringVersion: scoringVersionSchema, preliminary: z.literal(true), roles: z.record(roleIdSchema, roleWeightsSchema) });
+export const roleWeightConfigurationSchema = z.object({ schemaVersion: z.literal(schemaVersion), scoringVersion: z.literal(scoringVersion), status: z.literal('active'), roles: z.record(roleIdSchema, roleWeightsSchema) });
 export type RoleWeightConfiguration = z.infer<typeof roleWeightConfigurationSchema>;
 export const categoryScoreSchema = z.object({
   categoryId: scoringCategorySchema,

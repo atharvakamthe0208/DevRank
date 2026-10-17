@@ -13,15 +13,15 @@ const evaluation: PersistedEvaluation = {
   status: 'completed',
   createdAt: '2026-10-12T00:00:00.000Z',
   result: {
-    schemaVersion: '3.0.0',
-    scoringVersion: '3.0.0',
+    schemaVersion: '4.0.0',
+    scoringVersion: '4.0.0',
     candidateId,
     targetRole: 'software_developer',
     overallScore: 80,
     categoryScores: scoringCategories.map(({ id, displayName }, index) => ({
       categoryId: id, displayName, score: 80, status: 'scored', evidenceRefs: [`evidence-${index + 1}`], explanation: 'Supported by evidence.',
     })),
-    roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+    roleWeightsUsed: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
     evidence: scoringCategories.map(({ id }, index) => ({ evidenceId: `evidence-${index + 1}`, evidenceType: 'technical_screen', source: 'Technical screen', description: 'Completed a structured technical screen.', normalizedValue: 80, verificationStatus: 'verified', categoryId: id, availability: 'available' })),
     strengths: [], skillGaps: [], recommendations: [], missingEvidence: [],
     calculationExplanation: 'Deterministic scoring explanation.', evaluationStatus: 'completed',

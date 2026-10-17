@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { candidateSchema, githubInsightsSchema, proposedRubric, scoringCategories } from '@devrank/contracts';
+import { candidateSchema, finalRubric, githubInsightsSchema, scoringCategories } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
 import { AuthProvider } from '../auth/AuthProvider';
 import { CandidatePlatformDataPanel } from './CandidatePlatformDataPanel';
@@ -30,22 +30,21 @@ describe('proposed rubric and contribution panel', () => {
     });
     const html = renderToStaticMarkup(createElement(AuthProvider, null,
       createElement(CandidatePlatformDataPanel, { candidate })));
-    expect(html).toContain('Proposed GitHub + LeetCode Rubric');
+    expect(html).toContain('Active GitHub + LeetCode Rubric');
     expect(html).toContain('Project Portfolio');
     expect(html).toContain('GitHub contribution history');
     expect(html).toContain('Loading saved contribution history');
     expect(html).toContain('>loading</span>');
   });
 
-  it('renders all six categories, proposed weights, sources, signals, and non-policy notice', () => {
+  it('renders all six active categories, weights, sources, signals, and historical-version notice', () => {
     const html = renderToStaticMarkup(createElement(ProposedRubricPanel, { snapshotState: 'idle' }));
-    expect(html).toContain('Proposed GitHub + LeetCode Rubric');
-    expect(html).toContain('not approved policy');
-    expect(html).toContain('not used by the active scorer');
-    expect(html).toContain('Communication Skills remains an active v3 category');
-    for (const category of proposedRubric.categories) {
+    expect(html).toContain('Active GitHub + LeetCode Rubric');
+    expect(html).toContain('Scoring version 4');
+    expect(html).toContain('Historical v1/v2/v3 evaluations remain unchanged');
+    for (const category of finalRubric.categories) {
       expect(html).toContain(category.displayName.replaceAll('&', '&amp;'));
-      expect(html).toContain(`${category.proposedWeight}%`);
+      expect(html).toContain(`${category.weight}%`);
       expect(html).toContain(category.source === 'github' ? 'Evidence source: GitHub' : 'Evidence source: LeetCode');
       expect(html).toContain(category.definition);
     }
@@ -89,9 +88,9 @@ describe('proposed rubric and contribution panel', () => {
     expect(oldSnapshotHtml).toContain('predates contribution-history capture');
   });
 
-  it('keeps the proposed category set separate from the active persisted scoring rubric', () => {
-    expect(scoringCategories.map(({ id }) => id)).toContain('communication_skills');
-    expect(scoringCategories.map(({ id }) => id)).not.toContain('current_year_contributions');
-    expect(proposedRubric.status).toBe('proposed');
+  it('uses the same final category set on the candidate profile and in active scoring', () => {
+    expect(scoringCategories.map(({ id }) => id)).toEqual(finalRubric.categories.map(({ id }) => id));
+    expect(scoringCategories.map(({ id }) => id)).not.toContain('communication_skills');
+    expect(finalRubric.status).toBe('active');
   });
 });

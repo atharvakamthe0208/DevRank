@@ -52,6 +52,58 @@ export const previousEvaluationResponseV2Schema = z.object({
 });
 export type PreviousEvaluationResponseV2 = z.infer<typeof previousEvaluationResponseV2Schema>;
 
+const v3ScoringCategorySchema = z.enum([
+  'technical_skills', 'problem_solving_dsa', 'relevant_project_experience',
+  'practical_assessment_performance', 'communication_skills', 'learning_adaptability',
+]);
+const v3RoleWeightsSchema = z.record(v3ScoringCategorySchema, z.number().finite().min(0).max(100)).superRefine((weights, context) => {
+  if (Object.keys(weights).length !== 6 || Math.abs(Object.values(weights).reduce((sum, value) => sum + value, 0) - 100) > 1e-8) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Historical v3 role weights must contain six categories totaling 100.' });
+  }
+});
+const v3EvidenceSchema = z.object({
+  evidenceId: z.string().min(1),
+  evidenceType: z.enum(['technical_screen', 'coding_assessment', 'project', 'work_sample', 'structured_interview', 'learning_record', 'portfolio', 'other']),
+  source: z.string().min(1), description: z.string().min(1),
+  originalValue: z.union([z.string(), z.number(), z.boolean()]).optional(), normalizedValue: scoreSchema.optional(),
+  verificationStatus: z.enum(['verified', 'partially_verified', 'unverified']), observedAt: z.string().datetime().optional(),
+  categoryId: v3ScoringCategorySchema, availability: z.enum(['available', 'missing']),
+}).superRefine((item, context) => {
+  if (item.availability === 'missing' && item.normalizedValue !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['normalizedValue'], message: 'Missing historical evidence cannot have a normalized value.' });
+});
+const v3CategoryScoreSchema = z.object({
+  categoryId: v3ScoringCategorySchema, displayName: z.string().min(1), score: scoreSchema.optional(),
+  confidence: confidenceSchema.optional(), status: z.enum(['scored', 'insufficient_evidence']),
+  evidenceRefs: z.array(z.string().min(1)), explanation: z.string().min(1),
+}).superRefine((item, context) => {
+  if (item.status === 'scored' && item.score === undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['score'], message: 'Scored historical categories require a score.' });
+  if (item.status === 'insufficient_evidence' && item.score !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['score'], message: 'Insufficient historical categories cannot have a score.' });
+});
+
+/** Read-only validator for saved v3 results; v3 snapshots are never recalculated under v4. */
+export const previousEvaluationResponseV3Schema = z.object({
+  schemaVersion: z.literal('3.0.0'), scoringVersion: z.literal('3.0.0').optional(),
+  candidateId: z.string().min(1), targetRole: roleIdSchema, overallScore: scoreSchema.optional(),
+  categoryScores: z.array(v3CategoryScoreSchema).length(6), roleWeightsUsed: v3RoleWeightsSchema,
+  evidence: z.array(v3EvidenceSchema), platformEvidence: z.array(z.unknown()).optional(),
+  confidence: confidenceSchema.optional(), strengths: z.array(z.string()), skillGaps: z.array(z.string()),
+  recommendations: z.array(z.string()), missingEvidence: z.array(v3ScoringCategorySchema),
+  calculationExplanation: z.string().min(1), evaluationStatus: z.enum(['completed', 'insufficient_evidence']),
+  aiExplanation: z.object({ summary: z.string(), strengths: z.array(z.string()), skillGaps: z.array(z.string()), recommendations: z.array(z.string()) }),
+  decisionSupportNotice: z.literal('Decision support only; not an automatic hiring decision.'),
+}).superRefine((response, context) => {
+  const ids = response.categoryScores.map(({ categoryId }) => categoryId);
+  if (new Set(ids).size !== 6 || Object.keys(response.roleWeightsUsed).length !== 6) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryScores'], message: 'A v3 snapshot must contain all six unique categories.' });
+  const missing = response.categoryScores.filter(({ status }) => status === 'insufficient_evidence').map(({ categoryId }) => categoryId).sort();
+  if ([...response.missingEvidence].sort().join('|') !== missing.join('|')) context.addIssue({ code: z.ZodIssueCode.custom, path: ['missingEvidence'], message: 'v3 missingEvidence must match its category statuses.' });
+  if (response.evaluationStatus === 'insufficient_evidence' && response.overallScore !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['overallScore'], message: 'Insufficient-evidence v3 snapshots cannot have an overall score.' });
+  const evidence = new Map(response.evidence.map(({ evidenceId, categoryId }) => [evidenceId, categoryId]));
+  for (const [index, category] of response.categoryScores.entries()) {
+    if (category.evidenceRefs.some((reference) => evidence.get(reference) !== category.categoryId)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryScores', index, 'evidenceRefs'], message: 'v3 evidence references must exist and match their category.' });
+  }
+});
+export type PreviousEvaluationResponseV3 = z.infer<typeof previousEvaluationResponseV3Schema>;
+
 const legacyScoringCategorySchema = z.enum([
   'technical_skills',
   'problem_solving_dsa',

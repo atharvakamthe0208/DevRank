@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Draft taxonomy for GitHub/LeetCode context. These weights are proposals only. */
+/** Historical proposal metadata. The activated policy is finalRubric (v4) below. */
 export const proposedRubricId = 'github_leetcode_proposal_v1' as const;
 export const proposedRubricStatus = 'proposed' as const;
 export const proposedRubricTimezone = 'UTC' as const;
@@ -51,4 +51,40 @@ export const proposedRubric = proposedRubricSchema.parse({
   status: proposedRubricStatus,
   timezone: proposedRubricTimezone,
   categories: proposedRubricCategories,
+});
+
+/** Active policy for new v4 evaluations. Existing v1/v2/v3 snapshots retain their original categories. */
+export const finalRubricId = 'github_leetcode_v4' as const;
+export const finalRubricSchema = z.object({
+  id: z.literal(finalRubricId),
+  status: z.literal('active'),
+  timezone: z.literal(proposedRubricTimezone),
+  categories: z.array(z.object({
+    id: proposedRubricCategorySchema, displayName: z.string().min(1), weight: z.number().min(0).max(100),
+    source: z.enum(['github', 'leetcode']), definition: z.string().min(1),
+  }).strict()).length(6),
+}).strict().superRefine((value, context) => {
+  const ids = proposedRubricCategories.map(({ id }) => id);
+  if (new Set(value.categories.map(({ id }) => id)).size !== ids.length
+    || ids.some((id) => !value.categories.some((category) => category.id === id))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'The active rubric must contain each of its six categories exactly once.' });
+  }
+  for (const category of value.categories) {
+    const canonical = proposedRubricCategories.find(({ id }) => id === category.id);
+    if (canonical && (category.weight !== canonical.proposedWeight || category.source !== canonical.source)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'Active rubric weights and sources must match the approved v4 policy.' });
+    }
+  }
+  if (value.categories.reduce((sum, category) => sum + category.weight, 0) !== 100) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'Active rubric weights must total 100.' });
+  }
+});
+export type FinalRubric = z.infer<typeof finalRubricSchema>;
+export const finalRubric: FinalRubric = finalRubricSchema.parse({
+  id: finalRubricId,
+  status: 'active' as const,
+  timezone: proposedRubricTimezone,
+  categories: proposedRubricCategories.map(({ id, displayName, proposedWeight, source, definition }) => ({
+    id, displayName, weight: proposedWeight, source, definition,
+  })),
 });

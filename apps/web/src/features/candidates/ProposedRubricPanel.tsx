@@ -1,4 +1,4 @@
-import { proposedRubric, type GitHubInsights } from '@devrank/contracts';
+import { finalRubric, type GitHubInsights } from '@devrank/contracts';
 
 function utcTimestamp(value: string): string {
   return `${new Date(value).toISOString().replace('T', ' ').replace('.000Z', '')} UTC`;
@@ -42,12 +42,12 @@ export function ProposedRubricPanel({ insights, snapshotState }: {
 
   return <section className="proposed-rubric-panel" aria-labelledby="proposed-rubric-title">
     <div className="proposed-rubric-heading">
-      <div><h3 id="proposed-rubric-title">Proposed GitHub + LeetCode Rubric</h3><p>Draft taxonomy · not approved policy · not used by the active scorer</p></div>
-      <span className="source-status is-unavailable">PROPOSED</span>
+      <div><h3 id="proposed-rubric-title">Active GitHub + LeetCode Rubric</h3><p>Scoring version 4 · weights and source-specific formulas are active for new evaluations</p></div>
+      <span className="source-status is-available">ACTIVE V4</span>
     </div>
-    <p className="proposed-rubric-notice">These weights are proposals only. Active v3 scoring, configured owner weights, and saved historical v1/v2/v3 evaluations remain unchanged; Communication Skills remains an active v3 category.</p>
-    <div className="proposed-rubric-grid">{proposedRubric.categories.map((category) => <article className="proposed-rubric-category" key={category.id}>
-      <div><h4>{category.displayName}</h4><strong>{category.proposedWeight}%</strong></div>
+    <p className="proposed-rubric-notice">New evaluations use these fixed v4 weights and deterministic evidence indexes. Historical v1/v2/v3 evaluations remain unchanged and retain their original categories.</p>
+    <div className="proposed-rubric-grid">{finalRubric.categories.map((category) => <article className="proposed-rubric-category" key={category.id}>
+      <div><h4>{category.displayName}</h4><strong>{category.weight}%</strong></div>
       <span>{category.source === 'github' ? 'Evidence source: GitHub' : 'Evidence source: LeetCode'}</span>
       <p>{category.definition}</p>
     </article>)}</div>

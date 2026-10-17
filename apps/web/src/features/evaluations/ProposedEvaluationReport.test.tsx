@@ -12,16 +12,16 @@ const githubContribution: PlatformEvaluationEvidence = {
   categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions', relation: 'supporting' }],
 };
 
-describe('proposed evaluation report UI', () => {
-  it('shows actual partial values, proposed weights, and keeps absent categories unavailable', () => {
+describe('active evaluation index report UI', () => {
+  it('shows actual partial values, active weights, and keeps absent categories unavailable', () => {
     const html = renderToStaticMarkup(createElement(ProposedEvaluationReport, { report: buildProposedEvaluationReport([githubContribution]) }));
-    expect(html).toContain('Proposed GitHub + LeetCode evaluation report');
-    expect(html).toContain('Draft evidence index');
+    expect(html).toContain('GitHub + LeetCode evaluation report');
+    expect(html).toContain('Active v4 deterministic evidence index');
     expect(html).toContain('Current-Year Contributions');
     expect(html).toContain('44');
     expect(html).toContain('10% weight');
-    expect(html).toContain('Weighted total withheld');
+    expect(html).toContain('Overall score withheld');
     expect(html).toContain('Unavailable');
-    expect(html).toContain('does not affect active v3 results or rankings');
+    expect(html).toContain('not calibrated measures of engineering competence');
   });
 });

@@ -1,55 +1,34 @@
-# Evaluation evidence mapping
+# Active v4 evaluation evidence mapping
 
-## Canonical rubric and discrepancy resolution
+## Active rubric and historical versions
 
-The canonical six-category rubric is the original Day 4 definition in `docs/day4-scoring-versioning.md`; its sixth category is **Communication Skills** (`communication_skills`), based on structured interview or presentation evidence. The active v3 shared contract, role weights, evidence mapping, API response, and evaluation UI now use that same six-category set. The prior active v2 contract intentionally dropped Communication Skills and used five categories. That decision is retained as an immutable historical v2 format; those results are not padded, recomputed, or converted. Historical v1 results retain their six-category snapshot. This version boundary resolves the five-card/six-required discrepancy without changing saved scores.
+New evaluations use six active GitHub/LeetCode categories: Project Portfolio (20%), Technical Skills (20%), Development Activity (15%), Collaboration (10%), Current-Year Contributions (10%), and DSA & Problem-Solving (25%). The shared scoring contract and checked-in role weights use version `4.0.0`. The former v3 Communication Skills and Practical Assessment Performance results remain valid historical records and are displayed without conversion. Historical v1/v2/v3 snapshots are never padded, recomputed, or rewritten.
 
-The original six-category role weight table is documented in Day 4 and preserved unchanged in the v3 role configuration. The weights remain preliminary and unapproved. Restoring the original values is not approval to use them for hiring decisions.
-
-The separate `github_leetcode_proposal_v1` is also six categories, but is not the active canonical rubric: Project Portfolio 20%, Technical Skills 20%, Development Activity 15%, Collaboration 10%, Current-Year Contributions 10%, and DSA & Problem-Solving 25%. It replaces Documentation only in this proposed taxonomy. It does not replace Communication Skills in active v3 or change active/owner-defined weights. Its mappings are tagged with a proposal ID and cannot satisfy active scoring evidence. Historical v1/v2/v3 category definitions remain unchanged. See [the proposal's source, normalization, and limitations](../proposed-github-leetcode-rubric.md).
+The earlier `github_leetcode_proposal_v1` ID is retained only to read evidence snapshots written while the taxonomy was a proposal. New evaluation evidence maps to `github_leetcode_v4`.
 
 ## Category-to-signal matrix
 
-`Direct` means the evidence type is accepted as rubric-scored evidence only after a reviewer/assessment supplies a normalized score. `Supporting` means the signal may be shown to reviewers/AI as contextual observation, but it cannot satisfy score sufficiency or contribute a number. `Not appropriate` means the signal does not measure the category.
+| Active category | Source and available signal | Deterministic use | Limitation |
+| --- | --- | --- | --- |
+| Project Portfolio | GitHub public repository count and returned repository metadata | `100 × min(1, ln(1 + count) / ln(11))` | Quantity proxy only; no repository quality or role relevance judgment. |
+| Technical Skills | GitHub repository primary-language metadata | Distinct observed languages divided by five, capped at 100 | Language breadth is not proficiency; complete, untruncated repository coverage is required. |
+| Development Activity | GitHub contribution GraphQL commit totals and attributable activity patterns | `100 × min(1, ln(1 + commits) / ln(251))` | Commit volume/patterns are not code quality. Partial/truncated history is not scored. |
+| Collaboration | GitHub contribution totals for PRs opened, issues opened, reviews submitted | Mean of three separate `100 × min(1, ln(1 + count) / ln(51))` indexes | All counts are required; counts are not quality or outcomes. |
+| Current-Year Contributions | GitHub contribution calendar, UTC January 1–December 31 window | Active observed UTC weeks divided by observed UTC weeks | Calendar total and type breakdown are displayed but not added or scored again. |
+| DSA & Problem-Solving | LeetCode solved counts by difficulty; total-only fallback; contest context | `100 × min(1, ln(1 + weighted solved) / ln(301))`, easy=1, medium=2, hard=3 | Capped at 300 weighted solved; not a reasoning or competency measure. GitHub is not used. |
 
-| Category | Definition and direct evidence | GitHub profile/repositories | LeetCode solved/contest | Separate evidence required |
-| --- | --- | --- | --- | --- |
-| Technical Skills | Role-relevant languages, tools, engineering knowledge; direct `technical_screen` with agreed rubric | **Supporting:** repository primary languages and descriptions. No skills inferred from repo count or stars. | **Not appropriate as fetched:** current adapter does not request language or skill endpoints; solved counts do not establish language proficiency. | Rubric-scored technical screen/knowledge check |
-| Problem-Solving / DSA | Algorithmic reasoning, decomposition, complexity and trade-offs; direct `coding_assessment` | **Not appropriate:** public repositories do not reveal an assessed reasoning process. | **Supporting:** solved-by-difficulty and contest aggregate counts/rating/ranking, when present. These do not establish process, correctness quality, speed, consistency, or improvement. | Rubric-scored coding/structured problem-solving assessment |
-| Relevant Project Experience | Relevance, depth, and evidenced impact of related projects; direct `project` or `portfolio` review | **Supporting:** returned public repository descriptions, languages, and update timestamps. No score from number/popularity of repositories. | **Not appropriate:** LeetCode platform aggregates are not project-review evidence. | Reviewer-scored project/portfolio review with role relevance and impact evidence |
-| Practical Assessment Performance | Performance on a completed role-relevant task; direct `work_sample` | **Not appropriate:** a public repository snapshot is not a completed, controlled work sample. | **Not appropriate:** solved totals/contest profile are not a practical work sample. | Completed role-relevant assessment and rubric |
-| Communication Skills | Clarity/structure in technical explanation and collaboration; direct `structured_interview` | **Not appropriate:** profile/repository metadata does not measure communication. | **Not appropriate:** problem counts/contest ranks do not measure communication. | Structured interview or presentation rubric |
-| Learning & Adaptability | Evidence of learning a new concept/tool or responding to changed constraints; direct `learning_record` | **Not appropriate for scoring:** a lone `updatedAt` cannot prove learning or improvement. | **Not appropriate for scoring:** a single snapshot cannot prove learning trend/adaptation. | A specific learning/adaptation example scored under rubric |
+GitHub profile/repository REST and bounded contribution GraphQL data are fetched by server-only adapters. LeetCode profile, solved, and optional contest endpoints are fetched by its server-only adapter. The application does not fetch GitHub issue/PR/review objects or code diffs, nor LeetCode language/skill/history data. See [platform evidence inventory](platform-evidence-inventory.md) for exact provider fields.
 
-GitHub calendar totals and aggregate commit/PR/issue/review counts are available as proposal-only context via the official GraphQL `ContributionsCollection`, subject to the separate public-only token configuration, attribution match, response completeness, provider availability, and documented bounds. Detailed issue/PR/review objects and code are not fetched. LeetCode language counts, skill tags, contest history, and submission history are not fetched. The matrix does not treat these as available merely because providers could expose related endpoints.
+## Persistence and scoring boundary
 
-## Mapping and normalization behavior
+Evaluation creation reads the latest saved platform rows scoped by candidate and owner. It creates a snapshot for that evaluation and runs the deterministic formulas against those values. The report uses this persisted snapshot; it never fetches live data when rendering. A subsequent sync does not change earlier results.
 
-`config/evidence-category-mapping.json` is the direct evidence-type map:
+`platformEvidence` retains provider, provenance, timestamp, availability, normalized source fields, limitations, and category mapping. Candidate-reported LeetCode evidence (`candidate_provided`) remains distinct from provider data (`alfa_leetcode_api`); provider solved evidence is preferred when available for the DSA index. GitHub/LeetCode identity remains unverified, and freshness has no approved maximum age. Missing/malformed/partial/unavailable evidence is not converted to zero. The overall weighted result is withheld until every category has complete scoreable evidence.
 
-| Evidence type | Category | Direct scoring status |
-| --- | --- | --- |
-| `technical_screen` | Technical Skills | Direct after explicit `normalizedValue` supplied |
-| `coding_assessment` | Problem-Solving / DSA | Direct after explicit `normalizedValue` supplied |
-| `project` | Relevant Project Experience | Direct after explicit `normalizedValue` supplied |
-| `work_sample` | Practical Assessment Performance | Direct after explicit `normalizedValue` supplied |
-| `structured_interview` | Communication Skills | Direct after explicit `normalizedValue` supplied |
-| `learning_record` | Learning & Adaptability | Direct after explicit `normalizedValue` supplied |
-| `portfolio` | Relevant Project Experience | Direct after explicit `normalizedValue` supplied |
-| `other` | Unmapped | No category score |
+Legacy `processCandidateEvidence` and historical rubric configuration references are not used by the API evaluation repository. The API persists synthetic, unverified v4 category-index evidence from the saved source snapshot so the common v4 response, AI references, and rankings use the same deterministic result. The AI service may explain values but cannot calculate or override scores.
 
-The deterministic evidence processor accepts an explicit 0–100 normalized value; it does not derive a score from a raw field. Each category score is the arithmetic mean of its available normalized values, rounded to two decimals. Unique evidence IDs are enforced. Overall score is the weighted sum divided by 100 only when every category has at least one scoreable evidence item. Partial weights are not rescaled; missing values are not zero. The role-specific weight sets are exact v1/Day 4 values retained under scoring v3 and remain preliminary.
+## Weights and role profiles
 
-Provider snapshots use a separate `platformEvidence` contract. Their category mappings are labeled `supporting`; normalized provider values are not `Evidence.normalizedValue` scores, are not included in category `evidenceRefs`, and do not satisfy overall-score completeness. Missing optional fields remain absent. Provider unavailability is not negative evidence. Freshness is `unassessed` because no maximum age has been approved. Candidate-reported LeetCode values remain separately marked `candidate_provided` and unverified.
+Configured roles use the fixed v4 20/20/15/10/10/25 weight set. Existing owner-defined profiles with former v1/v2/v3 category keys are not transformed or inferred; their owner must explicitly configure all six current keys before they can be used. No weight approval workflow is created by this implementation. The v4 activation was explicitly requested for this product task; further governance policy remains a product-owner decision.
 
-## Duplicate and correlated signals
-
-Only the most recent persisted snapshot per platform/provenance is attached to one evaluation, avoiding repeated-refresh inflation. GitHub popularity/repository counts are context only; the current top-ten repository subset is not assigned score values. Provider LeetCode solved and contest statistics are shown as separate contextual items from the same saved snapshot for clarity; neither is separately averaged or scored. A reviewer must not create multiple normalized score items for the same underlying assessment/project without an independent-evidence rationale; the current schema rejects duplicate IDs but does not infer correlations across distinct IDs. A future formal deduplication policy requires rubric owner review and a new scoring version if it changes calculation results.
-
-## Overall-score and explanation limits
-
-Practical assessment and Communication Skills require their own direct evidence sources. GitHub/LeetCode cannot manufacture these categories. If any category lacks a normalized direct evidence item, its score is omitted, `missingEvidence` lists it, the evaluation is `insufficient_evidence`, and there is no overall score. AI receives validated deterministic result data and bounded platform context with limitations. It may explain the context but cannot calculate/alter scores, weights, or status, and it must not present public profile data as identity verification.
-
-## Approval and production boundary
-
-No team approval is recorded for category policy, weights, score thresholds, staleness policy, or platform normalization. The six-category contract is implemented and tested locally; that does not approve the weights or establish production schema compatibility. The production migration audit and ledger reconciliation remain independent deployment blockers.
+No migration is introduced: the existing JSON result and weight snapshot columns hold v4 values. Production schema/history compatibility is not established by this local implementation and remains blocked on the separate read-only production audit, backup/restore readiness, and deployment approval.
