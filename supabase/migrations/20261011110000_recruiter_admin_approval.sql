@@ -1,7 +1,6 @@
 -- Secure admin review for recruiter applications. The first admin is provisioned only by
 -- a trusted project owner using the SQL procedure documented in docs/authentication.md.
 begin;
-
 create or replace function public.is_dev_rank_admin()
 returns boolean
 language sql
@@ -20,7 +19,6 @@ as $$
   );
 $$;
 revoke all on function public.is_dev_rank_admin() from public, anon, authenticated;
-
 create or replace function public.list_recruiter_applications(p_status text default null)
 returns table (
   user_id uuid,
@@ -53,7 +51,6 @@ end;
 $$;
 revoke all on function public.list_recruiter_applications(text) from public, anon, authenticated;
 grant execute on function public.list_recruiter_applications(text) to authenticated;
-
 create or replace function public.decide_recruiter_application(p_user_id uuid, p_decision text)
 returns boolean
 language plpgsql
@@ -94,8 +91,6 @@ end;
 $$;
 revoke all on function public.decide_recruiter_application(uuid, text) from public, anon, authenticated;
 grant execute on function public.decide_recruiter_application(uuid, text) to authenticated;
-
 comment on function public.list_recruiter_applications(text) is 'Lists recruiter applications only for an approved, confirmed DevRank admin.';
 comment on function public.decide_recruiter_application(uuid, text) is 'Approves or rejects a pending recruiter application and records an audit event.';
-
 commit;

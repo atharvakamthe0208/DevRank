@@ -15,6 +15,27 @@ export function useCandidates(page: number, pageSize = 20) {
   const [error, setError] = useState('');
   const [refreshIndex, setRefreshIndex] = useState(0);
   const reload = useCallback(() => setRefreshIndex((value) => value + 1), []);
+  const deleteCandidate = useCallback(async (candidateId: string) => {
+    if (!session?.access_token) throw new Error('Your secure session is unavailable. Sign in again to delete candidates.');
+    try {
+      await apiRequest<void>(`/candidates/${candidateId}`, { method: 'DELETE' }, session.access_token);
+    } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.status === 401) {
+        await supabase?.auth.signOut({ scope: 'local' });
+        throw new Error('Your session expired. Sign in again to continue.');
+      }
+      if (cause instanceof ApiRequestError && cause.status === 403) {
+        await refresh();
+        throw new Error('Recruiter access is no longer approved. Contact an administrator.');
+      }
+      throw cause;
+    }
+    setData((current) => ({
+      ...current,
+      items: current.items.filter((candidate) => candidate.id !== candidateId),
+      total: Math.max(0, current.total - 1),
+    }));
+  }, [refresh, session?.access_token]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -44,5 +65,5 @@ export function useCandidates(page: number, pageSize = 20) {
     return () => controller.abort();
   }, [session?.access_token, page, pageSize, refreshIndex, refresh]);
 
-  return { ...data, loading, error, reload };
+  return { ...data, loading, error, reload, deleteCandidate };
 }

@@ -45,4 +45,10 @@ describe('apiRequest', () => {
       headers: { Authorization: 'Bearer test-access-token' },
     });
   });
+
+  it('accepts a successful no-content response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+
+    await expect(apiRequest<void>('/candidates/candidate-id', { method: 'DELETE' })).resolves.toBeUndefined();
+  });
 });

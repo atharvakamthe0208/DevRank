@@ -71,7 +71,7 @@ function createTestRepository(): CandidateRepository {
       if (auth.userId !== ownerId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       return { ...candidate, ...('name' in input && input.name ? { name: input.name } : {}) };
     }),
-    archive: vi.fn(async (auth) => {
+    delete: vi.fn(async (auth) => {
       if (auth.userId !== ownerId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
     }),
   };
@@ -259,13 +259,22 @@ describe('candidate API authorization and CRUD', () => {
     expect(protectedField.status).toBe(400);
   });
 
-  it('deletes by archiving so candidate history is retained', async () => {
+  it('permanently deletes candidate data for the verified owner', async () => {
     const response = await fetch(`${origin}/api/candidates/${candidateId}`, {
       method: 'DELETE',
       headers: { Authorization: 'Bearer valid-owner-token' },
     });
     expect(response.status).toBe(204);
-    expect(repository.archive).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId }), candidateId);
+    expect(repository.delete).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId }), candidateId);
+  });
+
+  it('hides another owner’s candidate from permanent deletion', async () => {
+    const response = await fetch(`${origin}/api/candidates/${candidateId}`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer valid-other-token' },
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
   });
 
   it('returns a safe database error to authorized users', async () => {

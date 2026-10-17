@@ -1,9 +1,8 @@
-﻿-- Reconcile the evaluations table for deterministic result persistence.
+-- Reconcile the evaluations table for deterministic result persistence.
 -- Existing result data and scores are never backfilled or synthesized.
 -- The migration fails closed when production's status-check semantics are not one
 -- of the two reviewed definitions used by this repository.
 begin;
-
 -- Verify the ownership/security baseline before any schema DDL. These invariants are
 -- established by the initial schema and recruiter-auth migrations; do not silently
 -- reconcile a database that lacks or has weakened them.
@@ -128,7 +127,6 @@ begin
   end if;
 end;
 $$;
-
 -- Supabase installations commonly apply default table ACLs for anon,
 -- authenticated, and service_role. PostgreSQL materializes those defaults into
 -- the new table's relacl, so has_table_privilege() sees them as effective grants.
@@ -270,7 +268,6 @@ begin
   end if;
 end;
 $$;
-
 -- Check any pre-existing columns before the first schema change.
 do $$
 declare
@@ -293,12 +290,10 @@ begin
   end loop;
 end;
 $$;
-
 alter table public.evaluations
   add column if not exists evaluation_result jsonb,
   add column if not exists role_weights_snapshot jsonb,
   add column if not exists target_role text;
-
 -- Preflight persisted values before adding or validating any new data constraints.
 do $$
 declare
@@ -346,7 +341,6 @@ begin
   end if;
 end;
 $$;
-
 -- Verify same-named constraints by their full normalized PostgreSQL definitions.
 -- Name collisions with different semantics abort; they are never treated as success.
 do $$
@@ -422,7 +416,6 @@ begin
   end if;
 end;
 $$;
-
 do $$
 begin
   if not exists (select 1 from pg_catalog.pg_constraint where conrelid = 'public.evaluations'::regclass and conname in ('evaluations_evaluation_result_object_check', 'evaluations_evaluation_result_check') and contype = 'c') then
@@ -439,7 +432,6 @@ begin
   end if;
 end;
 $$;
-
 -- Require the actual constraint to match exactly one reviewed repository form.
 -- The production catalog definition was not supplied for this migration review;
 -- any unavailable, renamed, or different constraint is a hard stop with its definition.
@@ -474,18 +466,15 @@ begin
   end if;
 end;
 $$;
-
 -- Configured-role runs write role_profile_id = NULL. PostgreSQL's default MATCH SIMPLE
 -- behavior skips only the composite role-profile FK when that component is NULL.
 -- Owner-defined runs still write a profile ID; owner_id and the candidate composite FK
 -- remain unchanged. This changes only nullability and does not remove the FK.
 alter table public.evaluations alter column role_profile_id drop not null;
-
 comment on column public.evaluations.evaluation_result is
   'Validated deterministic evaluation response snapshot; AI explanations cannot alter numerical scores.';
 comment on column public.evaluations.role_weights_snapshot is
   'Effective role weights captured at evaluation time for historical reproducibility.';
 comment on column public.evaluations.target_role is
   'Supported role identifier captured for deterministic configured-role evaluations.';
-
 commit;
