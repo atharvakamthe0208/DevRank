@@ -7,6 +7,8 @@ import {
   roleWeightsSchema,
   scoringCategories,
   scoringVersion,
+  buildProposedEvaluationReport,
+  parseProposedPlatformEvidence,
   type CandidateComparison,
   type DashboardResponse,
   type RankingQuery,
@@ -71,6 +73,13 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
         const evaluationCount = evaluationTotalResult.count ?? 0;
         if (knownEvaluationCount !== evaluationCount) throw new HttpError(409, 'EVALUATION_STATUS_UNSUPPORTED', 'Evaluation rows contain a status outside the supported dashboard contract');
         const rows = (recentResult.data ?? []) as EvaluationRow[];
+        const reportResult = rows.length
+          ? await client.from('evaluations').select('id,evaluation_result').eq('owner_id', auth.userId).in('id', rows.map(({ id }) => id))
+          : { data: [], error: null };
+        const reportSchemaUnavailable = Boolean(reportResult.error && ['42703', 'PGRST204', 'PGRST205'].includes(reportResult.error.code ?? ''));
+        if (reportResult.error && !reportSchemaUnavailable) throw databaseUnavailable();
+        const reportRows = (reportResult.data ?? []) as Array<{ id: string; evaluation_result?: unknown }>;
+        const reportById = new Map(reportRows.map(({ id, evaluation_result }) => [id, evaluation_result]));
         const candidateIds = [...new Set(rows.map(({ candidate_id }) => candidate_id))];
         const candidatesResult = candidateIds.length
           ? await client.from('candidates').select('id,full_name').eq('owner_id', auth.userId).in('id', candidateIds)
@@ -88,9 +97,14 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
             const score = typeof row.overall_score === 'number' ? row.overall_score
               : typeof row.overall_score === 'string' && row.overall_score.trim() !== '' ? Number(row.overall_score) : undefined;
             if (!status.success || !candidateName) return [];
+            const savedResult = evaluationResponseSchema.safeParse(reportById.get(row.id));
+            const proposedReport = savedResult.success && savedResult.data.candidateId === row.candidate_id
+              ? buildProposedEvaluationReport(parseProposedPlatformEvidence(savedResult.data.platformEvidence)) : undefined;
             return [{ id: row.id, candidateId: row.candidate_id, candidateName, status: status.data,
               createdAt: row.created_at, ...(status.data === 'completed' && score !== undefined && Number.isFinite(score) ? { score } : {}),
-              scoringVersion: row.scoring_version }];
+              scoringVersion: row.scoring_version,
+              ...(proposedReport ? { proposedReport } : {}),
+              ...(reportSchemaUnavailable ? { proposedReportUnavailable: true } : {}) }];
           }),
         };
         const result = dashboardResponseSchema.safeParse(payload);

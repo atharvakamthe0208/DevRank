@@ -14,6 +14,7 @@ import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { supabase } from '../../lib/supabase/client';
 import { useAuth } from '../auth/AuthProvider';
 import { comparableRecentEvaluations } from './insights-presentation';
+import { ProposedDashboardReports } from './ProposedDashboardReports';
 import './insights-page.css';
 
 function messageFor(error: unknown) {
@@ -120,6 +121,10 @@ export function InsightsPage() {
         <article><span>Candidates</span><strong>{dashboard.candidateCount}</strong><Link to="/dashboard/candidates">View workspace →</Link></article>
         <article><span>Evaluations</span><strong>{dashboard.evaluationCount}</strong><small>{dashboard.statusCounts.completed ?? 0} completed</small></article>
         <article><span>Need more evidence</span><strong>{dashboard.statusCounts.insufficient_evidence ?? 0}</strong><small>Scores are not inferred when evidence is missing.</small></article>
+      </section>
+      <section className="insights-panel" aria-labelledby="proposed-dashboard-title">
+        <div className="insights-panel-heading"><div><h2 id="proposed-dashboard-title">Proposed rubric report values</h2><p>Recent saved evidence snapshots with draft category indexes. These values never feed active rankings.</p></div></div>
+        <ProposedDashboardReports evaluations={dashboard.recentEvaluations}/>
       </section>
       <section className="insights-panel" aria-labelledby="ranking-title">
         <div className="insights-panel-heading"><div><h2 id="ranking-title">Candidate rankings</h2><p>Only compatible, complete evaluations receive a rank.</p></div><label htmlFor="ranking-role">Role<select id="ranking-role" value={roleId} onChange={(event) => setRoleId(event.target.value as EvaluationRole['id'])}>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label></div>

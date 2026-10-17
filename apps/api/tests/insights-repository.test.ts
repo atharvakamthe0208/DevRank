@@ -95,6 +95,27 @@ describe('insights repository', () => {
     expect(dashboard.recentEvaluations.map(({ candidateName }) => candidateName)).not.toContain('Other owner');
   });
 
+  it('includes proposal report values from owner-scoped saved evidence without changing active dashboard scores', async () => {
+    const saved = {
+      ...result(candidateA),
+      platformEvidence: [{
+        evidenceId: 'github-row:current-year', candidateId: candidateA, source: 'github', evidenceType: 'current_year_contributions',
+        availability: 'partial', observedAt: '2026-10-17T00:00:00.000Z', normalizedValue: { year: 2026, timezone: 'UTC', totalContributions: 44, observedThrough: '2026-10-16T23:59:59.999Z' },
+        verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed', limitations: [],
+        categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions', relation: 'supporting' }],
+      }],
+    };
+    const repo = repository([evaluation({ evaluation_result: saved })], [
+      { id: candidateA, full_name: 'Candidate A', owner_id: ownerId, archived_at: null },
+    ]);
+    const dashboard = await repo.dashboard(auth);
+    expect(dashboard.recentEvaluations[0]?.score).toBe(80);
+    expect(dashboard.recentEvaluations[0]?.proposedReport?.status).toBe('partial');
+    expect(dashboard.recentEvaluations[0]?.proposedReport?.categories.find(({ categoryId }) => categoryId === 'project_portfolio')?.status).toBe('unavailable');
+    expect(dashboard.recentEvaluations[0]?.proposedReport?.categories.find(({ categoryId }) => categoryId === 'current_year_contributions')).toMatchObject({ status: 'partial', metrics: { totalContributions: 44 } });
+    expect(dashboard.recentEvaluations[0]?.proposedReport).not.toHaveProperty('overallScore');
+  });
+
   it('does not omit an unknown persisted status from dashboard totals', async () => {
     const repo = repository([evaluation({ status: 'paused' })]);
     await expect(repo.dashboard(auth)).rejects.toMatchObject({ statusCode: 409, code: 'EVALUATION_STATUS_UNSUPPORTED' });

@@ -152,6 +152,8 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
         normalizedValue: {
           publicRepositoryCount: normalized.publicRepositoryCount,
           followers: normalized.followers, following: normalized.following,
+          repositoriesTruncated: normalized.repositoriesTruncated === true
+            || (typeof normalized.publicRepositoryCount === 'number' && normalized.publicRepositoryCount > repositories.length),
           repositories,
         }, verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
         limitations: [
