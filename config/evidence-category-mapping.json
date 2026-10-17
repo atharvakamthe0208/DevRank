@@ -1,10 +1,10 @@
 {
-  "technical_screen": "technical_skills",
-  "coding_assessment": "problem_solving_dsa",
-  "project": "relevant_project_experience",
-  "work_sample": "practical_assessment_performance",
-  "structured_interview": "communication_skills",
-  "learning_record": "learning_adaptability",
-  "portfolio": "relevant_project_experience",
+  "technical_screen": null,
+  "coding_assessment": null,
+  "project": null,
+  "work_sample": null,
+  "structured_interview": null,
+  "learning_record": null,
+  "portfolio": null,
   "other": null
 }

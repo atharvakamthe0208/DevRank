@@ -1,9 +1,9 @@
-import { proposedRubric, type ProposedRubricCategory } from './proposed-rubric.js';
+import { finalRubric, finalRubricId, proposedRubricId, type ProposedRubricCategory } from './proposed-rubric.js';
 import { platformEvaluationEvidenceSchema, type PlatformEvaluationEvidence } from './platform-data.js';
 import { z } from 'zod';
 
-export type ProposedReportValue = string | number | boolean;
-export type ProposedReportCategory = {
+export type FinalReportValue = string | number | boolean;
+export type FinalReportCategory = {
   categoryId: ProposedRubricCategory;
   displayName: string;
   weight: number;
@@ -11,48 +11,63 @@ export type ProposedReportCategory = {
   status: 'scored' | 'partial' | 'unavailable';
   score?: number;
   weightedPoints?: number;
-  metrics: Record<string, ProposedReportValue>;
+  metrics: Record<string, FinalReportValue>;
   formula: string;
 };
-export type ProposedEvaluationReport = {
-  rubricId: typeof proposedRubric.id;
+export type FinalEvaluationReport = {
+  rubricId: typeof finalRubric.id;
   status: 'complete' | 'partial';
   overallScore?: number;
-  categories: ProposedReportCategory[];
+  categories: FinalReportCategory[];
   notice: string;
 };
+/** Backward-compatible type names for clients compiled against the earlier draft report. */
+export type ProposedReportValue = FinalReportValue;
+export type ProposedReportCategory = FinalReportCategory;
+export type ProposedEvaluationReport = FinalEvaluationReport;
 
-export const proposedReportValueSchema = z.union([z.string(), z.number().finite(), z.boolean()]);
-export const proposedReportCategorySchema = z.object({
+function roundToHundredth(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export const finalReportValueSchema = z.union([z.string(), z.number().finite(), z.boolean()]);
+export const finalReportCategorySchema = z.object({
   categoryId: z.enum(['project_portfolio', 'technical_skills', 'development_activity', 'collaboration', 'current_year_contributions', 'problem_solving_dsa']),
   displayName: z.string().min(1), weight: z.number().min(0).max(100), source: z.enum(['github', 'leetcode']),
   status: z.enum(['scored', 'partial', 'unavailable']), score: z.number().finite().min(0).max(100).optional(),
-  weightedPoints: z.number().finite().min(0).max(100).optional(), metrics: z.record(proposedReportValueSchema), formula: z.string().min(1),
+  weightedPoints: z.number().finite().min(0).max(100).optional(), metrics: z.record(finalReportValueSchema), formula: z.string().min(1),
 }).strict();
-export const proposedEvaluationReportSchema = z.object({
-  rubricId: z.literal(proposedRubric.id), status: z.enum(['complete', 'partial']), overallScore: z.number().finite().min(0).max(100).optional(),
-  categories: z.array(proposedReportCategorySchema).length(6), notice: z.string().min(1),
+export const finalEvaluationReportSchema = z.object({
+  rubricId: z.literal(finalRubric.id), status: z.enum(['complete', 'partial']), overallScore: z.number().finite().min(0).max(100).optional(),
+  categories: z.array(finalReportCategorySchema).length(6), notice: z.string().min(1),
 }).strict().superRefine((report, context) => {
-  if ((report.status === 'complete') !== (report.overallScore !== undefined)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['overallScore'], message: 'A weighted draft total is only present when all categories are scoreable.' });
+  if ((report.status === 'complete') !== (report.overallScore !== undefined)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['overallScore'], message: 'An overall v4 total is only present when all categories are scoreable.' });
   if (report.categories.some(({ status, score, weightedPoints }) => (status === 'scored') !== (score !== undefined)
     || (score === undefined) !== (weightedPoints === undefined))) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'Only complete category evidence may produce an index and weighted points.' });
   if (report.status === 'complete' && report.categories.some(({ status }) => status !== 'scored')) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'A complete weighted total requires all six category indexes.' });
-  const expectedIds = proposedRubric.categories.map(({ id }) => id);
+  const expectedIds = finalRubric.categories.map(({ id }) => id);
   if (new Set(report.categories.map(({ categoryId }) => categoryId)).size !== expectedIds.length
-    || expectedIds.some((id) => !report.categories.some((category) => category.categoryId === id))) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'A report must include each proposal category exactly once.' });
+    || expectedIds.some((id) => !report.categories.some((category) => category.categoryId === id))) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'A report must include each active v4 category exactly once.' });
   for (const item of report.categories) {
-    const canonical = proposedRubric.categories.find(({ id }) => id === item.categoryId);
-    if (!canonical || item.weight !== canonical.proposedWeight || item.source !== canonical.source || item.displayName !== canonical.displayName) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'Report categories must match the reviewed proposal.' });
+    const canonical = finalRubric.categories.find(({ id }) => id === item.categoryId);
+    if (!canonical || item.weight !== canonical.weight || item.source !== canonical.source || item.displayName !== canonical.displayName) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'Report categories must match active v4 policy.' });
     }
     if (item.score !== undefined && item.weightedPoints !== undefined
-      && Math.abs(item.weightedPoints - Math.round(item.score * item.weight) / 100) >= 0.005) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'Weighted points must match the category index and proposed weight.' });
+      && Math.abs(item.weightedPoints - Math.round(item.score * item.weight) / 100) >= 0.005) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categories'], message: 'Weighted points must match the category index and active weight.' });
   }
   if (report.overallScore !== undefined) {
-    const expectedTotal = Math.round(report.categories.reduce((sum, item) => sum + (item.weightedPoints ?? 0), 0) * 100) / 100;
-    if (Math.abs(report.overallScore - expectedTotal) >= 0.005) context.addIssue({ code: z.ZodIssueCode.custom, path: ['overallScore'], message: 'Weighted total must equal the sum of category weighted points.' });
+    // Match the active scorer: multiply category indexes by weights at full
+    // precision, sum once, then round. Per-category weightedPoints are rounded
+    // display values and can differ by a cent when added together.
+    const expectedTotal = roundToHundredth(report.categories.reduce((sum, item) => sum + (item.score ?? 0) * item.weight / 100, 0));
+    if (Math.abs(report.overallScore - expectedTotal) >= 0.005) context.addIssue({ code: z.ZodIssueCode.custom, path: ['overallScore'], message: 'Weighted total must equal the rounded weighted sum of category indexes.' });
   }
 });
+/** Backward-compatible schema aliases; the report is active rubric v4. */
+export const proposedReportValueSchema = finalReportValueSchema;
+export const proposedReportCategorySchema = finalReportCategorySchema;
+export const proposedEvaluationReportSchema = finalEvaluationReportSchema;
 
 export function parseProposedPlatformEvidence(value: unknown): PlatformEvaluationEvidence[] {
   if (!Array.isArray(value)) return [];
@@ -63,7 +78,7 @@ export function parseProposedPlatformEvidence(value: unknown): PlatformEvaluatio
 }
 
 const target = { project_portfolio: 10, technical_skills: 5, development_activity: 250, collaboration: 50, problem_solving_dsa: 300 } as const;
-const proposalNotice = 'Draft evidence index only. It is not an engineering-quality or hiring score, is not approved policy, does not affect active v3 results or rankings, and cannot be compared across different snapshot dates or evidence coverage.';
+const activeRubricNotice = 'Active rubric v4 evidence indexes are deterministic measures of source volume and breadth, not calibrated measures of engineering competence, code quality, or hiring suitability. Missing or partial evidence is not zero. Results should not be compared when snapshot dates or evidence coverage differ. The DSA index caps at 300 difficulty-weighted solved problems; this threshold needs future calibration.';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
@@ -84,14 +99,15 @@ function sumNumericKeys(value: unknown, keys: string[]): { total: number; comple
 }
 
 /**
- * Deterministic, proposal-only normalizations. These indexes summarize evidence volume/breadth,
- * not competence. A complete weighted proposal score is withheld unless every category is scoreable.
+ * Deterministic active-v4 normalizations. These indexes summarize source evidence volume/breadth,
+ * not competence. A complete weighted score is withheld unless every category is scoreable.
  */
-export function buildProposedEvaluationReport(evidence: PlatformEvaluationEvidence[]): ProposedEvaluationReport {
-  const mapped = (id: ProposedRubricCategory) => evidence.filter((item) => item.categoryMappings.some((mapping) => mapping.rubricId === proposedRubric.id && mapping.categoryId === id));
+export function buildFinalEvaluationReport(evidence: PlatformEvaluationEvidence[]): FinalEvaluationReport {
+  const mapped = (id: ProposedRubricCategory) => evidence.filter((item) => item.categoryMappings.some((mapping) =>
+    (mapping.rubricId === finalRubricId || mapping.rubricId === proposedRubricId) && mapping.categoryId === id));
   const firstValue = (id: ProposedRubricCategory, type: PlatformEvaluationEvidence['evidenceType']) => mapped(id).find((item) => item.evidenceType === type);
-  const categories: ProposedReportCategory[] = proposedRubric.categories.map((category) => {
-    const row: ProposedReportCategory = { categoryId: category.id, displayName: category.displayName, weight: category.proposedWeight, source: category.source, status: 'unavailable', metrics: {}, formula: '' };
+  const categories: ProposedReportCategory[] = finalRubric.categories.map((category) => {
+    const row: ProposedReportCategory = { categoryId: category.id, displayName: category.displayName, weight: category.weight, source: category.source, status: 'unavailable', metrics: {}, formula: '' };
     if (category.id === 'project_portfolio') {
       const repo = firstValue(category.id, 'repository_snapshot');
       const count = finiteCount(repo?.normalizedValue.publicRepositoryCount);
@@ -186,19 +202,40 @@ export function buildProposedEvaluationReport(evidence: PlatformEvaluationEviden
       const solved = firstValue(category.id, 'solved_statistics') ?? firstValue(category.id, 'candidate_reported_statistics');
       const contest = firstValue(category.id, 'contest_statistics');
       const stats = record(solved?.normalizedValue.statistics) ?? {};
-      const points = finiteCount(stats.easySolved) !== undefined && finiteCount(stats.mediumSolved) !== undefined && finiteCount(stats.hardSolved) !== undefined
-        ? finiteCount(stats.easySolved)! + 2 * finiteCount(stats.mediumSolved)! + 3 * finiteCount(stats.hardSolved)!
-        : finiteCount(stats.problemsSolved);
+      const difficultyKeys = ['easySolved', 'mediumSolved', 'hardSolved'] as const;
+      const hasDifficultyBreakdown = difficultyKeys.some((key) => stats[key] !== undefined && stats[key] !== null);
+      const difficultyCounts = difficultyKeys.map((key) => finiteCount(stats[key]));
+      const completeDifficultyBreakdown = difficultyCounts.every((value) => value !== undefined);
+      const totalPresent = stats.problemsSolved !== undefined && stats.problemsSolved !== null;
+      const total = finiteCount(stats.problemsSolved);
+      const malformedDifficulty = difficultyKeys.some((key) => stats[key] !== undefined && stats[key] !== null && finiteCount(stats[key]) === undefined);
+      const malformedTotal = totalPresent && total === undefined;
+      const points = completeDifficultyBreakdown
+        ? difficultyCounts[0]! + 2 * difficultyCounts[1]! + 3 * difficultyCounts[2]!
+        : !hasDifficultyBreakdown ? total : undefined;
       if (points !== undefined) {
-        row.metrics.easySolved = finiteCount(stats.easySolved) ?? 'Unavailable';
-        row.metrics.mediumSolved = finiteCount(stats.mediumSolved) ?? 'Unavailable';
-        row.metrics.hardSolved = finiteCount(stats.hardSolved) ?? 'Unavailable';
+        difficultyKeys.forEach((key, index) => {
+          if (difficultyCounts[index] !== undefined) row.metrics[key] = difficultyCounts[index]!;
+        });
         row.metrics.difficultyWeightedSolved = points;
+        row.metrics.scoringBasis = completeDifficultyBreakdown
+          ? 'Difficulty-weighted count (easy=1, medium=2, hard=3)'
+          : 'Provider total fallback (difficulty breakdown unavailable)';
         if (solved?.availability === 'available') {
           row.score = normalizedLog(points, target.problem_solving_dsa);
           row.status = 'scored';
-        } else row.status = 'partial';
-      } else if ((solved && solved.availability === 'partial') || (contest && contest.availability === 'available')) row.status = 'partial';
+        } else if (solved?.availability === 'partial') row.status = 'partial';
+      } else {
+        difficultyKeys.forEach((key, index) => {
+          if (difficultyCounts[index] !== undefined) row.metrics[key] = difficultyCounts[index]!;
+        });
+        if (hasDifficultyBreakdown) row.metrics.difficultyDataStatus = malformedDifficulty
+          ? 'Malformed or partial difficulty breakdown; index withheld'
+          : 'Partial difficulty breakdown; index withheld';
+        if (malformedTotal) row.metrics.totalCountStatus = 'Malformed total count; value omitted';
+        if (solved?.availability === 'partial' || ((hasDifficultyBreakdown || malformedTotal) && solved?.availability === 'available')) row.status = 'partial';
+        else if (contest?.availability === 'available') row.status = 'partial';
+      }
       if (contest?.availability === 'available') {
         const contestStats = record(contest.normalizedValue.statistics) ?? {};
         for (const key of ['contestsAttended', 'contestRating', 'contestGlobalRanking', 'contestTopPercentage']) {
@@ -206,7 +243,7 @@ export function buildProposedEvaluationReport(evidence: PlatformEvaluationEviden
           if (value !== undefined) row.metrics[key] = value;
         }
       }
-      row.formula = `difficulty-weighted solved count (easy=1, medium=2, hard=3), falling back to provider total when difficulty breakdown is absent; log1p(points) / log1p(${target.problem_solving_dsa}), capped at 100. Contest data is context only.`;
+      row.formula = `Active v4 evidence index: 100 × min(1, ln(1 + difficulty-weighted solved count) / ln(301)); easy=1, medium=2, hard=3. Use provider total only when all difficulty fields are absent. The index caps at 100 once count reaches ${target.problem_solving_dsa} weighted solved problems; this threshold requires future calibration. Contest data is context only.`;
     }
     const savedSource = mapped(category.id)[0];
     if (savedSource) row.metrics.sourceCapturedAt = savedSource.observedAt;
@@ -214,11 +251,14 @@ export function buildProposedEvaluationReport(evidence: PlatformEvaluationEviden
     return row;
   });
   const complete = categories.every(({ status, score }) => status === 'scored' && score !== undefined);
-  return proposedEvaluationReportSchema.parse({
-    rubricId: proposedRubric.id,
+  return finalEvaluationReportSchema.parse({
+    rubricId: finalRubric.id,
     status: complete ? 'complete' : 'partial',
-    ...(complete ? { overallScore: Math.round(categories.reduce((sum, category) => sum + (category.weightedPoints ?? 0), 0) * 100) / 100 } : {}),
+    ...(complete ? { overallScore: roundToHundredth(categories.reduce((sum, category) => sum + (category.score ?? 0) * category.weight / 100, 0)) } : {}),
     categories,
-    notice: proposalNotice,
+    notice: activeRubricNotice,
   });
 }
+
+/** @deprecated Use buildFinalEvaluationReport; retained for compatibility with existing callers. */
+export const buildProposedEvaluationReport = buildFinalEvaluationReport;

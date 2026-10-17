@@ -68,13 +68,13 @@ export function EvaluationCreatePage() {
   return <main className="evaluation-page">
     <Link className="back-link" to={`/candidates/${candidate.id}`}>← <span>Back to candidate</span></Link>
     <header className="evaluation-header"><div><span className="eyebrow"><span className="eyebrow-line"/> NEW EVALUATION</span><h1>{candidate.name}</h1><p>{candidate.email || 'Email not provided'} · Candidate profile selected</p></div></header>
-    <section className="evaluation-setup-card"><h2>Choose a saved role profile</h2><p>Evaluation uses this profile’s saved five-category weights. DevRank does not create or approve weights automatically.</p>
-      {profiles.length === 0 ? <div className="evaluation-empty"><h3>No role profiles configured</h3><p>Create a role profile and have its five weights reviewed before evaluating this candidate. No default weights are assumed.</p></div> : <form onSubmit={(event) => void createEvaluation(event)}>
+    <section className="evaluation-setup-card"><h2>Choose a saved role profile</h2><p>Evaluation uses this profile’s saved v4 category weights. New profiles must use the active GitHub + LeetCode categories.</p>
+      {profiles.length === 0 ? <div className="evaluation-empty"><h3>No compatible role profiles</h3><p>Create or reconfigure a role profile with all six active v4 category weights before evaluating this candidate. Historical profiles are not changed automatically.</p></div> : <form onSubmit={(event) => void createEvaluation(event)}>
         <label className="evaluation-select-label">Role profile<select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Select a valid saved profile</option>{profiles.map((profile) => <option key={profile.id} value={profile.id} disabled={!profile.usable}>{profile.usable ? labelRole(profile.name) : `${profile.name} — invalid configuration`}</option>)}</select></label>
         {chosen && chosen.weights && <><div className="role-weight-preview"><h3>Saved category weights</h3><ul>{Object.entries(chosen.weights).map(([key, value]) => <li key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}%</strong></li>)}</ul><p>This profile’s role weights are stored as preliminary; confirm your organization has approved them before use.</p></div><button className="primary-button" type="submit" disabled={submitting}>{submitting ? 'Calculating evaluation…' : 'Calculate evaluation'}</button></>}
         {error && <p className="evaluation-error" role="alert">{error}</p>}
       </form>}
-      {profiles.some((profile) => !profile.usable) && <details className="invalid-role-details"><summary>Some saved profiles are unavailable</summary><p>Only profiles with a supported role name and exactly six valid category weights totaling 100 can be used. Previous five-category profiles must be explicitly updated; no weight is inferred for Communication Skills.</p></details>}
+      {profiles.some((profile) => !profile.usable) && <details className="invalid-role-details"><summary>Some saved profiles are unavailable</summary><p>Only profiles with a supported role name and exactly six active v4 category weights totaling 100 can be used. Historical profile weights are preserved and must be explicitly reconfigured; no category values are inferred.</p></details>}
     </section>
   </main>;
 }

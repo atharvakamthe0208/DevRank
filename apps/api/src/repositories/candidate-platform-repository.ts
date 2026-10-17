@@ -30,6 +30,24 @@ function unavailable(operation: string): never {
 
 type DatabaseFailure = { code?: unknown; message?: unknown; hint?: unknown; status?: unknown };
 
+function safeDatabaseCode(code: unknown): string | undefined {
+  return typeof code === 'string' && /^[A-Z0-9_-]{1,32}$/i.test(code) ? code : undefined;
+}
+
+function safeDatabaseFailureMessage(code: unknown): string {
+  if (typeof code !== 'string') return 'Database request failed before a server error code was returned.';
+  if (code === '42P01') return 'Database relation is missing or unavailable.';
+  if (code === '42703' || code === 'PGRST204') return 'Database column is missing or unavailable.';
+  if (code === '42501') return 'Database permission or row-level security denied the operation.';
+  if (code === '23503') return 'Database foreign-key constraint rejected the operation.';
+  if (code === '23505') return 'Database uniqueness constraint rejected the operation.';
+  if (code === '23514') return 'Database check constraint rejected the operation.';
+  if (code === '23502') return 'Database required-value constraint rejected the operation.';
+  if (/^08[A-Z0-9]{3}$/i.test(code)) return 'Database connection failed.';
+  if (/^PGRST/i.test(code)) return 'PostgREST could not complete the database request.';
+  return 'Database operation failed.';
+}
+
 function safeDiagnostic(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   return value.replace(/[\r\n\t]/g, ' ').replace(/(bearer\s+)[^\s,;]+/gi, '$1[redacted]')
@@ -66,6 +84,9 @@ export function createCandidatePlatformRepository(
     if (env.NODE_ENV === 'development') console.error('DevRank GitHub profile persistence failed', diagnostics);
   },
   getLeetCodeProfile: (profile: string) => Promise<NormalizedLeetCodeProfile> = (profile) => leetCodeAdapter.getProfile(profile),
+  logLeetCodeDatabaseFailure: (diagnostics: Record<string, string>) => void = (diagnostics) => {
+    console.error('DevRank LeetCode database operation failed', diagnostics);
+  },
 ): CandidatePlatformRepository {
   return {
     async getLatest(auth, candidateId) {
@@ -282,16 +303,22 @@ export function createCandidatePlatformRepository(
       try {
         const { data: candidate, error } = await client.from('candidates')
           .select('id').eq('id', candidateId).eq('owner_id', auth.userId).is('archived_at', null).maybeSingle();
-        if (error) unavailable('verify the candidate');
+        if (error) {
+          const code = safeDatabaseCode(error.code);
+          logLeetCodeDatabaseFailure({ operation: 'candidate_lookup', ...(code ? { code } : {}), message: safeDatabaseFailureMessage(code) });
+          unavailable('verify the candidate');
+        }
         if (!candidate) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       } catch (error) {
         if (error instanceof HttpError) throw error;
+        logLeetCodeDatabaseFailure({ operation: 'candidate_lookup', message: safeDatabaseFailureMessage(undefined) });
         unavailable('verify the candidate');
       }
 
       // Fetch and validate before inserting so a failed refresh never replaces the last saved snapshot.
       const profileData = await getLeetCodeProfile(profile);
       const syncedAt = new Date().toISOString();
+      let saved: { id: string; candidate_id: string; observed_at: string | null };
       try {
         const { data, error } = await client.from('platform_evidence').insert({
           candidate_id: candidateId,
@@ -302,17 +329,31 @@ export function createCandidatePlatformRepository(
           normalized_evidence: profileData,
           observed_at: syncedAt,
         }).select('id,candidate_id,observed_at').single();
-        if (error || !data) unavailable('save LeetCode profile data');
-        return leetCodeSyncResponseSchema.parse({
-          id: data.id,
-          candidateId: data.candidate_id,
-          ...profileData,
-          availability: 'available',
-          syncedAt: data.observed_at ?? syncedAt,
-        });
+        if (error) {
+          const code = safeDatabaseCode(error.code);
+          logLeetCodeDatabaseFailure({ operation: 'evidence_insert', ...(code ? { code } : {}), message: safeDatabaseFailureMessage(code) });
+          unavailable('save LeetCode profile data');
+        }
+        if (!data) {
+          logLeetCodeDatabaseFailure({ operation: 'evidence_insert', message: 'Database returned no saved row after the insert.' });
+          unavailable('save LeetCode profile data');
+        }
+        saved = data;
       } catch (error) {
         if (error instanceof HttpError) throw error;
+        logLeetCodeDatabaseFailure({ operation: 'evidence_insert', message: safeDatabaseFailureMessage(undefined) });
         unavailable('save LeetCode profile data');
+      }
+      try {
+        return leetCodeSyncResponseSchema.parse({
+          id: saved.id,
+          candidateId: saved.candidate_id,
+          ...profileData,
+          availability: 'available',
+          syncedAt: saved.observed_at ?? syncedAt,
+        });
+      } catch {
+        throw new HttpError(502, 'LEETCODE_RESPONSE_INVALID', 'LeetCode data was saved, but the API could not format the saved response. Reload candidate data.');
       }
     },
   };

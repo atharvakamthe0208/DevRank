@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { githubSyncResponseSchema } from './github.js';
 import { scoringCategorySchema } from './scoring.js';
-import { proposedRubricCategorySchema, proposedRubricId } from './proposed-rubric.js';
+import { finalRubricId, proposedRubricCategorySchema, proposedRubricId } from './proposed-rubric.js';
 
 export const platformNameSchema = z.enum(['github', 'leetcode', 'hackerrank', 'candidate_provided']);
 export const sourceAvailabilitySchema = z.enum(['available', 'unavailable', 'not_provided', 'error']);
@@ -27,11 +27,11 @@ export const platformEvaluationEvidenceSchema = z.object({
   freshness: z.literal('unassessed'),
   limitations: z.array(z.string().min(1)),
   categoryMappings: z.array(z.object({
-    rubricId: z.literal(proposedRubricId).optional(),
+    rubricId: z.enum([proposedRubricId, finalRubricId]).optional(),
     categoryId: z.union([scoringCategorySchema, proposedRubricCategorySchema]),
     relation: z.enum(['supporting', 'not_appropriate']),
   }).strict().superRefine((mapping, context) => {
-    if (mapping.rubricId === proposedRubricId) {
+    if (mapping.rubricId === proposedRubricId || mapping.rubricId === finalRubricId) {
       if (!proposedRubricCategorySchema.safeParse(mapping.categoryId).success) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryId'], message: 'Category is outside the proposed rubric.' });
     } else if (!scoringCategorySchema.safeParse(mapping.categoryId).success) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryId'], message: 'Historical/current scoring mappings must use a known scoring category.' });
@@ -134,7 +134,9 @@ export const leetCodeSyncResponseSchema = z.object({
   handle: z.string().min(1).max(100),
   profileUrl: z.string().url(),
   statistics: leetCodeSyncStatisticsSchema,
-  syncedAt: z.string().datetime(),
+  // PostgREST may serialize timestamptz with an explicit offset (for example +00:00).
+  // Accept any valid ISO offset while retaining strict datetime validation.
+  syncedAt: z.string().datetime({ offset: true }),
 }).strict();
 export type LeetCodeSyncResponse = z.infer<typeof leetCodeSyncResponseSchema>;
 

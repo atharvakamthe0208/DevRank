@@ -7,8 +7,6 @@ import {
   roleWeightsSchema,
   scoringCategories,
   scoringVersion,
-  buildProposedEvaluationReport,
-  parseProposedPlatformEvidence,
   type CandidateComparison,
   type DashboardResponse,
   type RankingQuery,
@@ -98,13 +96,13 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
               : typeof row.overall_score === 'string' && row.overall_score.trim() !== '' ? Number(row.overall_score) : undefined;
             if (!status.success || !candidateName) return [];
             const savedResult = evaluationResponseSchema.safeParse(reportById.get(row.id));
-            const proposedReport = savedResult.success && savedResult.data.candidateId === row.candidate_id
-              ? buildProposedEvaluationReport(parseProposedPlatformEvidence(savedResult.data.platformEvidence)) : undefined;
+            const finalReport = savedResult.success && savedResult.data.candidateId === row.candidate_id
+              ? savedResult.data.finalReport : undefined;
             return [{ id: row.id, candidateId: row.candidate_id, candidateName, status: status.data,
               createdAt: row.created_at, ...(status.data === 'completed' && score !== undefined && Number.isFinite(score) ? { score } : {}),
               scoringVersion: row.scoring_version,
-              ...(proposedReport ? { proposedReport } : {}),
-              ...(reportSchemaUnavailable ? { proposedReportUnavailable: true } : {}) }];
+              ...(finalReport ? { finalReport } : {}),
+              ...(reportSchemaUnavailable || (savedResult.success && !savedResult.data.finalReport) ? { finalReportUnavailable: true } : {}) }];
           }),
         };
         const result = dashboardResponseSchema.safeParse(payload);

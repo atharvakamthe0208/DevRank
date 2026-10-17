@@ -13,7 +13,9 @@ import {
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
+import { FinalEvaluationReport } from '../evaluations/ProposedEvaluationReport';
 import './evaluation-page.css';
+import '../evaluations/evaluation.css';
 
 type PageState = 'loading' | 'ready' | 'error';
 
@@ -155,24 +157,24 @@ export function EvaluationPage() {
   }
 
   return <div className="evaluation-page">
-    <section className="evaluation-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE ASSESSMENT</span><h1>Evaluation</h1><p className="page-subtitle">Review evidence against a role profile using DevRank’s deterministic scoring rules.</p></div><Link className="secondary-button evaluation-back-link" to="/dashboard/candidates">View candidates</Link></section>
+    <section className="evaluation-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE ASSESSMENT</span><h1>Evaluation</h1><p className="page-subtitle">Evaluate saved GitHub and LeetCode evidence using the active six-category v4 rubric.</p></div><Link className="secondary-button evaluation-back-link" to="/dashboard/candidates">View candidates</Link></section>
     {pageState === 'loading' ? <section className="evaluation-panel evaluation-state" role="status">Loading candidates and supported roles…</section> : pageState === 'error' ? <section className="evaluation-panel evaluation-state" role="alert"><h2>Could not load evaluation setup</h2><p>{loadError}</p><button className="secondary-button" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></section> : <>
       <form className="evaluation-panel evaluation-form" onSubmit={(event) => void runEvaluation(event)}>
-        <div className="evaluation-panel-heading"><div><h2>Choose an evaluation</h2><p>Select a candidate and the role you’re assessing them for.</p></div><span className="evaluation-rule-tag">Deterministic scoring</span></div>
+        <div className="evaluation-panel-heading"><div><h2>Run final rubric evaluation</h2><p>Select a candidate and role. Scores use the candidate’s saved provider snapshots.</p></div><span className="evaluation-rule-tag">Active rubric · v4</span></div>
         {candidates.length === 0 ? <div className="evaluation-empty"><h3>No candidates available</h3><p>Add a candidate before starting an evaluation.</p><Link className="primary-button link-button" to="/candidates/new">Add candidate</Link></div> : <div className="evaluation-select-grid">
           <label htmlFor="evaluation-candidate">Candidate<select id="evaluation-candidate" required disabled={running} value={candidateId} onChange={(event) => { setCandidateId(event.target.value); setResult(null); setRunError(''); }}><option value="">Choose a candidate</option>{candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></label>
           <label htmlFor="evaluation-role">Role<select id="evaluation-role" required disabled={running} value={roleId} onChange={(event) => { setRoleId(event.target.value as EvaluationRole['id']); setResult(null); setRunError(''); }}><option value="">Choose a role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label>
         </div>}
-        {candidates.length > 0 && <div className="evaluation-form-footer"><p>Role weights are preliminary and require review before hiring use.</p><button className="primary-button" type="submit" disabled={running || !candidateId || !roleId}>{running ? 'Running evaluation…' : 'Run Evaluation'}</button></div>}
+        {candidates.length > 0 && <div className="evaluation-form-footer"><p>Weights: Project Portfolio 20%, Technical Skills 20%, Development Activity 15%, Collaboration 10%, Current-Year Contributions 10%, DSA &amp; Problem-Solving 25%.</p><button className="primary-button" type="submit" disabled={running || !candidateId || !roleId}>{running ? 'Running evaluation…' : 'Run Evaluation'}</button></div>}
         {running && <p className="evaluation-progress" role="status">Verifying candidate access and calculating available evidence…</p>}
         {runError && <p className="form-feedback form-feedback-error" role="alert">{runError}</p>}
       </form>
-      {result && <EvaluationResult result={result} analysis={analysis} analysisLoading={analysisLoading} analysisError={analysisError} onAnalyze={() => void loadAiAnalysis()}/>}
+      {result && <EvaluationRunResult result={result} analysis={analysis} analysisLoading={analysisLoading} analysisError={analysisError} onAnalyze={() => void loadAiAnalysis()}/>}
     </>}
   </div>;
 }
 
-function EvaluationResult({ result, analysis, analysisLoading, analysisError, onAnalyze }: {
+export function EvaluationRunResult({ result, analysis, analysisLoading, analysisError, onAnalyze }: {
   result: EvaluationRunResponse;
   analysis: AiAnalysisResponse | null;
   analysisLoading: boolean;
@@ -180,11 +182,16 @@ function EvaluationResult({ result, analysis, analysisLoading, analysisError, on
   onAnalyze: () => void;
 }) {
   const evaluation = result.evaluation;
+  const finalReport = evaluation.finalReport;
   return <section className="evaluation-results" aria-labelledby="evaluation-results-title">
     <div className="evaluation-result-top"><div><span className="eyebrow"><span className="eyebrow-line"/> EVALUATION RESULT</span><h2 id="evaluation-results-title">{result.candidate.name}</h2><p>{result.role.displayName} · Evaluated {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(result.evaluatedAt))}</p></div><div className={`overall-score${evaluation.overallScore === undefined ? ' is-pending' : ''}`}><span>Overall score</span><strong>{evaluation.overallScore === undefined ? '—' : evaluation.overallScore}</strong><small>{evaluation.overallScore === undefined ? 'Insufficient evidence' : 'out of 100'}</small></div></div>
-    <div className="evaluation-categories">{evaluation.categoryScores.map((category) => <article className="evaluation-category" key={category.categoryId}><div className="evaluation-category-heading"><h3>{category.displayName}</h3><strong>{category.score === undefined ? 'Not scored' : `${category.score} / 100`}</strong></div>{category.score !== undefined && <progress max="100" value={category.score} aria-label={`${category.displayName} score ${category.score} out of 100`}/>}<p>{category.explanation}</p><small>{category.status === 'scored' ? `${category.evidenceRefs.length} supporting evidence item${category.evidenceRefs.length === 1 ? '' : 's'}` : 'Insufficient evidence'}</small></article>)}</div>
+    {finalReport ? <FinalEvaluationReport report={finalReport} title="Final GitHub + LeetCode evaluation report · v4"/> : <p className="evaluation-notice" role="status">The saved v4 report snapshot is unavailable. Run a new evaluation to create a final report from the currently saved platform evidence.</p>}
+    <section aria-labelledby="active-v4-categories-title">
+      <div className="evaluation-section-heading"><div><h2 id="active-v4-categories-title">Final GitHub + LeetCode rubric · v4</h2><p>These deterministic indexes use the saved GitHub and LeetCode snapshots shown in this result. Missing or partial data is not scored as zero.</p></div></div>
+      <div className="evaluation-categories">{evaluation.categoryScores.map((category) => <article className="evaluation-category" key={category.categoryId}><div className="evaluation-category-heading"><h3>{category.displayName}</h3><strong>{category.score === undefined ? 'Not scored' : `${category.score} / 100`}</strong></div>{category.score !== undefined && <progress max="100" value={category.score} aria-label={`${category.displayName} score ${category.score} out of 100`}/>}<p>{category.explanation}</p><small>{category.status === 'scored' ? `${category.evidenceRefs.length} supporting evidence item${category.evidenceRefs.length === 1 ? '' : 's'}` : 'Insufficient evidence'}</small></article>)}</div>
+    </section>
     <div className="evaluation-limitations"><h3>Evidence limitations</h3><ul>{result.evidenceLimitations.map((item) => <li key={item}>{item}</li>)}</ul><p>{evaluation.calculationExplanation}</p></div>
-    <p className="evaluation-disclaimer">{evaluation.decisionSupportNotice} Role weights are preliminary and have not been approved as hiring criteria.</p>
+    <p className="evaluation-disclaimer">{evaluation.decisionSupportNotice} The v4 indexes measure source volume and breadth, not engineering quality or candidate identity.</p>
     <section className="ai-analysis" aria-labelledby="ai-analysis-title">
       <div className="ai-analysis-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> EVIDENCE-GROUNDED EXPLANATION</span><h3 id="ai-analysis-title">AI analysis</h3><p>Explanatory support only. The persisted evaluation scores remain authoritative.</p></div><button className="secondary-button" type="button" onClick={onAnalyze} disabled={analysisLoading}>{analysisLoading ? 'Analyzing…' : analysis ? 'Regenerate analysis' : 'Generate AI analysis'}</button></div>
       {analysisLoading && <p className="ai-analysis-status" role="status">Reviewing the saved evaluation and its supporting evidence…</p>}

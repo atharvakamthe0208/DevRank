@@ -17,8 +17,8 @@ export const dashboardResponseSchema = z.object({
     createdAt: z.string().datetime({ offset: true }),
     score: z.number().finite().min(0).max(100).optional(),
     scoringVersion: z.string().nullable(),
-    proposedReport: proposedEvaluationReportSchema.optional(),
-    proposedReportUnavailable: z.boolean().optional(),
+    finalReport: proposedEvaluationReportSchema.optional(),
+    finalReportUnavailable: z.boolean().optional(),
   }).strict()).max(10),
 }).strict();
 

@@ -1,26 +1,28 @@
-# Proposed GitHub + LeetCode report
+# Final GitHub + LeetCode evaluation report · v4
 
-The evaluation detail page and Insights dashboard can show a **draft evidence index** derived from the platform evidence saved with each evaluation. The proposed category weights are applied only to this separately labeled report. This report does not change active v3 scoring, saved v1/v2/v3 snapshots, comparisons, rankings, or hiring decisions.
+The evaluation detail page and Insights dashboard show a final v4 report derived from the saved platform evidence snapshot. The report is persisted with each evaluation result and is never refreshed from providers while rendering. Later syncs require a new evaluation to affect a result.
 
-Each report is generated from that evaluation's immutable evidence snapshot. Syncing a platform later does not rewrite an existing evaluation; run a new evaluation to capture newly synced values.
+## Deterministic formulas
 
-The dashboard reads only the latest ten evaluation rows already scoped to the authenticated owner. The additional snapshot lookup is also filtered by that owner and those evaluation IDs. If the result column is unavailable in a local deployment, the regular dashboard remains usable and proposal values are labeled unavailable.
+These formulas create deterministic source-volume and breadth indexes. They are not calibrated competency, code-quality, identity, or hiring-suitability scores. Snapshot dates and evidence coverage matter when comparing values.
 
-## Deterministic draft formulas
-
-These formulas are transparent draft normalizations of evidence volume or metadata. They are not calibrated competency scores, have no benchmark validation, and must not be used to infer code quality, engineering competence, candidate identity, or hiring suitability. Snapshots from different dates or with different coverage are not comparable.
-
-| Proposed category | Draft evidence index | Required source coverage |
+| Category | Active index | Required source coverage |
 | --- | --- | --- |
-| Project Portfolio | `100 × min(1, ln(1 + public repository count) / ln(11))` | Complete GitHub repository snapshot. This measures quantity only; it does not judge role relevance or quality. Stars/forks are excluded. |
-| Technical Skills | `100 × min(1, distinct observed repository languages / 5)` | Complete repository snapshot with at least one language. Language breadth is not proficiency. |
-| Development Activity | `100 × min(1, ln(1 + commit contributions) / ln(251))` | Complete attributable commit activity. Commit volume is not quality. |
-| Collaboration | Mean of the three indexes `100 × min(1, ln(1 + count) / ln(51))` for pull requests opened, issues opened, and reviews submitted | All three activity counts must be present in a complete response. The counts remain separate; none is substituted for missing data. |
-| Current-Year Contributions | `100 × active observed UTC weeks / observed UTC weeks` | Complete contribution-calendar snapshot with both week counts. This scores distribution only; the calendar total and type breakdowns are displayed as context, never added or scored here, avoiding a second score for commit volume already used by Development Activity. |
-| DSA & Problem-Solving | `100 × min(1, ln(1 + difficulty-weighted solved count) / ln(301))`; easy=1, medium=2, hard=3. If the provider gives only a total, that total is used as the fallback count. | Complete LeetCode solved snapshot. Contest metrics are shown as context and are not included in the formula. |
+| Project Portfolio | `100 × min(1, ln(1 + public repository count) / ln(11))` | Complete GitHub repository snapshot. Quantity proxy only; no role relevance or quality inference. Stars/forks excluded. |
+| Technical Skills | `100 × min(1, distinct observed repository languages / 5)` | Complete, untruncated repository snapshot with language metadata. Breadth is not proficiency. |
+| Development Activity | `100 × min(1, ln(1 + commit contributions) / ln(251))` | Complete attributable commit activity. Volume is not quality. |
+| Collaboration | Mean of `100 × min(1, ln(1 + count) / ln(51))` for pull requests opened, issues opened, and reviews submitted | All three counts in a complete response. Counts stay separate; missing signals are not substituted. |
+| Current-Year Contributions | `100 × active observed UTC weeks / observed UTC weeks` | Complete contribution-calendar snapshot with both week counts. Calendar/type totals are context, not extra scored volume. |
+| DSA & Problem-Solving | `100 × min(1, ln(1 + difficulty-weighted solved count) / ln(301))`; easy=1, medium=2, hard=3 | Complete LeetCode solved snapshot. If all difficulty counts are absent, provider total is used and labeled as a fallback. Contest metrics are context only. |
 
-Category index values are rounded to two decimals. Weighted points are `index × proposed weight / 100`. The draft weighted total is the sum of weighted points only when all six categories have complete, scoreable evidence. A missing or partial category is never converted to zero, and the remaining weights are never renormalized.
+Category indexes are rounded to two decimals. Each displayed weighted-points value is `index × category weight / 100`, rounded to two decimals. The overall score matches the active scorer: it sums the full-precision products of each rounded category index and its weight, then rounds the aggregate once to two decimals, only when all six categories have complete scoreable evidence. Because displayed category points are rounded individually, their displayed sum can differ from the overall score by a cent. Missing and partial values are never converted to zero, and remaining weights are never renormalized.
 
-The report also displays available source values such as repository names, active commit days/weeks, active contribution weeks, per-week average, and contribution-type totals. Calendar totals and type totals overlap: they are kept as separate fields and never summed into another metric. Development Activity scores commit volume; Current-Year Contributions scores active-week distribution, so the commit total is not scored twice.
+The DSA index reaches 100 at 300 difficulty-weighted solved problems and remains capped above that threshold (100 easy + 92 medium + 16 hard = 332 and yields 100). The 300-point cap requires future calibration. It is an evidence-volume index, not a competency score.
 
-Platform snapshots remain unverified and have unassessed freshness. The report shows source values and category coverage beside the formula. A complete mathematical result does not validate these draft thresholds as hiring policy; approval and empirical validation would be required before any product or policy activation.
+## Evidence shown beside the indexes
+
+The report includes available source values such as repository names, languages, active commit days/weeks, active contribution weeks, contribution totals/types, LeetCode easy/medium/hard counts, and capture times. Contribution-calendar totals and the separate type totals overlap; they are never summed together. Development Activity uses commit-volume patterns while Current-Year Contributions scores active-week distribution, preventing a second calendar-volume score.
+
+GitHub/LeetCode snapshots remain unverified and freshness is unassessed. Candidate-reported LeetCode values are separate from provider-fetched values; provider evidence is preferred for the DSA index when available. A mathematically complete report does not establish candidate identity, code quality, engineering competence, or hiring suitability.
+
+Dashboard and saved-evaluation detail pages render the snapshot stored on that evaluation. Historical v1/v2/v3 evaluation results remain unchanged and use their historical categories. The active v4 rubric does not recalculate those records.

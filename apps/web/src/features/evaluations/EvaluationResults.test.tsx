@@ -1,18 +1,18 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { candidateSchema, evaluationResponseSchema, persistedEvaluationSchema, scoringCategories, type EvaluationResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
+import { candidateSchema, evaluationResponseSchema, persistedEvaluationReadSchema, persistedEvaluationSchema, scoringCategories, type EvaluationResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
 import { EvaluationResults } from './EvaluationResults';
 import { LegacyEvaluationResults } from './LegacyEvaluationResults';
 
 const candidate = candidateSchema.parse({ id: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', name: 'Test Candidate', email: 'test@example.com', createdAt: '2026-10-14T00:00:00.000Z', updatedAt: '2026-10-14T00:00:00.000Z' });
-const weights = { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 };
+const weights = { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 };
 
 function evaluation(complete: boolean): PersistedEvaluation & { result: EvaluationResponse } {
   const evidence = scoringCategories.map((category, index) => ({ evidenceId: `evidence-${index}`, evidenceType: 'technical_screen' as const, source: `Assessment ${index + 1}`, description: `Evidence for ${category.displayName}`, verificationStatus: 'verified' as const, categoryId: category.id, normalizedValue: 80 + index, availability: 'available' as const }));
   const categoryScores = scoringCategories.map((category, index) => ({ categoryId: category.id, displayName: category.displayName, ...(complete || index < 2 ? { score: 80 + index, status: 'scored' as const, evidenceRefs: [`evidence-${index}`] } : { status: 'insufficient_evidence' as const, evidenceRefs: [] }), explanation: complete || index < 2 ? `Score for ${category.displayName}.` : `No normalized evidence for ${category.displayName}.` }));
   const result = evaluationResponseSchema.parse({
-    schemaVersion: '3.0.0', scoringVersion: '3.0.0', candidateId: candidate.id, targetRole: 'software_developer',
+    schemaVersion: '4.0.0', scoringVersion: '4.0.0', candidateId: candidate.id, targetRole: 'software_developer',
     ...(complete ? { overallScore: 83.45 } : {}), categoryScores, roleWeightsUsed: weights,
     evidence: complete ? evidence : evidence.slice(0, 2), confidence: 0.8, strengths: [], skillGaps: [], recommendations: [],
     missingEvidence: complete ? [] : scoringCategories.slice(2).map(({ id }) => id),
@@ -26,16 +26,18 @@ function evaluation(complete: boolean): PersistedEvaluation & { result: Evaluati
 }
 
 describe('evaluation result view', () => {
-  it('renders all six active categories, real scores, progress indicators, and deterministic overall score', () => {
+  it('renders all six active v4 categories, scores, progress indicators, and deterministic overall score', () => {
     const saved = evaluation(true);
     const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result: saved.result } }));
-    for (const label of ['Technical Skills', 'Problem-Solving / DSA', 'Relevant Project Experience', 'Practical Assessment Performance', 'Communication Skills', 'Learning &amp; Adaptability']) expect(html).toContain(label);
+    for (const label of ['Project Portfolio', 'Technical Skills', 'Development Activity', 'Collaboration', 'Current-Year Contributions', 'DSA &amp; Problem-Solving']) expect(html).toContain(label);
     expect(html).toContain('83.45');
+    expect(html).toContain('Active GitHub + LeetCode evaluation');
+    expect(html).toContain('Final v4 GitHub + LeetCode rubric');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).not.toContain('AI evidence summary');
     expect(html).toContain('Project Portfolio');
-    expect(html).not.toContain('data-category="project_portfolio"');
-    expect(html).toContain('Communication Skills');
+    expect(html).toContain('data-category="project_portfolio"');
+    expect(html).not.toContain('Communication Skills');
   });
 
   it('shows missing evidence without a zero score or false overall result', () => {
@@ -56,16 +58,15 @@ describe('evaluation result view', () => {
       availability: 'partial', observedAt: '2026-10-14T12:00:00.000Z', normalizedValue: { year: 2026, timezone: 'UTC', totalContributions: 44 },
       verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
       limitations: ['Contribution volume does not establish engineering competence.'],
-      categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions', relation: 'supporting' }],
+      categoryMappings: [{ rubricId: 'github_leetcode_v4', categoryId: 'current_year_contributions', relation: 'supporting' }],
     }] });
     const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result } }));
     expect(html).toContain('Current-Year Contributions');
-    expect(html).toContain('Draft evidence index');
-    expect(html).toContain('not used by active v3');
+    expect(html).toContain('Current-Year Contributions; no additional score is inferred');
     expect(html).toContain('44');
     expect(html).toContain('Current-Year Contributions');
     expect(html).toContain('44');
-    expect(html).toContain('Weighted total withheld');
+    expect(html).toContain('Overall score');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).toContain('83.45');
   });
@@ -91,5 +92,11 @@ describe('evaluation result view', () => {
     expect(html).toContain('Not calculated');
     expect(html.match(/class="evaluation-category-card"/g)).toHaveLength(6);
     expect(html).not.toContain('<progress');
+
+    const v3Historical = persistedEvaluationReadSchema.parse({ ...historical, result: { ...historical.result, schemaVersion: '3.0.0', scoringVersion: '3.0.0' } });
+    const v3Html = renderToStaticMarkup(createElement(LegacyEvaluationResults, { candidate, evaluation: v3Historical as Exclude<PersistedEvaluationRead, PersistedEvaluation> }));
+    expect(v3Html).toContain('HISTORICAL EVALUATION · V3');
+    expect(v3Html).toContain('Communication Skills');
+    expect(v3Html).not.toContain('Final GitHub + LeetCode evaluation report');
   });
 });

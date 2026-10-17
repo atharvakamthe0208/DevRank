@@ -1,16 +1,16 @@
-import type { ProposedEvaluationReport } from '@devrank/contracts';
+import type { FinalEvaluationReport } from '@devrank/contracts';
 
 function formatMetric(name: string): string {
   return name.replace(/([A-Z])/g, ' $1').replaceAll('_', ' ').replace(/^./, (value) => value.toUpperCase());
 }
 
-export function ProposedEvaluationReport({ report, title = 'Proposed GitHub + LeetCode evaluation report' }: {
-  report: ProposedEvaluationReport;
+export function FinalEvaluationReport({ report, title = 'GitHub + LeetCode evaluation report · v4' }: {
+  report: FinalEvaluationReport;
   title?: string;
 }) {
   return <section className="proposed-evaluation-report" aria-label={title}>
-    <div className="proposed-report-heading"><div><h2>{title}</h2><p>Proposal-only evidence index · weights are not active policy and this score does not affect v3 results or rankings.</p></div>
-      <strong>{report.overallScore === undefined ? 'Weighted total withheld' : `Draft weighted index ${report.overallScore} / 100`}</strong></div>
+    <div className="proposed-report-heading"><div><h2>{title}</h2><p>Active v4 deterministic evidence index · these source-volume and breadth measures are not calibrated measures of engineering competence or hiring suitability.</p></div>
+      <strong>{report.overallScore === undefined ? 'Overall score withheld' : `Overall index ${report.overallScore} / 100`}</strong></div>
     <p className="proposed-report-notice">{report.notice}</p>
     <div className="proposed-report-grid">{report.categories.map((category) => <article className="proposed-report-card" key={category.categoryId}>
       <div className="proposed-report-card-heading"><h3>{category.displayName}</h3><span>{category.weight}% weight</span></div>
@@ -21,3 +21,6 @@ export function ProposedEvaluationReport({ report, title = 'Proposed GitHub + Le
     </article>)}</div>
   </section>;
 }
+
+/** @deprecated Use FinalEvaluationReport. */
+export const ProposedEvaluationReport = FinalEvaluationReport;

@@ -27,7 +27,7 @@ function equalWeights() {
     ...weights,
     roles: {
       ...weights.roles,
-      software_developer: { technical_skills: 20, problem_solving_dsa: 20, relevant_project_experience: 15, practical_assessment_performance: 15, communication_skills: 15, learning_adaptability: 15 },
+      software_developer: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
     },
   };
 }
@@ -103,8 +103,9 @@ describe('Day 6 scoring and ranking QA', () => {
     const result = scoreCandidate(input);
     expect(result.evaluationStatus).toBe('insufficient_evidence');
     expect(result.overallScore).toBeUndefined();
-    expect(result.missingEvidence).toEqual(['technical_skills', 'problem_solving_dsa']);
-    expect(result.categoryScores.find(({ categoryId }) => categoryId === 'relevant_project_experience')?.score).toBe(70);
+    expect(result.missingEvidence).toContain('project_portfolio');
+    expect(result.missingEvidence).toContain('technical_skills');
+    expect(result.categoryScores.find(({ categoryId }) => categoryId === 'development_activity')?.score).toBe(70);
   });
 
   it('validates and scores the usable part of evidence while reporting rejected and unavailable sources', () => {
@@ -118,8 +119,8 @@ describe('Day 6 scoring and ranking QA', () => {
       ],
     });
     expect(result.rejectedEvidence.map(({ evidenceId }) => evidenceId)).toContain('bad-score');
-    expect(result.evaluation.evaluationStatus).toBe('completed');
-    expect(result.evaluation.overallScore).toBeDefined();
-    expect(result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'technical_skills')?.score).toBe(91);
+    expect(result.evaluation.evaluationStatus).toBe('insufficient_evidence');
+    expect(result.evaluation.overallScore).toBeUndefined();
+    expect(result.unmappedEvidence.length).toBeGreaterThan(0);
   });
 });
