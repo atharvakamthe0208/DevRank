@@ -54,7 +54,7 @@ export function createCandidatesRouter(
   );
   router.get('/:id', validateParams(candidateIdParamsSchema), controller.get);
   router.patch('/:id', validateParams(candidateIdParamsSchema), validateBody(candidateUpdateSchema), controller.update);
-  router.delete('/:id', validateParams(candidateIdParamsSchema), controller.archive);
+  router.delete('/:id', validateParams(candidateIdParamsSchema), controller.delete);
   return router;
 }
 

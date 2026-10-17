@@ -28,7 +28,7 @@ All endpoints are under `/api/candidates` and require a valid bearer token.
 | `GET /api/candidates?page=1&pageSize=20` | List active records for that owner, newest first with stable ID tie-break | `200` with `{ items, page, pageSize, total }` |
 | `GET /api/candidates/:id` | Read one active record owned by the caller | `200` with candidate object |
 | `PATCH /api/candidates/:id` | Update supported fields only | `200` with updated candidate object |
-| `DELETE /api/candidates/:id` | Archive the record; related evidence and evaluation history are retained | `204` with no body |
+| `DELETE /api/candidates/:id` | Permanently delete the owner’s candidate, saved platform evidence, evaluations, category scores, AI analyses, and comparison membership. Other recruiters’ records are inaccessible. | `204` with no body; `404` when the candidate is not visible to the caller |
 
 Create request example:
 
@@ -43,6 +43,8 @@ Create request example:
 ```
 
 The response candidate includes `id`, `name`, optional `email` and platform usernames, `createdAt`, and `updatedAt`; it never includes `owner_id`. Candidate storage uses the existing `owner_id` column (the verified Supabase Auth user ID), rather than introducing a duplicate `created_by` column. Platform inputs are usernames, not URLs. Name is trimmed and limited to 120 characters; email is validated; usernames are trimmed, limited to 100 characters, and accept only letters, digits, `_`, `.`, and `-`. Page starts at 1 and `pageSize` is 1–100. Unknown fields are rejected; `id`, `owner_id`, and `created_by` are not writable.
+
+Candidate deletion is permanent and requires an explicit confirmation in the candidate list. Its database function runs as the caller (`SECURITY INVOKER`) and remains subject to the existing approved-recruiter, owner-scoped RLS policies. It first removes the candidate’s comparison membership rows to satisfy the restrictive comparison-to-evaluation foreign key, then deletes the candidate; existing cascading foreign keys remove evidence and evaluation-dependent records. Comparison containers are retained. Deploy the candidate-deletion migration before using this endpoint; do not substitute a service-role client or weaken RLS if the migration is unavailable.
 
 The existing contracts do not establish a supported role list or `targetRole` field, so candidate CRUD does not add one. Role assignment stays in role profiles/evaluations until the team agrees on its contract. All request/response schemas live in `packages/contracts/src/candidate*.ts`.
 

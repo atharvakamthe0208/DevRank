@@ -65,7 +65,7 @@ All listed protected application endpoints require bearer authentication. Recrui
 | `POST /api/candidates` | Create candidate for the verified owner. |
 | `GET /api/candidates/:id` | Owner-scoped candidate details. |
 | `PATCH /api/candidates/:id` | Update allowed candidate fields. |
-| `DELETE /api/candidates/:id` | Archive candidate, retaining history. |
+| `DELETE /api/candidates/:id` | Permanently delete an owner-scoped candidate and dependent evidence/evaluations after the candidate-deletion migration is deployed. |
 | `GET /api/candidates/:id/platform-data` | Candidate's latest platform evidence. |
 | `POST /api/candidates/:id/platform-data` | Add validated candidate-provided LeetCode/HackerRank data. |
 | `POST /api/candidates/:id/platform-data/github-sync` | Retrieve public GitHub profile and persist a validated snapshot. |

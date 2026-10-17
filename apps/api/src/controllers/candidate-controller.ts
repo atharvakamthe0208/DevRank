@@ -67,8 +67,8 @@ export function createCandidateController(repository: CandidateRepository = cand
     update: asyncHandler(async (request, response) => {
       response.json(checkedCandidate(await repository.update(authContext(request), candidateId(request), request.body)));
     }),
-    archive: asyncHandler(async (request, response) => {
-      await repository.archive(authContext(request), candidateId(request));
+    delete: asyncHandler(async (request, response) => {
+      await repository.delete(authContext(request), candidateId(request));
       response.status(204).end();
     }),
   };
