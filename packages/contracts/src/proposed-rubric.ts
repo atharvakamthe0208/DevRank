@@ -14,7 +14,10 @@ export const proposedRubricCategories = [
   { id: 'problem_solving_dsa', displayName: 'DSA & Problem-Solving', proposedWeight: 25, source: 'leetcode', definition: 'LeetCode solved-by-difficulty and contest evidence, when available; counts do not establish reasoning quality.' },
 ] as const;
 
-export const proposedRubricCategorySchema = z.enum(proposedRubricCategories.map(({ id }) => id) as [string, ...string[]]);
+export const proposedRubricCategorySchema = z.enum([
+  'project_portfolio', 'technical_skills', 'development_activity', 'collaboration',
+  'current_year_contributions', 'problem_solving_dsa',
+]);
 export type ProposedRubricCategory = z.infer<typeof proposedRubricCategorySchema>;
 
 export const proposedRubricSchema = z.object({

@@ -33,7 +33,8 @@ describe('evaluation result view', () => {
     expect(html).toContain('83.45');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).not.toContain('AI evidence summary');
-    expect(html).not.toContain('Project Portfolio');
+    expect(html).toContain('Project Portfolio');
+    expect(html).not.toContain('data-category="project_portfolio"');
     expect(html).toContain('Communication Skills');
   });
 
@@ -59,8 +60,12 @@ describe('evaluation result view', () => {
     }] });
     const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result } }));
     expect(html).toContain('Current-Year Contributions');
-    expect(html).toContain('not numerically scored');
+    expect(html).toContain('Draft evidence index');
+    expect(html).toContain('not used by active v3');
     expect(html).toContain('44');
+    expect(html).toContain('Current-Year Contributions');
+    expect(html).toContain('44');
+    expect(html).toContain('Weighted total withheld');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).toContain('83.45');
   });
