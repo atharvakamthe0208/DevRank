@@ -9,9 +9,8 @@ export function FinalEvaluationReport({ report, title = 'GitHub + LeetCode evalu
   title?: string;
 }) {
   return <section className="proposed-evaluation-report" aria-label={title}>
-    <div className="proposed-report-heading"><div><h2>{title}</h2><p>Active v4 deterministic evidence index · these source-volume and breadth measures are not calibrated measures of engineering competence or hiring suitability.</p></div>
+    <div className="proposed-report-heading"><div><h2>{title}</h2></div>
       <strong>{report.overallScore === undefined ? 'Overall score withheld' : `Overall index ${report.overallScore} / 100`}</strong></div>
-    <p className="proposed-report-notice">{report.notice}</p>
     <div className="proposed-report-grid">{report.categories.map((category) => <article className="proposed-report-card" key={category.categoryId}>
       <div className="proposed-report-card-heading"><h3>{category.displayName}</h3><span>{category.weight}% weight</span></div>
       <div className="proposed-report-score"><strong>{category.score === undefined ? category.status === 'partial' ? 'Partial evidence' : 'Unavailable' : `${category.score} / 100`}</strong>

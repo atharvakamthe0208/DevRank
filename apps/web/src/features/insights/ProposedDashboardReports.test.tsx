@@ -15,7 +15,8 @@ describe('proposed report dashboard section', () => {
   it('renders recent evaluation proposal values while preserving the active scoring version label', () => {
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ProposedDashboardReports, { evaluations: [evaluation] })));
     expect(html).toContain('Candidate Ada');
-    expect(html).toContain('Active v4 GitHub + LeetCode evaluation');
+    expect(html).toContain('Detailed Evaluation Report');
+    expect(html).not.toContain('Active v4 GitHub + LeetCode evaluation');
     expect(html).toContain('active scoring version 4.0.0');
     expect(html).toContain('Overall score withheld');
     expect(html).toContain('Project Portfolio');

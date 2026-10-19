@@ -1,6 +1,7 @@
 .evaluation-page { display: grid; gap: 24px; max-width: 1180px; margin: 0 auto; }
 .evaluation-heading, .evaluation-panel-heading, .evaluation-result-top, .evaluation-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .evaluation-heading h1 { margin: 8px 0 4px; font-size: clamp(30px, 4vw, 42px); letter-spacing: -1.4px; }
+.evaluation-heading .evaluation-back-link { flex: none; width: auto; height: 38px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
 .evaluation-panel, .evaluation-results { padding: 26px; border: 1px solid var(--border, #e5e7eb); border-radius: 16px; background: var(--surface, #fff); box-shadow: 0 8px 24px rgb(25 38 64 / 4%); }
 .evaluation-panel-heading h2, .evaluation-results h2 { margin: 0 0 6px; }
 .evaluation-panel-heading p, .evaluation-result-top p { margin: 0; color: var(--muted, #697586); }

@@ -13,7 +13,6 @@ import {
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
-import { FinalEvaluationReport } from '../evaluations/ProposedEvaluationReport';
 import './evaluation-page.css';
 import '../evaluations/evaluation.css';
 
@@ -182,12 +181,10 @@ export function EvaluationRunResult({ result, analysis, analysisLoading, analysi
   onAnalyze: () => void;
 }) {
   const evaluation = result.evaluation;
-  const finalReport = evaluation.finalReport;
   return <section className="evaluation-results" aria-labelledby="evaluation-results-title">
     <div className="evaluation-result-top"><div><span className="eyebrow"><span className="eyebrow-line"/> EVALUATION RESULT</span><h2 id="evaluation-results-title">{result.candidate.name}</h2><p>{result.role.displayName} · Evaluated {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(result.evaluatedAt))}</p></div><div className={`overall-score${evaluation.overallScore === undefined ? ' is-pending' : ''}`}><span>Overall score</span><strong>{evaluation.overallScore === undefined ? '—' : evaluation.overallScore}</strong><small>{evaluation.overallScore === undefined ? 'Insufficient evidence' : 'out of 100'}</small></div></div>
-    {finalReport ? <FinalEvaluationReport report={finalReport} title="Final GitHub + LeetCode evaluation report · v4"/> : <p className="evaluation-notice" role="status">The saved v4 report snapshot is unavailable. Run a new evaluation to create a final report from the currently saved platform evidence.</p>}
     <section aria-labelledby="active-v4-categories-title">
-      <div className="evaluation-section-heading"><div><h2 id="active-v4-categories-title">Final GitHub + LeetCode rubric · v4</h2><p>These deterministic indexes use the saved GitHub and LeetCode snapshots shown in this result. Missing or partial data is not scored as zero.</p></div></div>
+      <div className="evaluation-section-heading"><div><h2 id="active-v4-categories-title">Evaluation report</h2></div></div>
       <div className="evaluation-categories">{evaluation.categoryScores.map((category) => <article className="evaluation-category" key={category.categoryId}><div className="evaluation-category-heading"><h3>{category.displayName}</h3><strong>{category.score === undefined ? 'Not scored' : `${category.score} / 100`}</strong></div>{category.score !== undefined && <progress max="100" value={category.score} aria-label={`${category.displayName} score ${category.score} out of 100`}/>}<p>{category.explanation}</p><small>{category.status === 'scored' ? `${category.evidenceRefs.length} supporting evidence item${category.evidenceRefs.length === 1 ? '' : 's'}` : 'Insufficient evidence'}</small></article>)}</div>
     </section>
     <div className="evaluation-limitations"><h3>Evidence limitations</h3><ul>{result.evidenceLimitations.map((item) => <li key={item}>{item}</li>)}</ul><p>{evaluation.calculationExplanation}</p></div>

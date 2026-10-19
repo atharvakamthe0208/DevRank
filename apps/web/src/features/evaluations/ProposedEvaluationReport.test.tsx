@@ -16,12 +16,13 @@ describe('active evaluation index report UI', () => {
   it('shows actual partial values, active weights, and keeps absent categories unavailable', () => {
     const html = renderToStaticMarkup(createElement(ProposedEvaluationReport, { report: buildProposedEvaluationReport([githubContribution]) }));
     expect(html).toContain('GitHub + LeetCode evaluation report');
-    expect(html).toContain('Active v4 deterministic evidence index');
+    expect(html).not.toContain('Active v4 deterministic evidence index');
     expect(html).toContain('Current-Year Contributions');
     expect(html).toContain('44');
     expect(html).toContain('10% weight');
     expect(html).toContain('Overall score withheld');
     expect(html).toContain('Unavailable');
-    expect(html).toContain('not calibrated measures of engineering competence');
+    expect(html).not.toContain('not calibrated measures of engineering competence');
+    expect(html).not.toContain('threshold needs future calibration');
   });
 });
