@@ -5,7 +5,6 @@ export type CandidateFormValues = {
   email: string;
   githubUsername: string;
   leetcodeUsername: string;
-  hackerrankUsername: string;
 };
 
 export type CandidateFormResult =
@@ -18,7 +17,6 @@ export function validateCandidateForm(values: CandidateFormValues): CandidateFor
     ...(values.email.trim() ? { email: values.email } : {}),
     ...(values.githubUsername.trim() ? { githubUsername: values.githubUsername } : {}),
     ...(values.leetcodeUsername.trim() ? { leetcodeUsername: values.leetcodeUsername } : {}),
-    ...(values.hackerrankUsername.trim() ? { hackerrankUsername: values.hackerrankUsername } : {}),
   };
   const result = candidateCreateSchema.safeParse(input);
   if (result.success) return { success: true, data: result.data, errors: {} };

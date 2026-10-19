@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase/client';
 import { validateCandidateForm, type CandidateFormValues } from './candidate-form-validation';
 import { parseCandidateApiResponse } from './candidate-response-validation';
 
-const emptyValues: CandidateFormValues = { name: '', email: '', githubUsername: '', leetcodeUsername: '', hackerrankUsername: '' };
+const emptyValues: CandidateFormValues = { name: '', email: '', githubUsername: '', leetcodeUsername: '' };
 
 function inputErrorDetails(details: unknown): Record<string, string> {
   if (!Array.isArray(details)) return {};
@@ -70,7 +70,6 @@ export function AddCandidatePage() {
       <div className="candidate-form-divider"><span>Developer profiles</span><small>Optional · enter usernames, not profile URLs</small></div>
       {field('githubUsername', 'GitHub username', 'text', false, 'e.g. octocat')}
       {field('leetcodeUsername', 'LeetCode username', 'text', false, 'e.g. leetcode_user')}
-      {field('hackerrankUsername', 'HackerRank username', 'text', false, 'e.g. hackerrank_user')}
       {message && <p className="form-feedback form-feedback-error candidate-form-message" role="alert">{message}</p>}
       <div className="candidate-form-actions"><Link className="secondary-button" to="/dashboard/candidates">Cancel</Link><button className="primary-button" type="submit" disabled={busy}>{busy ? 'Adding candidate…' : 'Add candidate'} <span>→</span></button></div>
     </form></section></div>;
