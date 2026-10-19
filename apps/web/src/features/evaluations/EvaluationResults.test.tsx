@@ -32,7 +32,8 @@ describe('evaluation result view', () => {
     for (const label of ['Project Portfolio', 'Technical Skills', 'Development Activity', 'Collaboration', 'Current-Year Contributions', 'DSA &amp; Problem-Solving']) expect(html).toContain(label);
     expect(html).toContain('83.45');
     expect(html).toContain('Active GitHub + LeetCode evaluation');
-    expect(html).toContain('Final v4 GitHub + LeetCode rubric');
+    expect(html).toContain('Evaluation report');
+    expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).not.toContain('AI evidence summary');
     expect(html).toContain('Project Portfolio');
