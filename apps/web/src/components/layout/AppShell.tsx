@@ -28,7 +28,7 @@ export function AppShell() {
         : 'Overview';
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${location.pathname === '/dashboard' || /^\/evaluations\/[^/]+\/analysis$/.test(location.pathname) ? ' refined-workspace' : ''}`}>
       <aside className="sidebar">
         <NavLink to="/dashboard" className="brand"><span className="brand-mark">d.</span><span>devrank<span className="brand-period">.</span></span></NavLink>
         <div className="workspace-label">WORKSPACE</div>

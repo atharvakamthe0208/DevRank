@@ -53,7 +53,6 @@ export function CandidateDetailsPage() {
   const profiles = [
     { name: 'GitHub', handle: candidate.githubUsername, url: candidate.githubUsername ? `https://github.com/${encodeURIComponent(candidate.githubUsername)}` : '', mark: 'GH', className: 'github-mark' },
     { name: 'LeetCode', handle: candidate.leetcodeUsername, url: candidate.leetcodeUsername ? `https://leetcode.com/u/${encodeURIComponent(candidate.leetcodeUsername)}/` : '', mark: 'LC', className: 'leetcode-mark' },
-    { name: 'HackerRank', handle: candidate.hackerrankUsername, url: candidate.hackerrankUsername ? `https://www.hackerrank.com/profile/${encodeURIComponent(candidate.hackerrankUsername)}` : '', mark: 'HR', className: 'hackerrank-mark' },
   ];
   const availableProfiles = profiles.filter((profile) => profile.handle && profile.url);
   return <div className="detail-page candidate-api-detail">

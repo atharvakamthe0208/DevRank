@@ -1,7 +1,6 @@
 -- Supabase Auth profiles for the recruiter workspace.
 -- This migration is additive: no user, candidate, or evaluation rows are deleted.
 begin;
-
 alter table public.profiles
   add column if not exists role text not null default 'recruiter',
   add column if not exists approval_status text not null default 'pending';
@@ -9,7 +8,6 @@ update public.profiles set role = 'recruiter' where role is null;
 update public.profiles set approval_status = 'pending' where approval_status is null;
 alter table public.profiles alter column role set default 'recruiter', alter column role set not null;
 alter table public.profiles alter column approval_status set default 'pending', alter column approval_status set not null;
-
 -- Remove prior checks on these two fields (including dashboard-created constraint names),
 -- then constrain the allowed states explicitly. Invalid legacy values abort this transaction.
 do $$
@@ -30,11 +28,9 @@ begin
   end loop;
 end;
 $$;
-
 alter table public.profiles
   add constraint profiles_role_check check (role in ('recruiter', 'admin')),
   add constraint profiles_approval_status_check check (approval_status in ('pending', 'approved', 'rejected', 'suspended'));
-
 -- Any profile created from signup metadata is always recruiter/pending. The display name is
 -- the only signup metadata copied into the public profile.
 create or replace function public.enforce_recruiter_signup_defaults()
@@ -53,7 +49,6 @@ drop trigger if exists enforce_recruiter_signup_defaults on public.profiles;
 create trigger enforce_recruiter_signup_defaults
   before insert on public.profiles
   for each row execute function public.enforce_recruiter_signup_defaults();
-
 create or replace function public.handle_new_recruiter_profile()
 returns trigger
 language plpgsql
@@ -77,7 +72,6 @@ drop trigger if exists on_auth_user_created_recruiter_profile on auth.users;
 create trigger on_auth_user_created_recruiter_profile
   after insert on auth.users
   for each row execute function public.handle_new_recruiter_profile();
-
 -- This invoker function can inspect only the caller's profile through profiles_select_own.
 create or replace function public.is_approved_recruiter()
 returns boolean
@@ -96,13 +90,11 @@ as $$
 $$;
 revoke all on function public.is_approved_recruiter() from public, anon;
 grant execute on function public.is_approved_recruiter() to authenticated;
-
 -- Role and approval columns are never writable by an authenticated client.
 revoke all on public.profiles from anon;
 revoke insert, update on public.profiles from authenticated;
 grant select on public.profiles to authenticated;
 grant update (display_name) on public.profiles to authenticated;
-
 -- Add owner-scoped permissive policies plus restrictive approval gates. Restrictive policies
 -- AND with every permissive policy, so custom or legacy policies cannot bypass approval. This
 -- preserves existing policy definitions while safely tightening access.
@@ -119,12 +111,10 @@ begin
   end loop;
 end;
 $$;
-
 create policy devrank_auth_profiles_owner_scope on public.profiles as permissive for all to authenticated
   using (id = (select auth.uid())) with check (id = (select auth.uid()));
 create policy devrank_auth_profiles_restrict_to_owner on public.profiles as restrictive for all to authenticated
   using (id = (select auth.uid())) with check (id = (select auth.uid()));
-
 do $$
 declare
   target_table text;
@@ -147,5 +137,4 @@ end;
 $$;
 comment on column public.profiles.role is 'Signup always creates recruiters. Only trusted project owners may provision admin accounts.';
 comment on column public.profiles.approval_status is 'Recruiter applications require administrator approval before workspace access.';
-
 commit;

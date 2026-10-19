@@ -1,45 +1,40 @@
 import { apiErrorSchema } from '@devrank/contracts';
-import { supabase } from '../supabase/client';
+import { resolveApiBaseUrl } from './api-base-url';
 
-// Use Vite's same-origin development proxy by default. This also works when the
-// browser opens the app over a LAN address instead of localhost.
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api';
+const baseUrl = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, import.meta.env.PROD);
 
 export class ApiRequestError extends Error {
-  constructor(message: string, readonly status: number, readonly code?: string, readonly details?: unknown) { super(message); this.name = 'ApiRequestError'; }
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
 }
 
+/** Represents a request that could not receive an HTTP response. */
 export class ApiNetworkError extends Error {
-  constructor(message = 'Could not reach the DevRank API. Check that it is running and that this local frontend origin is allowed by API CORS.') {
-    super(message);
+  constructor(message = 'Could not connect to the API. Check your connection and try again.', options?: ErrorOptions) {
+    super(message, options);
     this.name = 'ApiNetworkError';
   }
 }
 
-async function send(path: string, init: RequestInit | undefined, accessToken?: string): Promise<Response> {
+export async function apiRequest<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
+  if (!baseUrl) {
+    throw new ApiRequestError('Set VITE_API_BASE_URL to the deployed HTTPS API before building the production frontend.', 0);
+  }
+  let response: Response;
   try {
-    return await fetch(`${baseUrl}${path}`, {
+    response = await fetch(`${baseUrl}${path}`, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
     });
   } catch (cause) {
-    if (init?.signal?.aborted) throw cause;
-    throw new ApiNetworkError();
-  }
-}
-
-export async function apiRequest<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
-  let response = await send(path, init, accessToken);
-  // A stored session can outlive the current access token. Refresh once and retry
-  // with the SDK's renewed token; never retry arbitrary API failures.
-  if (response.status === 401 && accessToken && supabase) {
-    let refreshedToken: string | undefined;
-    try {
-      refreshedToken = (await supabase.auth.refreshSession()).data.session?.access_token;
-    } catch {
-      throw new ApiNetworkError('Could not refresh your secure session because Supabase Auth is unreachable. Check your connection and try again.');
-    }
-    if (refreshedToken && refreshedToken !== accessToken) response = await send(path, init, refreshedToken);
+    throw new ApiNetworkError(undefined, { cause });
   }
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => undefined);
@@ -51,5 +46,6 @@ export async function apiRequest<T>(path: string, init?: RequestInit, accessToke
       parsedError.success ? parsedError.data.error.details : undefined,
     );
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }

@@ -1,8 +1,10 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { buildFinalEvaluationReport, evaluationRunResponseSchema, parseProposedPlatformEvidence, scoringCategories, type EvaluationRunResponse } from '@devrank/contracts';
+import { MemoryRouter } from 'react-router-dom';
+import { aiAnalysisResponseSchema, buildFinalEvaluationReport, evaluationResponseSchema, evaluationRunResponseSchema, parseProposedPlatformEvidence, persistedEvaluationSchema, scoringCategories, type AiAnalysisResponse, type EvaluationRunResponse } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
-import { EvaluationRunResult } from './EvaluationPage';
+import { AiAnalysisSummary, EvaluationRunResult } from './EvaluationPage';
+import { AiAnalysisReportView } from './AiAnalysisReportPage';
 
 const candidateId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const roleWeightsUsed = { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 };
@@ -42,6 +44,28 @@ function runResult(withLeetCodeEvidence = true): EvaluationRunResponse {
   });
 }
 
+function completedAnalysis(): AiAnalysisResponse {
+  const run = runResult();
+  const evidence = scoringCategories.map(({ id, displayName }) => ({ evidenceId: `evidence-${id}`, evidenceType: 'technical_screen' as const, source: 'Saved assessment', description: `Saved source evidence for ${displayName}.`, verificationStatus: 'verified' as const, categoryId: id, normalizedValue: 70, availability: 'available' as const }));
+  const result = evaluationResponseSchema.parse({
+    ...run.evaluation,
+    overallScore: 78,
+    evaluationStatus: 'completed',
+    missingEvidence: [],
+    finalReport: undefined,
+    evidence,
+    categoryScores: run.evaluation.categoryScores.map((item) => ({ ...item, score: 70, status: 'scored', evidenceRefs: [`evidence-${item.categoryId}`] })),
+  });
+  const evaluation = persistedEvaluationSchema.parse({ id: run.id, candidateId, roleProfileId: null, targetRole: 'software_developer', status: 'completed', createdAt: run.evaluatedAt, result });
+  return aiAnalysisResponseSchema.parse({ status: 'completed', evaluation, analysis: {
+    summary: 'The saved evidence shows experience across the listed source categories.', summaryEvidenceReferences: ['evidence-project_portfolio'],
+    strengths: [1, 2, 3, 4].map((n) => ({ text: `Strength ${n} grounded in saved evidence.`, evidenceReferences: ['evidence-project_portfolio'] })),
+    weaknesses: [{ text: 'The history is incomplete.', evidenceReferences: ['evidence-project_portfolio'] }],
+    roleRelevance: 'The evidence relates to the selected role.', roleRelevanceEvidenceReferences: ['evidence-project_portfolio'],
+    recommendations: [{ text: 'Review the cited source detail.', evidenceReferences: ['evidence-project_portfolio'] }],
+  } });
+}
+
 describe('evaluation run result', () => {
   it('shows the finalized v4 category result from the saved snapshot', () => {
     const html = renderToStaticMarkup(createElement(EvaluationRunResult, {
@@ -69,5 +93,41 @@ describe('evaluation run result', () => {
     expect(html).toContain('Not scored');
     expect(html).not.toContain('Communication Skills');
     expect(html).toContain('Insufficient evidence');
+  });
+
+  it('shows a concise cited summary with a route to the detailed report', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisSummary, { response: completedAnalysis() })));
+    expect(html).toContain('Executive summary');
+    expect(html).toContain('Evidence-backed strengths');
+    expect(html).toContain('Evidence gaps');
+    expect(html).toContain('Strength 3 grounded in saved evidence.');
+    expect(html).not.toContain('Strength 4 grounded in saved evidence.');
+    expect(html).toContain('Read full AI report');
+    expect(html).toContain('/evaluations/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/analysis');
+    expect(html).toContain('evaluation evidence');
+  });
+
+  it('shows a neutral insufficient-evidence summary and keeps the full report link', () => {
+    const run = runResult(false);
+    const evaluation = persistedEvaluationSchema.parse({ id: run.id, candidateId, roleProfileId: null, targetRole: 'software_developer', status: 'insufficient_evidence', createdAt: run.evaluatedAt, result: run.evaluation });
+    const response = aiAnalysisResponseSchema.parse({ status: 'insufficient_evidence', evaluation, analysis: null });
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisSummary, { response })));
+    expect(html).toContain('AI analysis is unavailable');
+    expect(html).toContain('Open evaluation report');
+    expect(html).not.toContain('0 / 100');
+  });
+
+  it('keeps the detailed report separate from saved deterministic scores', () => {
+    const response = completedAnalysis();
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisReportView, { response, candidateName: 'Candidate Example' })));
+    expect(html).toContain('DETERMINISTIC RESULT');
+    expect(html).toContain('78 / 100');
+    expect(html).toContain('Category results');
+    expect(html).toContain('Project Portfolio');
+    expect(html).toContain('Executive summary');
+    expect(html).toContain('Role relevance');
+    expect(html).toContain('Strength 1 grounded in saved evidence.');
+    expect(html).toContain('The history is incomplete.');
+    expect(html).toContain('AI text below explains the saved evaluation. It does not calculate, change, or override scores.');
   });
 });

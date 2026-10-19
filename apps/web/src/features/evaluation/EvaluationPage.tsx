@@ -196,7 +196,7 @@ export function EvaluationRunResult({ result, analysis, analysisLoading, analysi
       <div className="ai-analysis-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> EVIDENCE-GROUNDED EXPLANATION</span><h3 id="ai-analysis-title">AI analysis</h3><p>Explanatory support only. The persisted evaluation scores remain authoritative.</p></div><button className="secondary-button" type="button" onClick={onAnalyze} disabled={analysisLoading}>{analysisLoading ? 'Analyzing…' : analysis ? 'Regenerate analysis' : 'Generate AI analysis'}</button></div>
       {analysisLoading && <p className="ai-analysis-status" role="status">Reviewing the saved evaluation and its supporting evidence…</p>}
       {analysisError && <div className="ai-analysis-error" role="alert"><p>{analysisError}</p><button className="text-button" type="button" onClick={onAnalyze} disabled={analysisLoading}>Try again</button></div>}
-      {analysis && <AiAnalysisResult response={analysis}/>}
+      {analysis && <AiAnalysisSummary response={analysis}/>}
     </section>
   </section>;
 }
@@ -206,19 +206,14 @@ function AnalysisReferences({ evaluation, references }: { evaluation: AiAnalysis
   return descriptions.length > 0 ? <ul className="ai-analysis-references">{descriptions.map((description) => <li key={description}>{description}</li>)}</ul> : <p className="ai-analysis-no-references">No supporting evidence references were returned for this item.</p>;
 }
 
-function AiAnalysisResult({ response }: { response: AiAnalysisResponse }) {
+export function AiAnalysisSummary({ response }: { response: AiAnalysisResponse }) {
   const unavailable = analysisEmptyMessage(response);
-  if (unavailable || !response.analysis) return <p className="ai-analysis-unavailable" role="status">{unavailable}</p>;
+  if (unavailable || !response.analysis) return <div className="ai-analysis-unavailable" role="status"><p>{unavailable}</p><Link className="ai-report-link" to={`/evaluations/${response.evaluation.id}/analysis`} state={{ analysis: response }}>Open evaluation report →</Link></div>;
   const { analysis } = response;
-  const observations = [
-    { title: 'Strengths', items: analysis.strengths },
-    { title: 'Weaknesses', items: analysis.weaknesses },
-    { title: 'Recommendations', items: analysis.recommendations },
-  ];
   return <div className="ai-analysis-content">
-    <article className="ai-analysis-summary"><h4>Summary</h4><p>{analysis.summary}</p><AnalysisReferences evaluation={response.evaluation} references={analysis.summaryEvidenceReferences}/></article>
-    <article className="ai-analysis-relevance"><h4>Role suitability · {response.evaluation.targetRole.replaceAll('_', ' ')}</h4><p>{analysis.roleRelevance}</p><AnalysisReferences evaluation={response.evaluation} references={analysis.roleRelevanceEvidenceReferences}/></article>
-    <div className="ai-analysis-observations">{observations.map(({ title, items }) => <article key={title}><h4>{title}</h4>{items.length === 0 ? <p className="ai-analysis-empty">No {title.toLowerCase()} were identified from the supplied evidence.</p> : items.map((item, index) => <div className="ai-analysis-observation" key={`${title}-${index}`}><p>{item.text}</p><AnalysisReferences evaluation={response.evaluation} references={item.evidenceReferences}/></div>)}</article>)}</div>
+    <article className="ai-analysis-summary"><h4>Executive summary</h4><p>{analysis.summary}</p><AnalysisReferences evaluation={response.evaluation} references={analysis.summaryEvidenceReferences}/></article>
+    <div className="ai-analysis-preview-grid"><article><h4>Evidence-backed strengths</h4>{analysis.strengths.length ? <ul>{analysis.strengths.slice(0, 3).map((item, index) => <li key={index}>{item.text}</li>)}</ul> : <p className="ai-analysis-empty">No strengths were returned from the supplied evidence.</p>}</article><article><h4>Evidence gaps</h4>{analysis.weaknesses.length ? <ul>{analysis.weaknesses.slice(0, 3).map((item, index) => <li key={index}>{item.text}</li>)}</ul> : <p className="ai-analysis-empty">No evidence gaps were returned.</p>}</article></div>
+    <Link className="ai-report-link" to={`/evaluations/${response.evaluation.id}/analysis`} state={{ analysis }}>Read full AI report <span aria-hidden="true">→</span></Link>
     <p className="ai-analysis-disclaimer">AI-generated explanation grounded in the cited evaluation evidence. It does not change scores or make a hiring decision.</p>
   </div>;
 }
