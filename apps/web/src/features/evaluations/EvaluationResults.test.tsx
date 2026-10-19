@@ -45,7 +45,7 @@ describe('evaluation result view', () => {
     const saved = evaluation(false);
     const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result: saved.result } }));
     expect(html).toContain('Insufficient Evidence');
-    expect(html).toContain('Evidence needed');
+    expect(html).toContain('Evidence gaps · 4 categories');
     expect(html).toContain('Not calculated');
     expect(html.match(/<progress/g)).toHaveLength(2);
     expect(html).toContain('Not scored');
@@ -70,6 +70,7 @@ describe('evaluation result view', () => {
     expect(html).toContain('Overall score');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).toContain('83.45');
+    expect(html).toContain('Scored · partial source evidence');
   });
 
   it('renders validated v1 history with all six original categories and no recalculated score', () => {

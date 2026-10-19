@@ -80,6 +80,10 @@ describe('evaluation run result', () => {
     expect(html).toContain('Overall score');
     expect(html).toContain('Insufficient evidence');
     expect(html).not.toContain('out of 100</small>');
+    expect(html).toContain('Problems solved');
+    expect(html).toContain('LeetCode statistics provider');
+    expect(html).not.toContain('alfa_leetcode_api');
+    expect(html).not.toContain('{&quot;statistics&quot;');
   });
 
   it('keeps final rubric categories unscored when the run has no saved platform evidence', () => {
@@ -103,7 +107,7 @@ describe('evaluation run result', () => {
     expect(html).not.toContain('Strength 4 grounded in saved evidence.');
     expect(html).toContain('Read full AI report');
     expect(html).toContain('/evaluations/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/analysis');
-    expect(html).toContain('evaluation evidence');
+    expect(html).toContain('Supporting references (1)');
   });
 
   it('shows a neutral insufficient-evidence summary and keeps the full report link', () => {
@@ -116,17 +120,30 @@ describe('evaluation run result', () => {
     expect(html).not.toContain('0 / 100');
   });
 
-  it('keeps the detailed report separate from saved deterministic scores', () => {
+  it('keeps the AI explanation separate from the saved report and avoids repeating category results', () => {
     const response = completedAnalysis();
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisReportView, { response, candidateName: 'Candidate Example' })));
-    expect(html).toContain('DETERMINISTIC RESULT');
+    expect(html).toContain('SAVED EVALUATION');
     expect(html).toContain('78 / 100');
-    expect(html).toContain('Category results');
-    expect(html).toContain('Project Portfolio');
-    expect(html).toContain('Executive summary');
+    expect(html).not.toContain('Category results');
+    expect(html).toContain('View six category results');
+    expect(html).toContain('AI SUMMARY');
     expect(html).toContain('Role relevance');
     expect(html).toContain('Strength 1 grounded in saved evidence.');
     expect(html).toContain('The history is incomplete.');
-    expect(html).toContain('AI text below explains the saved evaluation. It does not calculate, change, or override scores.');
+    expect(html).toContain('AI text below is explanatory only. It does not calculate or change scores.');
+    expect(html).toContain('Supporting references (1)');
+    expect(html).not.toContain('<details class="ai-report-observation" open');
+  });
+
+  it('keeps the saved deterministic result visible when the on-demand AI explanation fails', () => {
+    const response = completedAnalysis();
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisReportView, {
+      evaluation: response.evaluation, candidateName: 'Candidate Example', analysisError: 'AI analysis is temporarily unavailable.',
+    })));
+    expect(html).toContain('78 / 100');
+    expect(html).toContain('AI analysis is temporarily unavailable.');
+    expect(html).toContain('View six category results');
+    expect(html).toContain('Try again');
   });
 });

@@ -23,18 +23,17 @@ const partialInsights = githubInsightsSchema.parse({
 });
 
 describe('proposed rubric and contribution panel', () => {
-  it('is integrated into the candidate profile and visible before a GitHub snapshot exists', () => {
+  it('keeps the active rubric details off the candidate profile while preserving platform panels', () => {
     const candidate = candidateSchema.parse({
       id: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', name: 'Test Candidate', email: 'test@example.com',
       createdAt: '2026-10-14T00:00:00.000Z', updatedAt: '2026-10-14T00:00:00.000Z',
     });
     const html = renderToStaticMarkup(createElement(AuthProvider, null,
       createElement(CandidatePlatformDataPanel, { candidate })));
-    expect(html).toContain('Active GitHub + LeetCode Rubric');
-    expect(html).toContain('Project Portfolio');
-    expect(html).toContain('GitHub contribution history');
-    expect(html).toContain('Loading saved contribution history');
-    expect(html).toContain('>loading</span>');
+    expect(html).not.toContain('Active GitHub + LeetCode Rubric');
+    expect(html).not.toContain('GitHub contribution history');
+    expect(html).toContain('GitHub');
+    expect(html).toContain('LeetCode');
   });
 
   it('renders all six active categories, weights, sources, signals, and historical-version notice', () => {

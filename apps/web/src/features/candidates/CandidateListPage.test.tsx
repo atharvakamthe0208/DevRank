@@ -7,7 +7,7 @@ const { useCandidatesMock } = vi.hoisted(() => ({ useCandidatesMock: vi.fn() }))
 vi.mock('./useCandidates', () => ({ useCandidates: useCandidatesMock }));
 
 import { CandidateListPage } from './CandidateListPage';
-import { confirmCandidateDeletion } from './candidate-delete-confirmation';
+import { candidateDeletionMessage } from './candidate-delete-confirmation';
 
 const candidate = {
   id: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c',
@@ -35,11 +35,18 @@ describe('candidate removal UI', () => {
     expect(html).not.toContain('HackerRank');
   });
 
-  it('requires explicit confirmation and describes the records that will be removed', () => {
-    const confirm = vi.fn(() => false);
+  it('describes the permanent deletion scope before the explicit dialog action', () => {
+    const message = candidateDeletionMessage('Taylor Example');
+    expect(message).toContain('Taylor Example');
+    expect(message).toContain('saved GitHub and LeetCode evidence');
+    expect(message).toContain('evaluation history, and comparison membership');
+    expect(message).toContain('This cannot be undone');
+  });
 
-    expect(confirmCandidateDeletion('Taylor Example', confirm)).toBe(false);
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('saved platform evidence, evaluations, and comparison membership'));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('This cannot be undone'));
+  it('makes the candidate list scroll region keyboard reachable', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+    expect(html).toContain('aria-label="Candidate list"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain('Scroll horizontally to see profile links and row actions.');
   });
 });

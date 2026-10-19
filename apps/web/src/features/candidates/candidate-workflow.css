@@ -1,0 +1,81 @@
+.candidate-table-scroll-hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.candidate-management-table-wrap:focus-visible {
+  outline: 3px solid #8db69a;
+  outline-offset: 2px;
+}
+
+.candidate-management-table td,
+.candidate-management-table th {
+  padding-right: 14px;
+  padding-left: 14px;
+}
+
+.candidate-delete-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border: 1px solid #e8e9e4;
+  border-radius: 10px;
+  padding: 24px;
+  color: #34362f;
+  background: #fff;
+  box-shadow: 0 18px 55px #2527202b;
+}
+
+.candidate-delete-dialog::backdrop { background: #25272070; }
+.candidate-delete-dialog h2 { margin: 0; font: 600 18px Manrope, sans-serif; }
+.candidate-delete-dialog p { margin: 11px 0 20px; color: #73766d; font-size: 12px; line-height: 1.65; }
+.candidate-delete-dialog-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.candidate-delete-dialog-actions button { min-height: 38px; padding: 0 14px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.candidate-delete-cancel { border: 1px solid #e8e9e4; background: #fff; color: #5f6259; }
+.candidate-delete-dialog-actions :is(button):focus-visible { outline: 3px solid #8db69a; outline-offset: 2px; }
+.candidate-delete-dialog .candidate-delete-button { min-height: 38px; padding: 0 14px; }
+
+.older-evaluations { margin-top: 11px; border-top: 1px solid #f0f0ed; padding-top: 11px; }
+.older-evaluations > summary { width: fit-content; color: #477457; font-size: 10px; font-weight: 600; cursor: pointer; }
+.older-evaluations .evaluation-history-list { margin-top: 8px; }
+.latest-evaluation-list { border-bottom: 1px solid #f0f0ed; }
+
+@media (max-width: 700px) {
+  .candidate-management-heading { align-items: flex-start; flex-wrap: wrap; }
+  .candidate-management-heading > .primary-button { flex: none; }
+  .candidate-management-panel { overflow: hidden; }
+  .candidate-table-scroll-hint {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0 0 7px;
+    overflow: visible;
+    clip: auto;
+    color: #85877f;
+    font-size: 9px;
+    line-height: 1.5;
+    white-space: normal;
+  }
+  .candidate-management-table-wrap { overscroll-behavior-inline: contain; scrollbar-color: #b6c7b8 #f4f5f2; }
+  .candidate-management-foot { gap: 10px; }
+  .candidate-delete-dialog { padding: 20px 17px; }
+}
+
+@media (max-width: 600px) {
+  .candidate-api-detail .detail-profile-card { flex-wrap: wrap; }
+  .candidate-api-detail .profile-main { width: calc(100% - 60px); }
+  .candidate-api-detail .profile-title-row { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .candidate-api-detail .profile-title-row .primary-button { width: 100%; }
+  .candidate-api-detail .profile-meta { font-size: 9px; }
+  .evaluation-history-list a { grid-template-columns: minmax(0, 1fr) auto; gap: 7px 10px; }
+  .evaluation-history-list .evaluation-status { justify-self: end; }
+  .evaluation-history-list .history-score { grid-column: 1; }
+  .evaluation-history-list a > span:last-child { display: none; }
+  .candidate-delete-dialog-actions { flex-direction: column-reverse; }
+  .candidate-delete-dialog-actions button { width: 100%; }
+}
