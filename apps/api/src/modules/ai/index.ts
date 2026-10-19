@@ -1,8 +1,22 @@
-import { ChatGroq } from '@langchain/groq';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { createRequire } from 'node:module';
+import type { ChatGroq as ChatGroqType } from '@langchain/groq' with { 'resolution-mode': 'require' };
+import type { HumanMessage as HumanMessageType, SystemMessage as SystemMessageType } from '@langchain/core/messages' with { 'resolution-mode': 'require' };
 import { aiAnalysisContentSchema, proposedRubric, scoringCategories, type AiAnalysisContent, type PersistedEvaluation } from '@devrank/contracts';
 import { env, type ApiEnvironment } from '../../config/env.js';
 import { HttpError } from '../../middleware/http-error.js';
+
+// The installed core package references a missing messages .d.ts for ESM, and its ESM
+// runtime graph references a missing langsmith .mjs. Their supported require exports and
+// declarations are present, so use those exports while retaining the package's real types.
+const loadCommonJs = createRequire(import.meta.url);
+const { ChatGroq } = loadCommonJs('@langchain/groq') as {
+  ChatGroq: typeof ChatGroqType;
+};
+const langchainMessages = loadCommonJs('@langchain/core/messages') as {
+  HumanMessage: new (...args: ConstructorParameters<typeof HumanMessageType>) => HumanMessageType;
+  SystemMessage: new (...args: ConstructorParameters<typeof SystemMessageType>) => SystemMessageType;
+};
+const { HumanMessage, SystemMessage } = langchainMessages;
 
 const MAX_EVIDENCE = 40;
 const MAX_TEXT = 1200;
@@ -106,7 +120,6 @@ function createGroqProvider(configuration: ApiEnvironment): StructuredProvider {
       model: configuration.GROQ_MODEL,
       temperature: 0,
       timeout: configuration.AI_TIMEOUT_MS,
-      maxRetries: 0,
     });
     const structured = model.withStructuredOutput(aiAnalysisContentSchema, {
       name: 'candidate_evaluation_analysis', method: 'jsonSchema', strict: true,

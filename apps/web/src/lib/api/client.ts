@@ -18,9 +18,10 @@ export class ApiNetworkError extends Error {
 
 async function send(path: string, init: RequestInit | undefined, accessToken?: string): Promise<Response> {
   try {
+    const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
     return await fetch(`${baseUrl}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
+      headers: { ...(!isFormData ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
     });
   } catch (cause) {
     if (init?.signal?.aborted) throw cause;

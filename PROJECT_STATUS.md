@@ -13,9 +13,9 @@ No SRS was present in the repository during inspection. Consequently this report
 
 | Area | Current contents |
 |---|---|
-| `apps/web` | React app, router, auth pages, admin recruiter-approval page, recruiter dashboard, candidate list/create/details, platform-data forms and GitHub sync, evaluation setup and persisted-result pages. Reports remain a placeholder. |
-| `apps/api` | Express API, Supabase token verification, recruiter/admin authorization, candidate/evaluation/admin routes and repositories, GitHub integration, evidence/scoring pipeline, optional AI module. |
-| `packages/contracts` | Shared schemas/types for auth, candidates, evidence, platform data, scoring, evaluations, AI analysis, comparison/ranking, and API errors. Current scoring contract is v2; a separate read-only v1 evaluation schema supports old snapshots. |
+| `apps/web` | React app, router, auth pages, admin recruiter-approval page, recruiter dashboard, candidate list/create/details, platform-data forms and GitHub sync, evaluation setup/results, and resume screening. Reports remain a placeholder. |
+| `apps/api` | Express API, Supabase token verification, recruiter/admin authorization, candidate/evaluation/admin/screening routes and repositories, GitHub integration, evidence/scoring pipeline, optional AI module. |
+| `packages/contracts` | Shared schemas/types for auth, candidates, evidence, platform data, scoring, evaluations, AI analysis, resume screening, comparison/ranking, and API errors. Current scoring contract is v2; a separate read-only v1 evaluation schema supports old snapshots. |
 | `supabase/migrations` | SQL migrations for base data model, candidate fields, recruiter auth, admin approval, and evaluation-result snapshots. These must be applied to a target Supabase project; application state is unknown. |
 | `config` and `fixtures` | Preliminary role weights, evidence mapping, synthetic candidates and expected v2 scores. |
 | `docs` | Setup, auth, API, database, scoring, AI and Day 1–7 QA notes. Some day notes are historical. |
@@ -37,11 +37,12 @@ No SRS was present in the repository during inspection. Consequently this report
 | Evaluation persistence/retrieval | Implemented in API | Persists result/scoring version/effective weights; authenticated create/get and candidate-scoped recent evaluation listing. Requires migrations and valid stored role profile. |
 | Evaluation creation/results UI | Implemented in web | Candidate profile starts evaluation using an existing valid owner-scoped role profile and lists recent saved results; result page reloads the persisted deterministic result, five categories, missing-evidence status, and validated optional AI analysis. Requires API connectivity, applied migrations, a valid saved role profile, and scoreable normalized evidence for an overall score. |
 | Comparison/ranking/reports | Not implemented | Schemas and/or placeholder route/page only; no comparison/ranking workflow. |
+| Resume screening | Implemented with durable queue worker in code, deployment not verified | Approved recruiter multipart upload at `POST /api/screenings`, private Storage + database persistence, PDF/DOCX extraction, validated Groq evidence analysis, deterministic job-match scores, owner-scoped result retrieval, worker retries, and progress polling. Requires the screening migrations, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, and Supabase RLS/storage setup. Scanned PDFs/OCR and retention/deletion workflow remain unavailable. See [resume screening API](docs/bulk-resume-screening.md). |
 | SRS/product approval | Unknown | No SRS found; categories, weights, privacy/provider policy need owner review. |
 
 ## 4. Routes and user flow
 
-The API mounts health/auth/admin, candidates, GitHub lookup and evaluation routes under `/api`. Recruiters must have confirmed email and approved status. Candidate/evaluation access is owner-scoped. Admin recruiter decisions require approved admin status. Candidate platform entries are explicitly marked candidate-provided; GitHub sync uses the official API.
+The API mounts health/auth/admin, candidates, GitHub lookup, evaluation, and resume screening routes under `/api`. Recruiters must have confirmed email and approved status. Candidate/evaluation/screening access is owner-scoped. Admin recruiter decisions require approved admin status. Candidate platform entries are explicitly marked candidate-provided; GitHub sync uses the official API.
 
 The web app provides login/signup and recruiter application flow, admin approvals, recruiter dashboard, candidate list/create/detail, GitHub/platform-data forms, and evaluation setup/results at `/candidates/:id/evaluate` and `/evaluations/:id`. Evaluation result scores are read from persisted API responses; the web client does not calculate or fabricate them. Comparison/ranking remain unimplemented.
 
@@ -97,3 +98,9 @@ The API `.env.example` names `API_PORT`, `NODE_ENV`, `WEB_ORIGIN`, `SUPABASE_URL
 ## 10. Ownership notes
 
 The README assigns API/Supabase operations to Atharva, web to Aryan, and scoring/AI/QA to Priya, with shared-contract coordination. Confirm current ownership with the team; the report does not assume approvals or live deployment access.
+
+## 11. Resume screening (2026-10-17)
+
+The initial visible page posted `POST /api/screenings`, but the Express app had no matching route, so the request reached the normal 404 handler. After that route was added, read-only checks of the configured Supabase project returned `PGRST205` for both screening tables and `NoSuchBucket` for `private-resumes`, confirming the persistence migration was not deployed there. A new idempotent additive migration `20261017130000_add_resume_screening_persistence.sql` was added without modifying earlier migrations. The route authenticates/authorizes recruiters, accepts bounded multipart uploads, saves originals to a private Supabase bucket, extracts PDF/DOCX text, validates Groq structured requirement assessments and verbatim evidence, computes a separate deterministic resume job-match score, persists per-file status/results, and returns owner-scoped details. Shared contracts and `/screening` UI display persisted statuses, candidate names only when explicitly labeled in the resume, score/category values, and missing-evidence details.
+
+Builds and unit/route tests pass. The Supabase read-only schema checks confirmed that the required objects are missing; migration application, RLS/storage write behavior, a real Groq call, and use with an approved recruiter account remain unverified. The synchronous processing design does not use the migration's queue worker tables; OCR, retention/deletion scheduling, and an async worker are not implemented. Review [resume screening API](docs/bulk-resume-screening.md) before production use.

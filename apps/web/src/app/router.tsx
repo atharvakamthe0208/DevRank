@@ -12,6 +12,7 @@ import { EvaluationPage } from '../features/evaluation/EvaluationPage';
 import { InsightsPage } from '../features/insights/InsightsPage';
 import { EvaluationCreatePage } from '../features/evaluations/EvaluationCreatePage';
 import { EvaluationResultPage } from '../features/evaluations/EvaluationResultPage';
+import { ResumeScreeningPage } from '../features/screening/ResumeScreeningPage';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh, signOut } = useAuth();
@@ -155,6 +156,7 @@ export const router = createBrowserRouter([
           { path: 'dashboard', element: <DashboardPage /> },
           { path: 'dashboard/candidates', element: <CandidateListPage /> },
           { path: 'dashboard/reports', element: <InsightsPage /> },
+          { path: 'screening', element: <ResumeScreeningPage /> },
           { path: 'evaluations', element: <EvaluationPage /> },
           { path: 'evaluations/:evaluationId', element: <EvaluationResultPage /> },
           { path: 'candidates/new', element: <AddCandidatePage /> },
