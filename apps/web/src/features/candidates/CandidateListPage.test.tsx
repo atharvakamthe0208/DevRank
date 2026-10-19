@@ -14,6 +14,7 @@ const candidate = {
   name: 'Taylor Example',
   email: 'taylor@example.com',
   githubUsername: 'taylor-dev',
+  hackerrankUsername: 'legacy-user',
   createdAt: '2026-10-10T12:00:00.000Z',
   updatedAt: '2026-10-10T12:00:00.000Z',
 };
@@ -29,6 +30,9 @@ describe('candidate removal UI', () => {
     expect(html).toContain('aria-label="Delete Taylor Example"');
     expect(html).toContain('candidate-delete-button');
     expect(html).toContain('aria-label="View Taylor Example"');
+    expect(html).toContain('GitHub');
+    expect(html).toContain('LeetCode');
+    expect(html).not.toContain('HackerRank');
   });
 
   it('requires explicit confirmation and describes the records that will be removed', () => {
