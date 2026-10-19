@@ -115,7 +115,7 @@ export function InsightsPage() {
   }
 
   return <div className="insights-page">
-    <section className="insights-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER WORKSPACE</span><h1>Insights &amp; rankings</h1><p className="page-subtitle">Workspace activity and comparable evaluation results.</p></div><Link className="secondary-button" to="/evaluations">Run an evaluation</Link></section>
+    <section className="insights-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER WORKSPACE</span><h1>Insights &amp; rankings</h1><p className="page-subtitle">Workspace activity and comparable evaluation results.</p></div><Link className="secondary-button insights-run-evaluation" to="/evaluations">Run an evaluation</Link></section>
     {loading ? <section className="insights-state" role="status">Loading recruiter insights…</section> : error ? <section className="insights-state" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></section> : dashboard && <>
       <section className="insights-summary" aria-label="Workspace activity">
         <article><span>Candidates</span><strong>{dashboard.candidateCount}</strong><Link to="/dashboard/candidates">View workspace →</Link></article>

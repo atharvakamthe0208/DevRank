@@ -72,13 +72,11 @@ describe('evaluation run result', () => {
       result: runResult(), analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined,
     }));
 
-    expect(html).toContain('Final GitHub + LeetCode rubric · v4');
+    expect(html).toContain('Evaluation report');
+    expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html).not.toContain('Communication Skills');
     expect(html).toContain('DSA &amp; Problem-Solving');
     expect(html).toContain('100 / 100');
-    expect(html).toContain('332');
-    expect(html).toContain('100 / 100');
-    expect(html).toContain('LeetCode v4 difficulty-weighted solved-volume index');
     expect(html).toContain('Overall score');
     expect(html).toContain('Insufficient evidence');
     expect(html).not.toContain('out of 100</small>');
@@ -89,7 +87,8 @@ describe('evaluation run result', () => {
       result: runResult(false), analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined,
     }));
 
-    expect(html).toContain('Final GitHub + LeetCode rubric · v4');
+    expect(html).toContain('Evaluation report');
+    expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html).toContain('Not scored');
     expect(html).not.toContain('Communication Skills');
     expect(html).toContain('Insufficient evidence');
