@@ -27,14 +27,18 @@ export function CandidateEvaluationHistory({ candidateId }: { candidateId: strin
     }
   }, [candidateId, session?.access_token]);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
-  return <section className="detail-section evaluation-history" aria-labelledby="evaluation-history-title"><div className="section-heading"><div><h2 id="evaluation-history-title">Evaluations</h2><p>Saved results for this candidate</p></div></div>
-    {state === 'loading' ? <p className="evaluation-history-state" role="status">Loading saved evaluations…</p> : state === 'error' ? <div className="evaluation-history-state" role="alert"><p>{error}</p><button type="button" className="secondary-button" onClick={() => void load()}>Try again</button></div> : items.length === 0 ? <p className="evaluation-history-state">No evaluations have been saved yet.</p> : <ul className="evaluation-history-list">{items.map((item) => {
+  function evaluationLink(item: PersistedEvaluationRead) {
       const score = 'overallScore' in item.result ? item.result.overallScore : undefined;
       const statusLabel = 'evaluationStatus' in item.result
         ? item.result.evaluationStatus === 'completed' ? 'Completed' : 'Insufficient Evidence'
         : item.status.replaceAll('_', ' ');
       const isComplete = statusLabel === 'Completed';
-      return <li key={item.id}><Link to={`/evaluations/${item.id}`}><span><strong>{roleLabel(item.result.targetRole)}</strong><small>{dateLabel(item.createdAt)}</small></span><span className={`evaluation-status ${isComplete ? 'is-complete' : 'is-incomplete'}`}>{statusLabel}</span><strong className="history-score">{score === undefined ? 'No overall score' : `${score}/100`}</strong><span aria-hidden="true">→</span></Link></li>;
-    })}</ul>}
+      return <Link to={`/evaluations/${item.id}`}><span><strong>{roleLabel(item.result.targetRole)}</strong><small>{dateLabel(item.createdAt)}</small></span><span className={`evaluation-status ${isComplete ? 'is-complete' : 'is-incomplete'}`}>{statusLabel}</span><strong className="history-score">{score === undefined ? 'No overall score' : `${score}/100`}</strong><span aria-hidden="true">→</span></Link>;
+  }
+  return <section className="detail-section evaluation-history" aria-labelledby="evaluation-history-title"><div className="section-heading"><div><h2 id="evaluation-history-title">Latest evaluation</h2><p>Most recent saved result</p></div></div>
+    {state === 'loading' ? <p className="evaluation-history-state" role="status">Loading saved evaluations…</p> : state === 'error' ? <div className="evaluation-history-state" role="alert"><p>{error}</p><button type="button" className="secondary-button" onClick={() => void load()}>Try again</button></div> : items.length === 0 ? <p className="evaluation-history-state">No evaluations have been saved yet.</p> : <>
+      <ul className="evaluation-history-list latest-evaluation-list"><li>{evaluationLink(items[0])}</li></ul>
+      {items.length > 1 && <details className="older-evaluations"><summary>Older evaluations ({items.length - 1})</summary><ul className="evaluation-history-list">{items.slice(1).map((item) => <li key={item.id}>{evaluationLink(item)}</li>)}</ul></details>}
+    </>}
   </section>;
 }

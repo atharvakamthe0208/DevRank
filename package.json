@@ -13,6 +13,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run build --workspace @devrank/contracts && npm run typecheck --workspace @devrank/api && npm run typecheck --workspace @devrank/web",
+    "test:recruiter-approval:db": "node scripts/test-recruiter-approval-db.mjs",
     "test:migration:acl": "node scripts/test-evaluation-acl-migration.mjs",
     "test:migration:integration": "node scripts/test-evaluation-migration.mjs"
   },

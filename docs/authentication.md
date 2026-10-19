@@ -50,4 +50,10 @@ Verify that exactly the intended owner account is returned. Do not run this for 
 5. Refresh the recruiter session or sign in again. The recruiter should reach `/dashboard`; `/api/candidates` should reject pending, rejected, unconfirmed, or signed-out users. Reject another test applicant and verify the rejected message and API denial.
 6. Test **Log out**, **Forgot password**, the `/reset-password` link, an expired confirmation/reset link, and direct visits to protected pages after logout.
 
+### Automated recruiter approval database tests
+
+Run `npm run test:recruiter-approval:db` to execute the four migrations listed above in a fresh in-memory PGlite database. The test creates synthetic Auth rows, adds broad legacy permissive policies before the recruiter-auth migration, and exercises the actual SQL signup trigger, admin decision functions, grants, `updated_at` trigger, audit insert, and RLS behavior. It never connects to a local or hosted Supabase project.
+
+PGlite uses PostgreSQL semantics for the tested SQL, but this harness supplies a small `auth.users` table and `auth.uid()` function. It does not exercise Supabase Auth confirmation flows, PostgREST RPC/session behavior, hosted project grants/extensions, or independent concurrent connections. The paired API auth/admin tests use mocked verified identities and RPC responses; they are not database integration tests. The repository currently has no full local Supabase Auth/RLS integration suite. For end-to-end confirmation and access checks, follow steps 1–6 above using only a disposable local Supabase stack or a dedicated development project.
+
 The dashboard currently contains sample candidate displays; existing candidate CRUD is separately protected and RLS-scoped. These authentication changes do not replace the sample dashboard data with candidate persistence.

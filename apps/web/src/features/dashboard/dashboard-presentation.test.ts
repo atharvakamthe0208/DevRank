@@ -1,20 +1,21 @@
-import { dashboardResponseSchema } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
-import { dashboardActivityCounts, dashboardScoreLabel } from './dashboard-presentation';
+import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel } from './dashboard-presentation';
 
 describe('dashboard presentation', () => {
-  it('aggregates only the dashboard API statuses for summary metrics', () => {
-    const response = dashboardResponseSchema.parse({
-      candidateCount: 8,
-      evaluationCount: 7,
-      statusCounts: { completed: 3, insufficient_evidence: 2, in_progress: 1, failed: 1 },
-      recentEvaluations: [],
-    });
-    expect(dashboardActivityCounts(response)).toEqual({ completed: 3, inProgress: 2, insufficientEvidence: 2 });
+  it('shows canonical role labels for roles retrieved from saved evaluation details', () => {
+    expect(dashboardRoleLabel('software_developer')).toBe('Software Developer');
+    expect(dashboardRoleLabel('ai_ml_engineer')).toBe('AI/ML Engineer');
+    expect(dashboardRoleLabel('data_analyst')).toBe('Data Analyst');
   });
 
-  it('keeps unavailable scores distinct from a score of zero', () => {
-    expect(dashboardScoreLabel(undefined)).toBe('Score unavailable');
-    expect(dashboardScoreLabel(0)).toBe('0 / 100');
+  it('keeps every evaluation state distinct and does not invent a score', () => {
+    expect(dashboardEvaluationStatusLabel('insufficient_evidence')).toBe('Insufficient evidence');
+    expect(dashboardScoreAvailabilityLabel('insufficient_evidence')).toContain('No score');
+    expect(dashboardEvaluationStatusLabel('failed')).toBe('Failed');
+    expect(dashboardScoreAvailabilityLabel('failed')).toContain('evaluation failed');
+    expect(dashboardEvaluationStatusLabel('in_progress')).toBe('In progress');
+    expect(dashboardScoreAvailabilityLabel('in_progress')).toBe('Not scored yet');
+    expect(dashboardEvaluationStatusLabel('completed')).toBe('Completed');
+    expect(dashboardScoreAvailabilityLabel('completed')).toBe('Score unavailable');
   });
 });

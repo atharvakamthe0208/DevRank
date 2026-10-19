@@ -33,9 +33,29 @@ const evaluation: PersistedEvaluation = {
 describe('AI analysis presentation helpers', () => {
   it('turns only recognized evidence and category references into supporting descriptions', () => {
     expect(analysisReferenceDescriptions(evaluation, ['evidence-1', 'technical_skills', 'unknown-ref'])).toEqual([
-      'Technical screen · Completed a structured technical screen.',
+      'Technical Screen · Completed a structured technical screen.',
       'Technical Skills: Supported by evidence.',
     ]);
+  });
+
+  it('describes provider snapshot references with readable provenance, availability, and capture time', () => {
+    const withSnapshot: PersistedEvaluation = {
+      ...evaluation,
+      result: {
+        ...evaluation.result,
+        platformEvidence: [{
+          evidenceId: 'saved-leetcode-row', candidateId, source: 'leetcode', evidenceType: 'solved_statistics',
+          availability: 'partial', observedAt: '2026-10-12T00:00:00.000Z',
+          normalizedValue: { problemsSolved: 50 }, verificationStatus: 'unverified', provenance: 'alfa_leetcode_api',
+          freshness: 'unassessed', limitations: [], categoryMappings: [],
+        }],
+      },
+    };
+    const [description] = analysisReferenceDescriptions(withSnapshot, ['saved-leetcode-row']);
+    expect(description).toContain('LeetCode · Solved Statistics');
+    expect(description).toContain('LeetCode statistics provider · partial');
+    expect(description).toContain('saved');
+    expect(description).not.toContain('alfa_leetcode_api');
   });
 
   it('shows a clear unavailable state when the API has insufficient evidence', () => {

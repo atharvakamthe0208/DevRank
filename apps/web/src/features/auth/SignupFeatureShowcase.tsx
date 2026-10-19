@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-
 const features = [
   {
     label: 'Role-specific evaluation',
@@ -77,14 +75,8 @@ function ReportPreview({ kind }: { kind: (typeof features)[number]['kind'] }) {
 
 export function SignupFeatureShowcase() {
   const initialSlide = 3;
-  const [activeIndex, setActiveIndex] = useState(initialSlide);
+  const activeIndex = initialSlide;
   const activeFeature = features[activeIndex];
-
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const interval = window.setInterval(() => setActiveIndex((index) => (index + 1) % features.length), 4000);
-    return () => window.clearInterval(interval);
-  }, []);
 
   return <aside className="signup-showcase" aria-label="DevRank product features">
     <div className="signup-showcase-ambient" aria-hidden="true"><i className="signup-orbit signup-orbit-one"/><i className="signup-orbit signup-orbit-two"/><i className="signup-diamond signup-diamond-one"/><i className="signup-diamond signup-diamond-two"/><span className="signup-light signup-light-one"/><span className="signup-light signup-light-two"/></div>
