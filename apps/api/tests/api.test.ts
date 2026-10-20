@@ -65,12 +65,13 @@ describe('API HTTP conventions', () => {
       headers: {
         Origin: 'http://localhost:5174',
         'Access-Control-Request-Method': 'GET',
-        'Access-Control-Request-Headers': 'authorization,content-type',
+        'Access-Control-Request-Headers': 'authorization,content-type,idempotency-key',
       },
     });
     expect(response.status).toBe(204);
     expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5174');
     expect(response.headers.get('access-control-allow-headers')).toContain('Authorization');
+    expect(response.headers.get('access-control-allow-headers')).toContain('Idempotency-Key');
   });
 
   it('does not grant CORS access to arbitrary origins', async () => {

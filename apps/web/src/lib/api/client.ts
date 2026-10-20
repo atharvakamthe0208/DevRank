@@ -29,9 +29,10 @@ export async function apiRequest<T>(path: string, init?: RequestInit, accessToke
   }
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`, {
+    const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+    return await fetch(`${baseUrl}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
+      headers: { ...(!isFormData ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
     });
   } catch (cause) {
     throw new ApiNetworkError(undefined, { cause });

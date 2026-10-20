@@ -32,6 +32,7 @@ const envSchema = z.object({
   WEB_ORIGINS: z.string().optional(),
   SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: optionalSecret,
+  SUPABASE_SERVICE_ROLE_KEY: optionalSecret,
   GITHUB_TOKEN: optionalSecret,
   // Use a separate public-only token without the optional read:user scope.
   GITHUB_PUBLIC_CONTRIBUTIONS_TOKEN: optionalSecret,

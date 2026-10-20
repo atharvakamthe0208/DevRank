@@ -13,37 +13,36 @@ No SRS was present in the repository during inspection. Consequently this report
 
 | Area | Current contents |
 |---|---|
-| `apps/web` | React app, router, auth pages, admin recruiter-approval page, recruiter dashboard, candidate list/create/details, platform-data forms and GitHub/LeetCode sync, evaluation setup/history/results, and recruiter insights page for dashboard, comparison, and ranking. |
-| `apps/api` | Express API, Supabase token verification, recruiter/admin authorization, candidate/evaluation/admin/insights routes and repositories, GitHub and LeetCode provider integrations, evidence/scoring pipeline, optional AI module. |
-| `packages/contracts` | Shared schemas/types for auth, candidates, evidence, platform data, scoring, evaluations, AI analysis, comparison/ranking, and API errors. Current scoring contract is v4; read-only v1/v2/v3 schemas support historical snapshots. |
+| `apps/web` | React app, router, auth pages, admin recruiter-approval page, recruiter dashboard, candidate list/create/details, platform-data forms and GitHub sync, evaluation setup/results, and resume screening. Reports remain a placeholder. |
+| `apps/api` | Express API, Supabase token verification, recruiter/admin authorization, candidate/evaluation/admin/screening routes and repositories, GitHub integration, evidence/scoring pipeline, optional AI module. |
+| `packages/contracts` | Shared schemas/types for auth, candidates, evidence, platform data, scoring, evaluations, AI analysis, resume screening, comparison/ranking, and API errors. Current scoring contract is v2; a separate read-only v1 evaluation schema supports old snapshots. |
 | `supabase/migrations` | SQL migrations for base data model, candidate fields, recruiter auth, admin approval, and evaluation-result snapshots. These must be applied to a target Supabase project; application state is unknown. |
 | `config` and `fixtures` | Active six-category v4 role weights, evidence mapping, synthetic candidates and expected v4 scores. |
 | `docs` | Setup, auth, API, database, scoring, AI and Day 1–7 QA notes. Some day notes are historical. |
 
 ## 3. Feature status
 
-| Feature | Implemented in code | Automated tests | End-to-end verified | Verified against real deployment |
-|---|---|---|---|---|
-| Health and API error conventions | Yes | Yes; local HTTP tests | Partial local HTTP only | No |
-| Authentication and recruiter/admin approval | Yes | Yes; mocked token/auth paths | No authenticated browser-to-Supabase workflow | No |
-| Candidate CRUD and ownership | Yes | Yes; API/repository mocks and UI state tests | No live database path | No |
-| Admin recruiter approval | Yes | Yes; mocked API/auth paths | No | No |
-| GitHub lookup and profile sync | Yes | Yes; provider and repository mocked | No real provider/database round-trip | No |
-| LeetCode evidence intake/sync | Yes; manual data and alfa-leetcode-api sync | Yes; provider and persistence mocked | No real provider/database round-trip | No |
-| HackerRank evidence intake | Yes, as candidate/recruiter-provided data | Yes | No hosted persistence verification | No |
-| Evidence validation and mapping | Yes | Yes | Local fixtures only | No |
-| Deterministic six-category v4 GitHub + LeetCode evaluation | Yes; fixed formulas use saved provider snapshots | Yes; scoring, repository, API-contract and UI fixtures | Local mocked API flow only | No |
-| Configured-role and owner-defined-role evaluation | Yes | Yes; repository/API tests; migration inserts in PGlite | No authenticated live database flow | No |
-| Evaluation history and supported legacy v1/v2/v3 display | Yes | Yes; repository/API/UI fixtures | No current production-row verification | No |
-| Optional AI evidence analysis | Yes, optional | Yes; provider mocked | No live provider flow | No |
-| Dashboard, comparison, and ranking | Yes; API routes/repositories and recruiter insights page | Yes; API/repository and presentation tests | No full authenticated browser-to-database workflow | No |
-| Evaluation persistence migration | Yes; forward migration and isolated PGlite harness | Yes; see `npm run test:migration:integration` | Disposable PGlite only | No; production schema/ledger remain unverified |
-| Role-profile management | No create/update API or UI | N/A | No | No |
-| SRS/product approval | Unknown | N/A | N/A | N/A |
+| Feature | Status | Evidence / limitation |
+|---|---|---|
+| Health/API error conventions | Implemented | `/api/health`, compatibility `/health`, structured API errors and 404. |
+| Authentication and approval | Implemented in code | Supabase Auth token verification; confirmed email; recruiter/admin profile and approval gates. Live Supabase configuration not verified. |
+| Candidate CRUD | Implemented in API and UI | Owner-scoped create/list/read/update/archive; candidate screens use authenticated API. |
+| Admin recruiter approval | Implemented in API and UI | Admin list/decision flow, migration RPCs and audit records. Live policy behavior unverified. |
+| GitHub profile lookup | Implemented | Official GitHub REST API, bounded public profile/repository response; optional backend token. Live provider not tested here. |
+| LeetCode/HackerRank evidence intake | Implemented as recruiter-provided data | Validated, append-only entries with provenance; no scraping or provider integration; not currently scoreable. |
+| Evidence validation/mapping | Implemented | Validates normalized evidence, rejects duplicate IDs, tracks invalid/unmapped items; `structured_interview` is deliberately unmapped. |
+| Deterministic evaluation | Implemented | Five-category v2 scorer; requires scoreable values for an overall score; missing categories are not treated as zero. |
+| Weights and role configuration | Partially implemented | Three preliminary role configurations; no role-profile CRUD. Stored six-category profiles need explicit update before v2 evaluation. |
+| AI evidence analysis | Implemented as optional API-side service | Groq-compatible structured output, evidence ID validation, data minimization, redaction, timeout/failure handling; validated analysis is shown separately in the evaluation result UI. No live provider call was made. |
+| Evaluation persistence/retrieval | Implemented in API | Persists result/scoring version/effective weights; authenticated create/get and candidate-scoped recent evaluation listing. Requires migrations and valid stored role profile. |
+| Evaluation creation/results UI | Implemented in web | Candidate profile starts evaluation using an existing valid owner-scoped role profile and lists recent saved results; result page reloads the persisted deterministic result, five categories, missing-evidence status, and validated optional AI analysis. Requires API connectivity, applied migrations, a valid saved role profile, and scoreable normalized evidence for an overall score. |
+| Comparison/ranking/reports | Not implemented | Schemas and/or placeholder route/page only; no comparison/ranking workflow. |
+| Resume screening | Implemented with durable queue worker in code, deployment not verified | Approved recruiter multipart upload at `POST /api/screenings`, private Storage + database persistence, PDF/DOCX extraction, validated Groq evidence analysis, deterministic job-match scores, owner-scoped result retrieval, worker retries, and progress polling. Requires the screening migrations, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, and Supabase RLS/storage setup. Scanned PDFs/OCR and retention/deletion workflow remain unavailable. See [resume screening API](docs/bulk-resume-screening.md). |
+| SRS/product approval | Unknown | No SRS found; categories, weights, privacy/provider policy need owner review. |
 
 ## 4. Routes and user flow
 
-The API mounts health/auth/admin, candidates, GitHub lookup and evaluation routes under `/api`. Recruiters must have confirmed email and approved status. Candidate/evaluation access is owner-scoped. Admin recruiter decisions require approved admin status. Candidate platform entries distinguish recruiter-provided evidence from provider snapshots; GitHub sync uses the official API and LeetCode sync uses the configured alfa-leetcode-api provider.
+The API mounts health/auth/admin, candidates, GitHub lookup, evaluation, and resume screening routes under `/api`. Recruiters must have confirmed email and approved status. Candidate/evaluation/screening access is owner-scoped. Admin recruiter decisions require approved admin status. Candidate platform entries are explicitly marked candidate-provided; GitHub sync uses the official API.
 
 The web app provides login/signup and recruiter application flow, admin approvals, recruiter dashboard, candidate list/create/detail, GitHub/platform-data forms, evaluation setup/results at `/candidates/:id/evaluate` and `/evaluations/:id`, and insights at `/dashboard/reports`. The API exposes `GET /api/dashboard`, `POST /api/comparisons`, and `GET /api/rankings`. Comparison and ranking require compatible persisted evaluation snapshots. Evaluation result scores are read from persisted API responses; the web client does not calculate or fabricate them. These paths have automated tests but have not been verified end-to-end against a live deployment.
 
@@ -131,3 +130,9 @@ The candidate details page offers LeetCode synchronization through the server-co
 ## 10. Ownership notes
 
 The README assigns API/Supabase operations to Atharva, web to Aryan, and scoring/AI/QA to Priya, with shared-contract coordination. Confirm current ownership with the team; the report does not assume approvals or live deployment access.
+
+## 11. Resume screening (2026-10-17)
+
+The initial visible page posted `POST /api/screenings`, but the Express app had no matching route, so the request reached the normal 404 handler. After that route was added, read-only checks of the configured Supabase project returned `PGRST205` for both screening tables and `NoSuchBucket` for `private-resumes`, confirming the persistence migration was not deployed there. A new idempotent additive migration `20261017130000_add_resume_screening_persistence.sql` was added without modifying earlier migrations. The route authenticates/authorizes recruiters, accepts bounded multipart uploads, saves originals to a private Supabase bucket, extracts PDF/DOCX text, validates Groq structured requirement assessments and verbatim evidence, computes a separate deterministic resume job-match score, persists per-file status/results, and returns owner-scoped details. Shared contracts and `/screening` UI display persisted statuses, candidate names only when explicitly labeled in the resume, score/category values, and missing-evidence details.
+
+Builds and unit/route tests pass. The Supabase read-only schema checks confirmed that the required objects are missing; migration application, RLS/storage write behavior, a real Groq call, and use with an approved recruiter account remain unverified. The synchronous processing design does not use the migration's queue worker tables; OCR, retention/deletion scheduling, and an async worker are not implemented. Review [resume screening API](docs/bulk-resume-screening.md) before production use.

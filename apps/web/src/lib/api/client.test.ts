@@ -51,4 +51,17 @@ describe('apiRequest', () => {
 
     await expect(apiRequest<void>('/candidates/candidate-id', { method: 'DELETE' })).resolves.toBeUndefined();
   });
+
+  it('leaves multipart content type to the browser and forwards recruiter auth', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const formData = new FormData();
+    formData.set('jobTitle', 'Engineer');
+
+    await apiRequest('/screenings', { method: 'POST', body: formData }, 'recruiter-token');
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(request.headers);
+    expect(headers.get('Content-Type')).toBeNull();
+    expect(headers.get('Authorization')).toBe('Bearer recruiter-token');
+  });
 });
