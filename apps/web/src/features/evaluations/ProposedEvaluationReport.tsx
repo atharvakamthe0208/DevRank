@@ -1,4 +1,5 @@
 import type { FinalEvaluationReport } from '@devrank/contracts';
+import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 
 function formatMetric(name: string): string {
   return name.replace(/([A-Z])/g, ' $1').replaceAll('_', ' ').replace(/^./, (value) => value.toUpperCase());
@@ -16,7 +17,7 @@ export function FinalEvaluationReport({ report, title = 'GitHub + LeetCode evalu
       <div className="proposed-report-score"><strong>{category.score === undefined ? category.status === 'partial' ? 'Partial evidence' : 'Unavailable' : `${category.score} / 100`}</strong>
         {category.weightedPoints !== undefined && <small>{category.weightedPoints} weighted points</small>}</div>
       {Object.keys(category.metrics).length > 0 ? <dl>{Object.entries(category.metrics).map(([key, value]) => <div key={key}><dt>{formatMetric(key)}</dt><dd>{value}</dd></div>)}</dl> : <p>No usable source values are saved for this category.</p>}
-      <small>{category.source === 'github' ? 'GitHub' : 'LeetCode'} · {category.formula}</small>
+      <small className="platform-heading"><PlatformLogo platform={category.source}/>{category.source === 'github' ? 'GitHub' : 'LeetCode'} · {category.formula}</small>
     </article>)}</div>
   </section>;
 }

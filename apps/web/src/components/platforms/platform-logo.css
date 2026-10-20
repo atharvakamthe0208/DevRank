@@ -1,0 +1,25 @@
+.platform-logo {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.platform-logo-regular { width: 18px; height: 18px; }
+.platform-logo-large { width: 21px; height: 21px; }
+.platform-heading,
+.platform-profile-link,
+.platform-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+.platform-profile-link { white-space: nowrap; }
+.platform-field-label { gap: 7px; }
+.platform-source-label { display: inline-flex; align-items: center; gap: 6px; }
+.signup-preview-profile-row .platform-logo-github { filter: invert(1); }
+.signup-preview-profile-row > .platform-logo { width: 22px; height: 22px; margin: 0 5px; }
+.dashboard-platform-title { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.evaluation-platform-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }

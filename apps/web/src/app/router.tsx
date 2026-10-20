@@ -13,13 +13,14 @@ import { InsightsPage } from '../features/insights/InsightsPage';
 import { EvaluationCreatePage } from '../features/evaluations/EvaluationCreatePage';
 import { EvaluationResultPage } from '../features/evaluations/EvaluationResultPage';
 import { AiAnalysisReportPage } from '../features/evaluation/AiAnalysisReportPage';
+import { AuthLoadingScreen } from '../features/auth/AuthLoadingScreen';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh, signOut } = useAuth();
   const location = useLocation();
 
   if (state === 'loading') {
-    return <main className="auth-state-page" role="status">Restoring your secure session…</main>;
+    return <AuthLoadingScreen message="Verifying recruiter access…"/>;
   }
 
   if (state === 'signed-out') {
@@ -69,7 +70,7 @@ function ProtectedAdminRoutes() {
   const location = useLocation();
 
   if (state === 'loading') {
-    return <main className="auth-state-page" role="status">Restoring your secure session…</main>;
+    return <AuthLoadingScreen message="Verifying administrator access…"/>;
   }
 
   if (state === 'signed-out') {

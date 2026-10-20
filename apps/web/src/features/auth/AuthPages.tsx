@@ -5,15 +5,17 @@ import { MIN_PASSWORD_LENGTH, validateEmail, validateSignup } from './validation
 import { passwordResetRequestFailureMessage, passwordUpdateFailureMessage, requestPasswordReset, updatePasswordFromRecovery, validatePasswordReset } from './password-recovery';
 import { supabase } from '../../lib/supabase/client';
 import { SignupFeatureShowcase } from './SignupFeatureShowcase';
+import { DelayedAuthLoadingScreen } from './DelayedAuthLoadingScreen';
 import devrankMark from '../../assets/devrank-mark.svg';
 import './signup.css';
 
-function AuthLayout({ eyebrow, title, children, footer, pageVariant }: { eyebrow: string; title: ReactNode; children: ReactNode; footer: ReactNode; pageVariant?: 'signin' | 'recovery' }) {
-  const brand = pageVariant === 'signin'
+function AuthLayout({ eyebrow, title, children, footer, pageVariant }: { eyebrow: string; title: ReactNode; children: ReactNode; footer: ReactNode; pageVariant?: 'signin' | 'recovery' | 'recovery-request' }) {
+  const brand = pageVariant === 'signin' || pageVariant === 'recovery-request'
     ? <Link to="/login" className="brand signin-brand" aria-label="DevRank home"><img src={devrankMark} alt=""/><span>DevRank</span></Link>
     : <Link to="/login" className="brand"><span className="brand-mark">d.</span><span>devrank<span className="brand-period">.</span></span></Link>;
-  const isRecovery = pageVariant === 'recovery';
-  return <main className={`login-page auth-page${pageVariant === 'signin' ? ' signin-auth-page' : ''}${isRecovery ? ' auth-recovery-page' : ''}`}><div className="login-brand">{brand}<div className="login-trust">✦ <span>Smarter hiring, backed by data.</span></div></div><div className="login-layout"><section className="login-form-wrap"><span className="login-kicker">{eyebrow}</span><h1>{title}<span className="brand-period">.</span></h1>{!isRecovery && <p className="login-intro">A secure workspace for recruiters to make thoughtful, data-informed hiring decisions.</p>}{children}<p className="auth-recruiter-note">Recruiter accounts only. DevRank does not offer candidate sign-in or registration.</p>{footer}</section><aside className="login-visual" aria-hidden="true"><div className="visual-orbit orbit-one"/><div className="visual-orbit orbit-two"/><div className="visual-sun">d.</div><div className="floating-score"><span>RECRUITER WORKSPACE</span><strong>✦</strong><em>Insight for every decision</em></div><div className="visual-quote"><span>✦ &nbsp; BUILT FOR BETTER HIRING</span><blockquote>“Great teams start with<br/>clearer insight.”</blockquote><small>DevRank candidate intelligence</small></div></aside></div><footer className="login-footer"><span>© 2026 DevRank</span><span>Recruiter workspace <i/></span></footer></main>;
+  const isRecovery = pageVariant === 'recovery' || pageVariant === 'recovery-request';
+  const isRecoveryRequest = pageVariant === 'recovery-request';
+  return <main className={`login-page auth-page${pageVariant === 'signin' || isRecoveryRequest ? ' signin-auth-page' : ''}${pageVariant === 'recovery' ? ' auth-recovery-page' : ''}${isRecoveryRequest ? ' auth-recovery-request' : ''}`}><div className="login-brand">{brand}<div className="login-trust">✦ <span>Smarter hiring, backed by data.</span></div></div><div className="login-layout"><section className="login-form-wrap"><span className="login-kicker">{eyebrow}</span><h1>{title}<span className="brand-period">.</span></h1>{!isRecovery && <p className="login-intro">A secure workspace for recruiters to make thoughtful, data-informed hiring decisions.</p>}{children}<p className="auth-recruiter-note">Recruiter accounts only. DevRank does not offer candidate sign-in or registration.</p>{footer}</section><aside className="login-visual" aria-hidden="true"><div className="visual-orbit orbit-one"/><div className="visual-orbit orbit-two"/><div className="visual-sun">d.</div><div className="floating-score"><span>RECRUITER WORKSPACE</span><strong>✦</strong><em>Insight for every decision</em></div><div className="visual-quote"><span>✦ &nbsp; BUILT FOR BETTER HIRING</span><blockquote>“Great teams start with<br/>clearer insight.”</blockquote><small>DevRank candidate intelligence</small></div></aside></div><footer className="login-footer"><span>© 2026 DevRank</span><span>Recruiter workspace <i/></span></footer></main>;
 }
 
 function FormError({ message }: { message?: string }) { return message ? <small className="auth-field-error" role="alert">{message}</small> : null; }
@@ -34,7 +36,7 @@ export function LoginPage() {
   if (state === 'profile-missing') return <Navigate to="/dashboard" replace/>;
   if (state === 'pending' || state === 'rejected' || state === 'unconfirmed') return <Navigate to="/access-pending" replace/>;
   async function submit(event: FormEvent) {
-    event.preventDefault(); setMessage(''); const next = { email: validateEmail(email), password: password ? undefined : 'Enter your password.' }; setErrors(next);
+    event.preventDefault(); if (busy) return; setMessage(''); const next = { email: validateEmail(email), password: password ? undefined : 'Enter your password.' }; setErrors(next);
     if (Object.values(next).some(Boolean)) return;
     if (!supabase) { setMessage('Authentication is temporarily unavailable because Supabase is not configured.'); return; }
     setBusy(true);
@@ -47,31 +49,32 @@ export function LoginPage() {
     if (authError) { setMessage(authError.code === 'email_not_confirmed' ? 'Confirm your email using the link Supabase sent before signing in.' : 'We could not sign you in. Check your email and password, then try again.'); return; }
     navigate(returnTo, { replace: true });
   }
-  return <AuthLayout eyebrow="RECRUITER SIGN IN" title={<>Welcome back</>} pageVariant="signin" footer={<p className="auth-switch">New to DevRank? <Link to="/signup">Create a recruiter account</Link></p>}>
+  return <><AuthLayout eyebrow="RECRUITER SIGN IN" title={<>Welcome back</>} pageVariant="signin" footer={<p className="auth-switch">New to DevRank? <Link to="/signup">Create a recruiter account</Link></p>}>
     <ConfigMessage/>{state==='error'&&authError&&<p className="form-feedback form-feedback-error" role="alert">{authError}</p>}<form className="login-form auth-form" onSubmit={submit} noValidate><label className="auth-field" htmlFor="email"><span>Work email</span><input id="email" type="email" autoComplete="email" value={email} onChange={(e) => {setEmail(e.target.value);setErrors({...errors,email:undefined});}} placeholder="you@company.com" aria-invalid={Boolean(errors.email)}/><FormError message={errors.email}/></label><div className="auth-forgot-row"><Link to="/forgot-password">Forgot password?</Link></div><PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="current-password" error={errors.password}/>{message && <p className="form-feedback form-feedback-error" role="alert">{message}</p>}<button className="primary-button login-submit" type="submit" disabled={busy || !supabase}>{busy ? 'Signing in…' : 'Sign in'} <span>→</span></button></form>
-  </AuthLayout>;
+  </AuthLayout><DelayedAuthLoadingScreen loading={busy} message="Signing you in…"/></>;
 }
 
 export function SignupPage() {
   const { state } = useAuth(); const [fullName,setFullName] = useState(''); const [email,setEmail] = useState(''); const [password,setPassword] = useState(''); const [confirm,setConfirm] = useState('');
-  const [errors,setErrors] = useState<Record<string,string|undefined>>({}); const [message,setMessage] = useState(''); const [busy,setBusy] = useState(false);
+  const [errors,setErrors] = useState<Record<string,string|undefined>>({}); const [message,setMessage] = useState(''); const [busy,setBusy] = useState(false); const [verifyAfterSignup,setVerifyAfterSignup] = useState(false);
   if (state === 'approved') return <Navigate to="/dashboard" replace/>;
   if (state === 'admin') return <Navigate to="/admin/recruiters" replace/>;
   if (state === 'profile-missing') return <Navigate to="/dashboard" replace/>;
   if (state === 'pending' || state === 'rejected' || state === 'unconfirmed') return <Navigate to="/access-pending" replace/>;
   async function submit(event: FormEvent) {
-    event.preventDefault(); setMessage(''); const next = validateSignup(fullName,email,password,confirm); setErrors(next);
+    event.preventDefault(); if (busy) return; setMessage(''); const next = validateSignup(fullName,email,password,confirm); setErrors(next);
     if (Object.values(next).some(Boolean)) return;
     if (!supabase) {setMessage('Authentication is temporarily unavailable because Supabase is not configured.');return;}
     setBusy(true);
     try {
       const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { full_name: fullName.trim() }, emailRedirectTo: `${window.location.origin}/auth/callback` } });
       if (error) { setMessage('We could not create your account. Check your details and try again.'); return; }
+      if (data.session) setVerifyAfterSignup(true);
       setMessage(data.session ? 'Account created. Confirm your email; your recruiter access will be available after administrator approval.' : 'If this address can be registered, Supabase will send an email confirmation. After confirmation, an administrator must approve recruiter access.');
     } catch { setMessage('The signup service could not be reached. Check your connection and try again.'); }
     finally { setBusy(false); }
   }
-  return <main className="signup-page auth-page">
+  return <><main className="signup-page auth-page">
     <header className="signup-header">
       <Link to="/login" className="signup-brand" aria-label="DevRank home">
         <img src={devrankMark} alt="" />
@@ -101,13 +104,13 @@ export function SignupPage() {
       </section>
       <SignupFeatureShowcase/>
     </div>
-  </main>;
+  </main><DelayedAuthLoadingScreen loading={busy || (verifyAfterSignup && state === 'loading')} message={busy ? 'Creating your account…' : 'Verifying recruiter access…'}/></>;
 }
 
 export function ForgotPasswordPage() {
   const [email,setEmail]=useState(''); const [error,setError]=useState(''); const [message,setMessage]=useState(''); const [busy,setBusy]=useState(false);
   async function submit(event:FormEvent){event.preventDefault();if(busy)return;const invalid=validateEmail(email);setError(invalid??'');setMessage('');if(invalid)return;const authClient=supabase;if(!authClient){setMessage('Authentication is temporarily unavailable because Supabase is not configured.');return;}setBusy(true);try{await requestPasswordReset((address,options)=>authClient.auth.resetPasswordForEmail(address,options),email.trim(),`${window.location.origin}/reset-password`);setMessage('If an account matches that address, password reset instructions will be sent.');}catch(cause){setMessage(passwordResetRequestFailureMessage(cause));}finally{setBusy(false);}}
-  return <AuthLayout pageVariant="recovery" eyebrow="ACCOUNT RECOVERY" title={<>Reset password</>} footer={<p className="auth-switch"><Link to="/login">← Back to sign in</Link></p>}><ConfigMessage/><form className="login-form auth-form" onSubmit={submit} noValidate><p className="login-intro">Enter your work email and we’ll send password reset instructions if an account matches.</p><label className="auth-field" htmlFor="reset-email"><span>Work email</span><input id="reset-email" type="email" autoComplete="email" value={email} onChange={(e)=>{setEmail(e.target.value);setError('');setMessage('');}} placeholder="you@company.com" aria-invalid={Boolean(error)}/><FormError message={error}/></label>{message&&<p className="form-feedback" role="status">{message}</p>}<button className="primary-button login-submit" disabled={busy||!supabase}>{busy?'Sending…':'Send reset link'} <span>→</span></button></form></AuthLayout>;
+  return <AuthLayout pageVariant="recovery-request" eyebrow="ACCOUNT RECOVERY" title={<>Reset your<br/>password</>} footer={<p className="auth-switch"><Link to="/login">← Back to sign in</Link></p>}><ConfigMessage/><form className="login-form auth-form" onSubmit={submit} noValidate aria-busy={busy}><p className="login-intro">Request a secure password-reset link at your registered work email.</p><label className="auth-field" htmlFor="reset-email"><span>Work email</span><input id="reset-email" type="email" autoComplete="email" value={email} onChange={(e)=>{setEmail(e.target.value);setError('');setMessage('');}} placeholder="you@company.com" aria-invalid={Boolean(error)}/><FormError message={error}/></label>{busy&&<p className="auth-reset-progress" role="status" aria-live="polite"><span aria-hidden="true"/>Sending reset link…</p>}{message&&<p className="form-feedback" role="status">{message}</p>}<button className="primary-button login-submit" type="submit" disabled={busy||!supabase}>{busy?'Sending…':'Send reset link'} <span>→</span></button></form></AuthLayout>;
 }
 
 export function ResetPasswordPage() {

@@ -13,6 +13,7 @@ import {
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { supabase } from '../../lib/supabase/client';
 import { useAuth } from '../auth/AuthProvider';
+import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
 import { comparableRecentEvaluations } from './insights-presentation';
 import { ActiveDashboardReports } from './ProposedDashboardReports';
 import './insights-page.css';
@@ -122,6 +123,7 @@ export function InsightsPage() {
   }
 
   return <div className="insights-page">
+    <DelayedAuthLoadingScreen loading={loading} message="Preparing insights…"/>
     <section className="insights-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER WORKSPACE</span><h1>Insights &amp; rankings</h1><p className="page-subtitle">Workspace activity and comparable evaluation results.</p></div><Link className="secondary-button insights-run-evaluation" to="/evaluations">Run an evaluation</Link></section>
     {loading ? <section className="insights-state" role="status">Loading recruiter insights…</section> : error ? <section className="insights-state" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></section> : dashboard && <>
       <section className="insights-panel" aria-labelledby="ranking-title">

@@ -3,13 +3,15 @@ import { Link, useLocation } from 'react-router-dom';
 import { useCandidates } from './useCandidates';
 import { candidateListView } from './candidate-list-state';
 import { candidateDeletionMessage } from './candidate-delete-confirmation';
+import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
+import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import './candidate-workflow.css';
 
 function CandidateTable({ items, deletingId, onDelete }: { items: ReturnType<typeof useCandidates>['items']; deletingId: string | null; onDelete: (candidate: ReturnType<typeof useCandidates>['items'][number]) => void }) {
-  return <><p className="candidate-table-scroll-hint" id="candidate-table-scroll-hint">Scroll horizontally to see profile links and row actions.</p><div className="candidate-management-table-wrap" role="region" aria-label="Candidate list" aria-describedby="candidate-table-scroll-hint" tabIndex={0}><table className="candidate-management-table"><thead><tr><th scope="col">Candidate</th><th scope="col">GitHub</th><th scope="col">LeetCode</th><th scope="col">Added</th><th scope="col"><span className="sr-only">Candidate actions</span></th></tr></thead><tbody>{items.map((candidate) => <tr key={candidate.id}>
+  return <><p className="candidate-table-scroll-hint" id="candidate-table-scroll-hint">Scroll horizontally to see profile links and row actions.</p><div className="candidate-management-table-wrap" role="region" aria-label="Candidate list" aria-describedby="candidate-table-scroll-hint" tabIndex={0}><table className="candidate-management-table"><thead><tr><th scope="col">Candidate</th><th scope="col"><span className="platform-heading"><PlatformLogo platform="github"/>GitHub</span></th><th scope="col"><span className="platform-heading"><PlatformLogo platform="leetcode"/>LeetCode</span></th><th scope="col">Added</th><th scope="col"><span className="sr-only">Candidate actions</span></th></tr></thead><tbody>{items.map((candidate) => <tr key={candidate.id}>
     <td><Link className="management-candidate" to={`/candidates/${candidate.id}`}><span className="avatar avatar-user">{candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span><strong>{candidate.name}</strong><small>{candidate.email || 'Email not provided'}</small></span></Link></td>
-    <td>{candidate.githubUsername ? <a href={`https://github.com/${encodeURIComponent(candidate.githubUsername)}`} target="_blank" rel="noreferrer">@{candidate.githubUsername}</a> : <span className="candidate-field-empty">—</span>}</td>
-    <td>{candidate.leetcodeUsername ? <a href={`https://leetcode.com/u/${encodeURIComponent(candidate.leetcodeUsername)}/`} target="_blank" rel="noreferrer">@{candidate.leetcodeUsername}</a> : <span className="candidate-field-empty">—</span>}</td>
+    <td>{candidate.githubUsername ? <a className="platform-profile-link" href={`https://github.com/${encodeURIComponent(candidate.githubUsername)}`} target="_blank" rel="noreferrer"><PlatformLogo platform="github"/>@{candidate.githubUsername}</a> : <span className="candidate-field-empty">—</span>}</td>
+    <td>{candidate.leetcodeUsername ? <a className="platform-profile-link" href={`https://leetcode.com/u/${encodeURIComponent(candidate.leetcodeUsername)}/`} target="_blank" rel="noreferrer"><PlatformLogo platform="leetcode"/>@{candidate.leetcodeUsername}</a> : <span className="candidate-field-empty">—</span>}</td>
     <td><time dateTime={candidate.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(candidate.createdAt))}</time></td>
     <td><div className="candidate-row-actions"><Link className="row-action" to={`/candidates/${candidate.id}`} aria-label={`View ${candidate.name}`}>↗</Link><button className="candidate-delete-button" type="button" aria-label={`Delete ${candidate.name}`} disabled={deletingId !== null} onClick={() => onDelete(candidate)}>{deletingId === candidate.id ? 'Deleting…' : 'Delete'}</button></div></td>
   </tr>)}</tbody></table></div></>;
@@ -49,6 +51,7 @@ export function CandidateListPage() {
     }
   }
   return <div className="candidate-management-page">
+    <DelayedAuthLoadingScreen loading={loading} message="Loading your candidates…"/>
     <section className="candidate-management-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER WORKSPACE</span><h1>Candidates</h1><p className="page-subtitle">Manage the candidate profiles in your workspace.</p></div><Link className="primary-button link-button" to="/candidates/new"><span>＋</span> Add candidate</Link></section>
     {typeof notice === 'string' && <p className="form-feedback candidate-success-message" role="status">{notice}</p>}
     {deleteNotice && <p className="form-feedback candidate-success-message" role="status">{deleteNotice}</p>}
