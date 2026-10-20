@@ -135,6 +135,7 @@ describe('LeetCode provider adapter', () => {
     } catch (error) {
       expect(error).toMatchObject({ statusCode: 503, code: 'LEETCODE_PROVIDER_UNAVAILABLE' });
       expect((error as Error).message).not.toContain('private network');
+      expect((error as Error).message).toContain('configured alfa-leetcode-api service is running and reachable');
     }
   });
 

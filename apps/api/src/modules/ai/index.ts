@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import type { ChatGroq as ChatGroqType } from '@langchain/groq' with { 'resolution-mode': 'require' };
 import type { HumanMessage as HumanMessageType, SystemMessage as SystemMessageType } from '@langchain/core/messages' with { 'resolution-mode': 'require' };
-import { aiAnalysisContentSchema, proposedRubric, scoringCategories, type AiAnalysisContent, type PersistedEvaluation } from '@devrank/contracts';
+import { aiAnalysisContentSchema, finalRubric, scoringCategories, type AiAnalysisContent, type PersistedEvaluation } from '@devrank/contracts';
 import { env, type ApiEnvironment } from '../../config/env.js';
 import { HttpError } from '../../middleware/http-error.js';
 

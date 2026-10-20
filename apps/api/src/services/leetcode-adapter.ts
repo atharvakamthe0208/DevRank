@@ -71,7 +71,7 @@ function providerError(error: unknown): HttpError {
   if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
     return new HttpError(504, 'LEETCODE_TIMEOUT', 'LeetCode statistics provider did not respond in time');
   }
-  return new HttpError(503, 'LEETCODE_PROVIDER_UNAVAILABLE', 'LeetCode statistics provider could not be reached; try again later');
+  return new HttpError(503, 'LEETCODE_PROVIDER_UNAVAILABLE', 'LeetCode statistics provider could not be reached. Check that the configured alfa-leetcode-api service is running and reachable, then retry.');
 }
 
 export function createLeetCodeAdapter(
