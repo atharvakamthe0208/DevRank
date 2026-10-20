@@ -12,7 +12,6 @@ import {
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { normalizePlatformProfile, platformSyncCapabilities } from './candidate-platform-form';
 import { parseCandidateApiResponse } from './candidate-response-validation';
-import { ProposedRubricPanel } from './ProposedRubricPanel';
 import { useAuth } from '../auth/AuthProvider';
 import './candidate-platform-data.css';
 
@@ -112,7 +111,6 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
   }
 
   const latestLeetCode = saved.find((item): item is CandidatePlatformResponse => 'platform' in item && item.platform === 'leetcode' && 'submittedAt' in item);
-  const githubInsights = githubState.status === 'synced' ? githubState.result.profile.insights : undefined;
   return <section className="detail-section platform-data-section" aria-labelledby="platform-data-heading">
     <div className="section-heading"><div><h2 id="platform-data-heading">Platform data</h2><p>GitHub syncs through its public API. Coding profile links are saved to the candidate record; unsupported stats are never fabricated.</p></div></div>
     <article className="platform-data-card github-sync-card">
@@ -122,7 +120,6 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
       {githubState.status === 'synced' && <div className="github-sync-result" role="status"><p>Saved public snapshot for <strong>@{githubState.result.profile.username}</strong>: {githubState.result.profile.publicRepositoryCount} public repositories, {githubState.result.profile.followers} followers, {githubState.result.profile.following} following.</p><small>Updated {when(githubState.result.syncedAt)}. {githubState.result.profile.repositoriesTruncated ? `Showing ${githubState.result.profile.repositoriesReturned} of the available repositories.` : 'No score is calculated from this data.'}</small>{githubState.result.profile.repositories.length > 0 && <ul>{githubState.result.profile.repositories.slice(0, 3).map((repository) => <li key={repository.id}><a href={repository.url} target="_blank" rel="noreferrer">{repository.name}</a><span>{repository.stars} stars{repository.primaryLanguage ? ` · ${repository.primaryLanguage}` : ''}</span></li>)}</ul>}
       </div>}
     </article>
-    <ProposedRubricPanel insights={githubInsights} snapshotState={githubState.status === 'synced' ? 'synced' : githubState.status === 'loading' ? 'loading' : githubState.status === 'error' ? 'error' : 'idle'} />
     <article className="platform-data-card platform-data-card-leetcode">
       <div className="platform-data-heading"><span className="platform-mark leetcode-mark">LC</span><div><h3>LeetCode</h3><p>Profile link and any previously saved candidate-provided summary</p></div><span className={`source-status ${latestLeetCode?.availability === 'available' ? 'is-available' : latestLeetCode ? 'is-unavailable' : 'is-idle'}`} role="status">{latestLeetCode ? latestLeetCode.availability.replace('_', ' ') : 'No stats saved'}</span></div>
       <form className="platform-data-form" onSubmit={(event) => void saveLeetCodeProfile(event)}>

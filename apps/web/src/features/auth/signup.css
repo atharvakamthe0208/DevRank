@@ -266,7 +266,7 @@ html[data-theme='dark'] .signup-footer { color: #7e8ca4; }
   .signup-layout { min-height: 0; grid-template-columns: minmax(0,1fr); overflow: visible; }
   .signup-form-panel { padding: 45px 34px 22px; }
   .signup-form-content { max-width: 550px; }
-  .signup-showcase { min-height: 670px; padding: 50px 36px; border-radius: 0 0 24px 24px; }
+  .signup-showcase { min-height: 480px; padding: 34px 36px; border-radius: 0 0 24px 24px; }
   .signup-showcase-content { max-width: 700px; }
   .signup-footer { margin-top: 18px; }
 }
@@ -287,7 +287,7 @@ html[data-theme='dark'] .signup-footer { color: #7e8ca4; }
   .signup-form-panel .auth-recruiter-note { font-size: 10px; }
   .signup-login-link { font-size: 11px; }
   .signup-footer { margin-top: 14px; font-size: 8px; }
-  .signup-showcase { min-height: 610px; padding: 36px 18px; border-radius: 0 0 16px 16px; }
+  .signup-showcase { min-height: 440px; padding: 28px 18px; border-radius: 0 0 16px 16px; }
   .signup-showcase-heading > span { font-size: 9px; }
   .signup-showcase-heading h2 { margin: 10px 0 7px; font-size: 30px; }
   .signup-showcase-heading > p { font-size: 12px; }
@@ -433,6 +433,13 @@ html[data-theme='dark'] .signup-footer { color: #7e8ca4; }
 .login-page.signin-auth-page .visual-quote small { color: #aab8d2; }
 .login-page.signin-auth-page .login-footer { width: min(1160px, 100%); margin: 0; color: #a0aec5; }
 .login-page.signin-auth-page .login-footer i { background: #7ba8ff; }
+
+/* Recovery tasks stay focused on the form; the shared recruiter promotion is
+   already available on sign-in and signup. */
+.login-page.auth-recovery-page .login-layout { width: min(560px, 100%); min-height: 0; grid-template-columns: minmax(0, 1fr); }
+.login-page.auth-recovery-page .login-form-wrap { padding: clamp(28px, 6vw, 62px); }
+.login-page.auth-recovery-page .login-visual { display: none; }
+.login-page.auth-recovery-page .login-form-wrap > .login-intro { margin-bottom: 20px; }
 
 @media (max-height: 820px) and (min-width: 861px) {
   .login-page.signin-auth-page { padding-top: 24px; padding-bottom: 24px; }
