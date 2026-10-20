@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { schemaVersion, scoringVersionSchema, roleIdSchema, roleWeightsSchema, scoringCategorySchema, scoringCategories, scoreSchema, confidenceSchema, categoryScoreSchema } from './scoring.js';
 import { evidenceSchema } from './evidence.js';
 import { platformEvaluationEvidenceSchema } from './platform-data.js';
+import { finalEvaluationReportSchema } from './proposed-report.js';
 
 export const candidateInputSchema = z.object({ candidateId: z.string().min(1), targetRole: roleIdSchema, evidence: z.array(evidenceSchema) });
 export const evaluationResponseSchema = z.object({
@@ -14,6 +15,8 @@ export const evaluationResponseSchema = z.object({
   roleWeightsUsed: roleWeightsSchema,
   evidence: z.array(evidenceSchema),
   platformEvidence: z.array(platformEvaluationEvidenceSchema).optional(),
+  /** Exact v4 report snapshot used to create this result; absent only on pre-report v4 rows. */
+  finalReport: finalEvaluationReportSchema.optional(),
   confidence: confidenceSchema.optional(),
   strengths: z.array(z.string()),
   skillGaps: z.array(z.string()),
@@ -44,6 +47,16 @@ export const evaluationResponseSchema = z.object({
     if (category.status === 'scored' && category.evidenceRefs.length === 0) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryScores', index, 'evidenceRefs'], message: 'A scored category must reference supporting evidence.' });
     if (category.evidenceRefs.some((id) => result.evidence.find((item) => item.evidenceId === id)?.categoryId !== category.categoryId)) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryScores', index, 'evidenceRefs'], message: 'Evidence references must match the score category.' });
+    }
+  }
+  if (result.finalReport) {
+    if (result.finalReport.overallScore !== result.overallScore) context.addIssue({ code: z.ZodIssueCode.custom, path: ['finalReport', 'overallScore'], message: 'The persisted report total must match the evaluation total.' });
+    for (const reportCategory of result.finalReport.categories) {
+      const scoreCategory = result.categoryScores.find(({ categoryId }) => categoryId === reportCategory.categoryId);
+      if (!scoreCategory || scoreCategory.score !== reportCategory.score
+        || (scoreCategory.status === 'scored') !== (reportCategory.status === 'scored')) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['finalReport', 'categories'], message: 'Persisted report indexes must match the active category results.' });
+      }
     }
   }
 });

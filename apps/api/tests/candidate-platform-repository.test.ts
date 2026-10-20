@@ -226,7 +226,7 @@ describe('candidate platform evidence repository', () => {
     };
     const { client, candidateQuery, evidenceQuery } = createClient(
       { data: { id: candidateId }, error: null },
-      { data: { id: evidenceId, candidate_id: candidateId, observed_at: '2026-10-15T12:00:00.000Z' }, error: null },
+      { data: { id: evidenceId, candidate_id: candidateId, observed_at: '2026-10-15T12:00:00.000+00:00' }, error: null },
     );
     const getProfile = vi.fn(async () => profile);
     const repository = createCandidatePlatformRepository(() => client, undefined, undefined, getProfile);
@@ -238,7 +238,7 @@ describe('candidate platform evidence repository', () => {
       raw_evidence: expect.objectContaining({ provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example' }),
       normalized_evidence: profile,
     }));
-    expect(result).toMatchObject({ id: evidenceId, candidateId, provenance: 'alfa_leetcode_api', statistics: { problemsSolved: 12, easySolved: 0 } });
+    expect(result).toMatchObject({ id: evidenceId, candidateId, provenance: 'alfa_leetcode_api', syncedAt: '2026-10-15T12:00:00.000+00:00', statistics: { problemsSolved: 12, easySolved: 0 } });
     expect(result).not.toHaveProperty('score');
   });
 
@@ -272,6 +272,51 @@ describe('candidate platform evidence repository', () => {
     expect(evidenceQuery.update).not.toHaveBeenCalled();
   });
 
+  it('logs a safe SQLSTATE diagnosis for a LeetCode evidence insert failure without exposing database text', async () => {
+    const { client } = createClient(
+      { data: { id: candidateId }, error: null },
+      { data: null, error: { code: '42501', message: 'permission denied for candidate atharva@example.com token=private-value' } },
+    );
+    const log = vi.fn();
+    const repository = createCandidatePlatformRepository(
+      () => client,
+      undefined,
+      undefined,
+      async () => ({
+        platform: 'leetcode', provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'private-handle',
+        profileUrl: 'https://leetcode.com/u/private-handle/', statistics: { problemsSolved: 12 },
+      }),
+      log,
+    );
+
+    await expect(repository.syncLeetCode(auth, candidateId, 'private-handle')).rejects.toMatchObject({
+      statusCode: 503, code: 'DATABASE_UNAVAILABLE', message: 'Unable to save LeetCode profile data right now',
+    });
+    expect(log).toHaveBeenCalledWith({
+      operation: 'evidence_insert', code: '42501',
+      message: 'Database permission or row-level security denied the operation.',
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/private|atharva|example\.com/);
+  });
+
+  it('identifies candidate lookup failures separately from evidence persistence failures', async () => {
+    const { client } = createClient(
+      { data: null, error: { code: '42P01', message: 'relation candidates does not exist' } },
+      undefined,
+    );
+    const log = vi.fn();
+    const getProfile = vi.fn();
+    const repository = createCandidatePlatformRepository(() => client, undefined, undefined, getProfile, log);
+
+    await expect(repository.syncLeetCode(auth, candidateId, 'example')).rejects.toMatchObject({
+      statusCode: 503, code: 'DATABASE_UNAVAILABLE', message: 'Unable to verify the candidate right now',
+    });
+    expect(log).toHaveBeenCalledWith({
+      operation: 'candidate_lookup', code: '42P01', message: 'Database relation is missing or unavailable.',
+    });
+    expect(getProfile).not.toHaveBeenCalled();
+  });
+
   it('returns LeetCode sync provenance and retrieval time from owner-scoped saved evidence', async () => {
     const normalized = {
       platform: 'leetcode', provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example',
@@ -282,12 +327,12 @@ describe('candidate platform evidence repository', () => {
       { data: [{
         id: evidenceId, candidate_id: candidateId, owner_id: ownerId, source: 'leetcode', availability: 'available',
         raw_evidence: { provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example', profileUrl: normalized.profileUrl },
-        normalized_evidence: normalized, created_at: '2026-10-15T12:00:00.000Z', observed_at: '2026-10-15T12:00:00.000Z',
+        normalized_evidence: normalized, created_at: '2026-10-15T12:00:00.000+00:00', observed_at: '2026-10-15T12:00:00.000+00:00',
       }], error: null },
     );
     const repository = createCandidatePlatformRepository(() => client);
     await expect(repository.getLatest(auth, candidateId)).resolves.toMatchObject({ items: [{
-      id: evidenceId, candidateId, provenance: 'alfa_leetcode_api', syncedAt: '2026-10-15T12:00:00.000Z', statistics: { problemsSolved: 15 },
+      id: evidenceId, candidateId, provenance: 'alfa_leetcode_api', syncedAt: '2026-10-15T12:00:00.000+00:00', statistics: { problemsSolved: 15 },
     }] });
   });
 

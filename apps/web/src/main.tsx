@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from './app/router';
 import { Providers } from './app/providers';
 import './styles.css';
+import './workspace-refinement.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element #root was not found');

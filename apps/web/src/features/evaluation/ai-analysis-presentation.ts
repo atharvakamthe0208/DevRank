@@ -1,5 +1,6 @@
 import { scoringCategories, type AiAnalysisResponse, type PersistedEvaluation } from '@devrank/contracts';
 import { ApiRequestError } from '../../lib/api/client';
+import { formatEvidenceDate, readableEvidenceLabel, readableProvenance } from './evidence-presentation';
 
 export function aiAnalysisErrorMessage(error: unknown): string {
   if (error instanceof ApiRequestError) {
@@ -24,7 +25,9 @@ export function analysisReferenceDescriptions(evaluation: PersistedEvaluation, r
       continue;
     }
     const evidence = evaluation.result.evidence.find(({ evidenceId }) => evidenceId === reference);
-    if (evidence) descriptions.set(reference, `${evidence.source} · ${evidence.description}`);
+    if (evidence) descriptions.set(reference, `${readableProvenance(evidence.source)} · ${evidence.description}${evidence.observedAt ? ` · observed ${formatEvidenceDate(evidence.observedAt)}` : ''}`);
+    const snapshot = evaluation.result.platformEvidence?.find(({ evidenceId }) => evidenceId === reference);
+    if (snapshot) descriptions.set(reference, `${snapshot.source === 'github' ? 'GitHub' : 'LeetCode'} · ${readableEvidenceLabel(snapshot.evidenceType)} · ${readableProvenance(snapshot.provenance)} · ${snapshot.availability.replaceAll('_', ' ')} · saved ${formatEvidenceDate(snapshot.observedAt)}`);
   }
   return [...descriptions.values()];
 }

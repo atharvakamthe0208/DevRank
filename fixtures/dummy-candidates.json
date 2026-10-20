@@ -1,42 +1,328 @@
 [
-  { "candidateId": "synthetic-candidate-001", "targetRole": "software_developer", "evidence": [
-    { "evidenceId": "c001-tech", "evidenceType": "technical_screen", "source": "Synthetic structured technical screen", "description": "Strong TypeScript and API fundamentals", "originalValue": "4/5 rubric", "normalizedValue": 80, "verificationStatus": "unverified", "categoryId": "technical_skills", "availability": "available" },
-    { "evidenceId": "c001-dsa", "evidenceType": "coding_assessment", "source": "Synthetic timed coding sample", "description": "Solved two of three problems with clear complexity analysis", "originalValue": "2/3 rubric", "normalizedValue": 75, "verificationStatus": "unverified", "categoryId": "problem_solving_dsa", "availability": "available" },
-    { "evidenceId": "c001-project", "evidenceType": "project", "source": "Synthetic portfolio review", "description": "Maintained a small service with documented tests", "normalizedValue": 78, "verificationStatus": "unverified", "categoryId": "relevant_project_experience", "availability": "available" },
-    { "evidenceId": "c001-practical", "evidenceType": "work_sample", "source": "Synthetic take-home rubric", "description": "Completed maintainable feature with edge-case handling", "normalizedValue": 82, "verificationStatus": "unverified", "categoryId": "practical_assessment_performance", "availability": "available" },
-    { "evidenceId": "c001-communication", "evidenceType": "structured_interview", "source": "Synthetic structured interview rubric", "description": "Explained design choices clearly and responded to follow-up questions", "normalizedValue": 80, "verificationStatus": "unverified", "categoryId": "communication_skills", "availability": "available" },
-    { "evidenceId": "c001-learning", "evidenceType": "learning_record", "source": "Synthetic learning example", "description": "Described learning and applying an unfamiliar testing tool", "normalizedValue": 72, "verificationStatus": "unverified", "categoryId": "learning_adaptability", "availability": "available" }
-  ] },
-  { "candidateId": "synthetic-candidate-002", "targetRole": "ai_ml_engineer", "evidence": [
-    { "evidenceId": "c002-tech", "evidenceType": "technical_screen", "source": "Synthetic ML screen", "description": "Good Python and model evaluation fundamentals", "normalizedValue": 86, "verificationStatus": "unverified", "categoryId": "technical_skills", "availability": "available" },
-    { "evidenceId": "c002-dsa", "evidenceType": "coding_assessment", "source": "Synthetic coding rubric", "description": "Reasoned through data structures with minor inefficiency", "normalizedValue": 70, "verificationStatus": "unverified", "categoryId": "problem_solving_dsa", "availability": "available" },
-    { "evidenceId": "c002-project", "evidenceType": "project", "source": "Synthetic project review", "description": "Compared baseline models and documented limitations", "normalizedValue": 90, "verificationStatus": "unverified", "categoryId": "relevant_project_experience", "availability": "available" },
-    { "evidenceId": "c002-practical", "evidenceType": "work_sample", "source": "Synthetic model exercise", "description": "Built a reproducible evaluation notebook", "normalizedValue": 88, "verificationStatus": "unverified", "categoryId": "practical_assessment_performance", "availability": "available" },
-    { "evidenceId": "c002-communication", "evidenceType": "structured_interview", "source": "Synthetic structured interview rubric", "description": "Explained evaluation trade-offs clearly in a structured interview", "normalizedValue": 80, "verificationStatus": "unverified", "categoryId": "communication_skills", "availability": "available" },
-    { "evidenceId": "c002-learning", "evidenceType": "learning_record", "source": "Synthetic learning example", "description": "Adapted an existing pipeline to a new dataset", "normalizedValue": 84, "verificationStatus": "unverified", "categoryId": "learning_adaptability", "availability": "available" }
-  ] },
-  { "candidateId": "synthetic-candidate-003", "targetRole": "data_analyst", "evidence": [
-    { "evidenceId": "c003-tech", "evidenceType": "technical_screen", "source": "Synthetic analytics screen", "description": "Strong SQL and spreadsheet analysis; basic Python", "normalizedValue": 82, "verificationStatus": "unverified", "categoryId": "technical_skills", "availability": "available" },
-    { "evidenceId": "c003-dsa", "evidenceType": "coding_assessment", "source": "Synthetic reasoning sample", "description": "Applied sound decomposition to a data question", "normalizedValue": 74, "verificationStatus": "unverified", "categoryId": "problem_solving_dsa", "availability": "available" },
-    { "evidenceId": "c003-project", "evidenceType": "project", "source": "Synthetic portfolio review", "description": "Produced a clear dashboard from synthetic sales data", "normalizedValue": 88, "verificationStatus": "unverified", "categoryId": "relevant_project_experience", "availability": "available" },
-    { "evidenceId": "c003-practical", "evidenceType": "work_sample", "source": "Synthetic analysis exercise", "description": "Found and documented data quality issues", "normalizedValue": 84, "verificationStatus": "unverified", "categoryId": "practical_assessment_performance", "availability": "available" },
-    { "evidenceId": "c003-communication", "evidenceType": "structured_interview", "source": "Synthetic structured interview rubric", "description": "Presented analysis and limitations clearly", "normalizedValue": 80, "verificationStatus": "unverified", "categoryId": "communication_skills", "availability": "available" },
-    { "evidenceId": "c003-learning", "evidenceType": "learning_record", "source": "Synthetic learning example", "description": "Picked up a new visualization tool for a sample report", "normalizedValue": 78, "verificationStatus": "unverified", "categoryId": "learning_adaptability", "availability": "available" }
-  ] },
-  { "candidateId": "synthetic-candidate-004", "targetRole": "software_developer", "evidence": [
-    { "evidenceId": "c004-tech", "evidenceType": "technical_screen", "source": "Synthetic technical screen", "description": "Broad familiarity with backend concepts", "normalizedValue": 70, "verificationStatus": "unverified", "categoryId": "technical_skills", "availability": "available" },
-    { "evidenceId": "c004-dsa", "evidenceType": "coding_assessment", "source": "Synthetic coding sample", "description": "Completed core cases; missed one boundary condition", "normalizedValue": 62, "verificationStatus": "unverified", "categoryId": "problem_solving_dsa", "availability": "available" },
-    { "evidenceId": "c004-project", "evidenceType": "project", "source": "Synthetic portfolio review", "description": "Contributed features to a sample service", "normalizedValue": 68, "verificationStatus": "unverified", "categoryId": "relevant_project_experience", "availability": "available" },
-    { "evidenceId": "c004-practical", "evidenceType": "work_sample", "source": "Synthetic work sample", "description": "Basic feature complete; limited tests supplied", "normalizedValue": 58, "verificationStatus": "unverified", "categoryId": "practical_assessment_performance", "availability": "available" },
-    { "evidenceId": "c004-communication", "evidenceType": "structured_interview", "source": "Synthetic structured interview rubric", "description": "Described implementation decisions with a basic level of clarity", "normalizedValue": 80, "verificationStatus": "unverified", "categoryId": "communication_skills", "availability": "available" },
-    { "evidenceId": "c004-learning", "evidenceType": "learning_record", "source": "Synthetic learning example", "description": "Provided one example of self-directed learning", "normalizedValue": 80, "verificationStatus": "unverified", "categoryId": "learning_adaptability", "availability": "available" }
-  ] },
-  { "candidateId": "synthetic-candidate-005", "targetRole": "ai_ml_engineer", "evidence": [
-    { "evidenceId": "c005-tech-missing", "evidenceType": "technical_screen", "source": "Not collected", "description": "No technical screen evidence supplied", "verificationStatus": "unverified", "categoryId": "technical_skills", "availability": "missing" },
-    { "evidenceId": "c005-dsa-missing", "evidenceType": "coding_assessment", "source": "Not collected", "description": "No problem-solving evidence supplied", "verificationStatus": "unverified", "categoryId": "problem_solving_dsa", "availability": "missing" },
-    { "evidenceId": "c005-project-missing", "evidenceType": "project", "source": "Not collected", "description": "No relevant project evidence supplied", "verificationStatus": "unverified", "categoryId": "relevant_project_experience", "availability": "missing" },
-    { "evidenceId": "c005-practical-missing", "evidenceType": "work_sample", "source": "Not collected", "description": "No practical assessment completed or supplied", "verificationStatus": "unverified", "categoryId": "practical_assessment_performance", "availability": "missing" },
-    { "evidenceId": "c005-communication-missing", "evidenceType": "structured_interview", "source": "Not collected", "description": "No structured communication assessment supplied", "verificationStatus": "unverified", "categoryId": "communication_skills", "availability": "missing" },
-    { "evidenceId": "c005-learning-missing", "evidenceType": "learning_record", "source": "Not collected", "description": "No learning evidence supplied", "verificationStatus": "unverified", "categoryId": "learning_adaptability", "availability": "missing" }
-  ] }
+  {
+    "candidateId": "synthetic-candidate-001",
+    "targetRole": "software_developer",
+    "evidence": [
+      {
+        "evidenceId": "c001-tech",
+        "evidenceType": "technical_screen",
+        "source": "Synthetic structured technical screen",
+        "description": "Strong TypeScript and API fundamentals",
+        "originalValue": "4/5 rubric",
+        "normalizedValue": 80,
+        "verificationStatus": "unverified",
+        "categoryId": "technical_skills",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c001-dsa",
+        "evidenceType": "coding_assessment",
+        "source": "Synthetic timed coding sample",
+        "description": "Solved two of three problems with clear complexity analysis",
+        "originalValue": "2/3 rubric",
+        "normalizedValue": 75,
+        "verificationStatus": "unverified",
+        "categoryId": "problem_solving_dsa",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c001-project",
+        "evidenceType": "project",
+        "source": "Synthetic portfolio review",
+        "description": "Maintained a small service with documented tests",
+        "normalizedValue": 78,
+        "verificationStatus": "unverified",
+        "categoryId": "project_portfolio",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c001-practical",
+        "evidenceType": "work_sample",
+        "source": "Synthetic take-home rubric",
+        "description": "Completed maintainable feature with edge-case handling",
+        "normalizedValue": 82,
+        "verificationStatus": "unverified",
+        "categoryId": "development_activity",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c001-communication",
+        "evidenceType": "structured_interview",
+        "source": "Synthetic structured interview rubric",
+        "description": "Explained design choices clearly and responded to follow-up questions",
+        "normalizedValue": 80,
+        "verificationStatus": "unverified",
+        "categoryId": "collaboration",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c001-learning",
+        "evidenceType": "learning_record",
+        "source": "Synthetic learning example",
+        "description": "Described learning and applying an unfamiliar testing tool",
+        "normalizedValue": 72,
+        "verificationStatus": "unverified",
+        "categoryId": "current_year_contributions",
+        "availability": "available"
+      }
+    ]
+  },
+  {
+    "candidateId": "synthetic-candidate-002",
+    "targetRole": "ai_ml_engineer",
+    "evidence": [
+      {
+        "evidenceId": "c002-tech",
+        "evidenceType": "technical_screen",
+        "source": "Synthetic ML screen",
+        "description": "Good Python and model evaluation fundamentals",
+        "normalizedValue": 86,
+        "verificationStatus": "unverified",
+        "categoryId": "technical_skills",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c002-dsa",
+        "evidenceType": "coding_assessment",
+        "source": "Synthetic coding rubric",
+        "description": "Reasoned through data structures with minor inefficiency",
+        "normalizedValue": 70,
+        "verificationStatus": "unverified",
+        "categoryId": "problem_solving_dsa",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c002-project",
+        "evidenceType": "project",
+        "source": "Synthetic project review",
+        "description": "Compared baseline models and documented limitations",
+        "normalizedValue": 90,
+        "verificationStatus": "unverified",
+        "categoryId": "project_portfolio",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c002-practical",
+        "evidenceType": "work_sample",
+        "source": "Synthetic model exercise",
+        "description": "Built a reproducible evaluation notebook",
+        "normalizedValue": 88,
+        "verificationStatus": "unverified",
+        "categoryId": "development_activity",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c002-communication",
+        "evidenceType": "structured_interview",
+        "source": "Synthetic structured interview rubric",
+        "description": "Explained evaluation trade-offs clearly in a structured interview",
+        "normalizedValue": 80,
+        "verificationStatus": "unverified",
+        "categoryId": "collaboration",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c002-learning",
+        "evidenceType": "learning_record",
+        "source": "Synthetic learning example",
+        "description": "Adapted an existing pipeline to a new dataset",
+        "normalizedValue": 84,
+        "verificationStatus": "unverified",
+        "categoryId": "current_year_contributions",
+        "availability": "available"
+      }
+    ]
+  },
+  {
+    "candidateId": "synthetic-candidate-003",
+    "targetRole": "data_analyst",
+    "evidence": [
+      {
+        "evidenceId": "c003-tech",
+        "evidenceType": "technical_screen",
+        "source": "Synthetic analytics screen",
+        "description": "Strong SQL and spreadsheet analysis; basic Python",
+        "normalizedValue": 82,
+        "verificationStatus": "unverified",
+        "categoryId": "technical_skills",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c003-dsa",
+        "evidenceType": "coding_assessment",
+        "source": "Synthetic reasoning sample",
+        "description": "Applied sound decomposition to a data question",
+        "normalizedValue": 74,
+        "verificationStatus": "unverified",
+        "categoryId": "problem_solving_dsa",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c003-project",
+        "evidenceType": "project",
+        "source": "Synthetic portfolio review",
+        "description": "Produced a clear dashboard from synthetic sales data",
+        "normalizedValue": 88,
+        "verificationStatus": "unverified",
+        "categoryId": "project_portfolio",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c003-practical",
+        "evidenceType": "work_sample",
+        "source": "Synthetic analysis exercise",
+        "description": "Found and documented data quality issues",
+        "normalizedValue": 84,
+        "verificationStatus": "unverified",
+        "categoryId": "development_activity",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c003-communication",
+        "evidenceType": "structured_interview",
+        "source": "Synthetic structured interview rubric",
+        "description": "Presented analysis and limitations clearly",
+        "normalizedValue": 80,
+        "verificationStatus": "unverified",
+        "categoryId": "collaboration",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c003-learning",
+        "evidenceType": "learning_record",
+        "source": "Synthetic learning example",
+        "description": "Picked up a new visualization tool for a sample report",
+        "normalizedValue": 78,
+        "verificationStatus": "unverified",
+        "categoryId": "current_year_contributions",
+        "availability": "available"
+      }
+    ]
+  },
+  {
+    "candidateId": "synthetic-candidate-004",
+    "targetRole": "software_developer",
+    "evidence": [
+      {
+        "evidenceId": "c004-tech",
+        "evidenceType": "technical_screen",
+        "source": "Synthetic technical screen",
+        "description": "Broad familiarity with backend concepts",
+        "normalizedValue": 70,
+        "verificationStatus": "unverified",
+        "categoryId": "technical_skills",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c004-dsa",
+        "evidenceType": "coding_assessment",
+        "source": "Synthetic coding sample",
+        "description": "Completed core cases; missed one boundary condition",
+        "normalizedValue": 62,
+        "verificationStatus": "unverified",
+        "categoryId": "problem_solving_dsa",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c004-project",
+        "evidenceType": "project",
+        "source": "Synthetic portfolio review",
+        "description": "Contributed features to a sample service",
+        "normalizedValue": 68,
+        "verificationStatus": "unverified",
+        "categoryId": "project_portfolio",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c004-practical",
+        "evidenceType": "work_sample",
+        "source": "Synthetic work sample",
+        "description": "Basic feature complete; limited tests supplied",
+        "normalizedValue": 58,
+        "verificationStatus": "unverified",
+        "categoryId": "development_activity",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c004-communication",
+        "evidenceType": "structured_interview",
+        "source": "Synthetic structured interview rubric",
+        "description": "Described implementation decisions with a basic level of clarity",
+        "normalizedValue": 80,
+        "verificationStatus": "unverified",
+        "categoryId": "collaboration",
+        "availability": "available"
+      },
+      {
+        "evidenceId": "c004-learning",
+        "evidenceType": "learning_record",
+        "source": "Synthetic learning example",
+        "description": "Provided one example of self-directed learning",
+        "normalizedValue": 80,
+        "verificationStatus": "unverified",
+        "categoryId": "current_year_contributions",
+        "availability": "available"
+      }
+    ]
+  },
+  {
+    "candidateId": "synthetic-candidate-005",
+    "targetRole": "ai_ml_engineer",
+    "evidence": [
+      {
+        "evidenceId": "c005-tech-missing",
+        "evidenceType": "technical_screen",
+        "source": "Not collected",
+        "description": "No technical screen evidence supplied",
+        "verificationStatus": "unverified",
+        "categoryId": "technical_skills",
+        "availability": "missing"
+      },
+      {
+        "evidenceId": "c005-dsa-missing",
+        "evidenceType": "coding_assessment",
+        "source": "Not collected",
+        "description": "No problem-solving evidence supplied",
+        "verificationStatus": "unverified",
+        "categoryId": "problem_solving_dsa",
+        "availability": "missing"
+      },
+      {
+        "evidenceId": "c005-project-missing",
+        "evidenceType": "project",
+        "source": "Not collected",
+        "description": "No relevant project evidence supplied",
+        "verificationStatus": "unverified",
+        "categoryId": "project_portfolio",
+        "availability": "missing"
+      },
+      {
+        "evidenceId": "c005-practical-missing",
+        "evidenceType": "work_sample",
+        "source": "Not collected",
+        "description": "No practical assessment completed or supplied",
+        "verificationStatus": "unverified",
+        "categoryId": "development_activity",
+        "availability": "missing"
+      },
+      {
+        "evidenceId": "c005-communication-missing",
+        "evidenceType": "structured_interview",
+        "source": "Not collected",
+        "description": "No structured communication assessment supplied",
+        "verificationStatus": "unverified",
+        "categoryId": "collaboration",
+        "availability": "missing"
+      },
+      {
+        "evidenceId": "c005-learning-missing",
+        "evidenceType": "learning_record",
+        "source": "Not collected",
+        "description": "No learning evidence supplied",
+        "verificationStatus": "unverified",
+        "categoryId": "current_year_contributions",
+        "availability": "missing"
+      }
+    ]
+  }
 ]

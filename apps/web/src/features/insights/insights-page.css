@@ -2,13 +2,8 @@
 .insights-heading, .insights-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .insights-heading h1 { margin: 9px 0 5px; font: 600 26px Manrope, sans-serif; letter-spacing: -.8px; }
 .insights-heading .page-subtitle { margin: 0; }
-.insights-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.insights-summary article, .insights-panel { min-width: 0; padding: 18px 20px; border: 1px solid #ededeb; border-radius: 9px; background: #fff; box-shadow: 0 2px 6px #25272004; }
-.insights-summary article { display: grid; gap: 7px; }
-.insights-summary article > span { color: #85877f; font-size: 10px; }
-.insights-summary strong { font: 600 25px Manrope, sans-serif; }
-.insights-summary small, .insights-summary a { color: #777a70; font-size: 10px; line-height: 1.5; }
-.insights-summary a { color: #477457; text-decoration: none; }
+.insights-heading .insights-run-evaluation { flex: none; width: auto; min-width: 150px; height: 38px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
+.insights-panel { min-width: 0; padding: 18px 20px; border: 1px solid #ededeb; border-radius: 9px; background: #fff; box-shadow: 0 2px 6px #25272004; }
 .insights-panel-heading { align-items: flex-start; margin-bottom: 15px; }
 .insights-panel-heading h2 { margin: 0; font: 600 16px Manrope, sans-serif; }
 .insights-panel-heading p { margin: 5px 0 0; color: #85877f; font-size: 10px; line-height: 1.5; }
@@ -20,6 +15,7 @@
 .insights-state p { margin: 0; max-width: 470px; line-height: 1.6; }
 .insights-table-wrap { overflow-x: auto; }
 .insights-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 11px; }
+.insights-table caption.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .insights-table th { padding: 10px; background: #fafaf8; color: #878980; font-size: 9px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
 .insights-table td { padding: 12px 10px; border-bottom: 1px solid #f0f0ed; color: #6f7269; white-space: nowrap; }
 .insights-table a { color: #477457; }
@@ -42,18 +38,25 @@
 .comparison-cards strong small { padding-left: 4px; font: 400 9px 'DM Sans', sans-serif; color: #85877f; }
 .comparison-cards article > small { color: #85877f; font-size: 9px; text-transform: capitalize; }
 .insights-disclaimer { margin: 0; }
+.insights-draft-disclosure { padding: 0; }
+.insights-draft-disclosure > summary { display: flex; align-items: center; min-height: 62px; padding: 14px 20px; cursor: pointer; color: #34362f; list-style-position: inside; }
+.insights-draft-disclosure > summary:focus-visible { outline: 3px solid #8db69a; outline-offset: 2px; }
+.insights-draft-disclosure > summary span { display: grid; gap: 4px; }
+.insights-draft-disclosure > summary strong { font: 600 14px Manrope, sans-serif; }
+.insights-draft-disclosure > summary small { color: #85877f; font-size: 10px; line-height: 1.5; }
+.insights-draft-content { padding: 0 14px 14px; }
+.insights-draft-content > * { margin-top: 0; }
 .insights-page :is(a, button, select, input):focus-visible { outline: 3px solid #8db69a; outline-offset: 2px; }
 @media (max-width: 700px) {
-  .insights-heading { align-items: flex-start; }
+  .insights-heading { align-items: flex-start; flex-wrap: wrap; }
   .insights-heading h1 { font-size: 22px; }
-  .insights-summary { grid-template-columns: 1fr; }
-  .insights-summary article { grid-template-columns: 1fr auto; align-items: center; }
-  .insights-summary article > span { grid-column: 1; }
-  .insights-summary strong { grid-column: 2; grid-row: 1 / span 2; }
-  .insights-summary small, .insights-summary a { grid-column: 1; }
   .insights-panel { padding: 15px 12px; }
   .insights-panel-heading { flex-direction: column; }
   .insights-panel-heading select, .insights-panel-heading .primary-button { width: 100%; max-width: none; }
+  .insights-table { min-width: 520px; }
   .evaluation-choice-list { grid-template-columns: 1fr; }
   .insights-heading > .secondary-button { white-space: nowrap; }
+  .insights-draft-disclosure { padding: 0; }
+  .insights-draft-disclosure > summary { padding: 13px 12px; align-items: flex-start; }
+  .insights-draft-content { padding: 0 8px 8px; }
 }

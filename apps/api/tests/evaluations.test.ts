@@ -8,7 +8,7 @@ import { HttpError } from '../src/middleware/http-error.js';
 import { validateBody } from '../src/middleware/validate-body.js';
 import { validateParams } from '../src/middleware/validate-request.js';
 import { createEvaluationController } from '../src/controllers/evaluation-controller.js';
-import { candidateIdParamsSchema, evaluationRequestSchema, scoringCategories, type AiAnalysisContent, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
+import { candidateIdParamsSchema, evaluationRequestSchema, schemaVersion, scoringCategories, scoringVersion, type AiAnalysisContent, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
 import type { EvaluationRepository } from '../src/repositories/evaluation-repository.js';
 import { createEvaluationsRouter } from '../src/routes/evaluations.js';
 
@@ -22,9 +22,9 @@ describe('evaluation API routes', () => {
   let origin: string;
   const categories = scoringCategories.map(({ id, displayName }) => id);
   const created = { id: evaluationId, candidateId, roleProfileId, targetRole: 'software_developer', status: 'insufficient_evidence', createdAt: '2026-10-12T00:00:00.000Z', result: {
-    schemaVersion: '3.0.0', scoringVersion: '3.0.0', candidateId, targetRole: 'software_developer',
+    schemaVersion, scoringVersion, candidateId, targetRole: 'software_developer',
     categoryScores: scoringCategories.map(({ id, displayName }) => ({ categoryId: id, displayName, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' })),
-    roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+    roleWeightsUsed: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
     evidence: [], strengths: [], skillGaps: [], recommendations: ['Collect normalized evidence.'], missingEvidence: categories,
     calculationExplanation: 'No overall score without evidence.', evaluationStatus: 'insufficient_evidence',
     aiExplanation: { summary: 'No AI explanation.', strengths: [], skillGaps: [], recommendations: [] },

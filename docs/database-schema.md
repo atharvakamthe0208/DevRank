@@ -6,7 +6,7 @@ It defines:
 
 - `profiles`, keyed directly to `auth.users.id`; Supabase's managed auth table is not duplicated.
 - New public signup profiles are fixed to `recruiter` and `pending`; `admin` is reserved for one-time project-owner provisioning. Admin decisions are database-checked and audited.
-- `candidates`, owned by an auth user and separate from recruiter profile details. The next migration adds platform usernames and `archived_at`; API deletion archives candidates instead of cascading away evaluation/evidence history.
+- `candidates`, owned by an auth user and separate from recruiter profile details. The API supports permanent owner-scoped deletion: platform evidence and evaluations cascade from the candidate, and the deletion routine first removes comparison membership to satisfy the restrictive evaluation reference. Comparison containers remain.
 - `platform_evidence`, with raw and normalized JSON kept separate and source availability recorded.
 - `role_profiles`, with owner-scoped JSON weights and no seeded/final weight values.
 - `evaluations` and `category_scores`, linked to candidates/roles owned by the same recruiter; category identifiers remain open pending shared-contract agreement.

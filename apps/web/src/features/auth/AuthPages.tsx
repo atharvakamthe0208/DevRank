@@ -4,9 +4,16 @@ import { useAuth } from './AuthProvider';
 import { MIN_PASSWORD_LENGTH, validateEmail, validateSignup } from './validation';
 import { passwordResetRequestFailureMessage, passwordUpdateFailureMessage, requestPasswordReset, updatePasswordFromRecovery, validatePasswordReset } from './password-recovery';
 import { supabase } from '../../lib/supabase/client';
+import { SignupFeatureShowcase } from './SignupFeatureShowcase';
+import devrankMark from '../../assets/devrank-mark.svg';
+import './signup.css';
 
-function AuthLayout({ eyebrow, title, children, footer }: { eyebrow: string; title: ReactNode; children: ReactNode; footer: ReactNode }) {
-  return <main className="login-page auth-page"><div className="login-brand"><Link to="/login" className="brand"><span className="brand-mark">d.</span><span>devrank<span className="brand-period">.</span></span></Link><div className="login-trust">✦ <span>Smarter hiring, backed by data.</span></div></div><div className="login-layout"><section className="login-form-wrap"><span className="login-kicker">{eyebrow}</span><h1>{title}<span className="brand-period">.</span></h1><p className="login-intro">A secure workspace for recruiters to make thoughtful, data-informed hiring decisions.</p>{children}<p className="auth-recruiter-note">Recruiter accounts only. DevRank does not offer candidate sign-in or registration.</p>{footer}</section><aside className="login-visual"><div className="visual-orbit orbit-one"/><div className="visual-orbit orbit-two"/><div className="visual-sun">d.</div><div className="floating-score"><span>RECRUITER WORKSPACE</span><strong>✦</strong><em>Insight for every decision</em></div><div className="visual-quote"><span>✦ &nbsp; BUILT FOR BETTER HIRING</span><blockquote>“Great teams start with<br/>clearer insight.”</blockquote><small>DevRank candidate intelligence</small></div></aside></div><footer className="login-footer"><span>© 2026 DevRank</span><span>Recruiter workspace <i/></span></footer></main>;
+function AuthLayout({ eyebrow, title, children, footer, pageVariant }: { eyebrow: string; title: ReactNode; children: ReactNode; footer: ReactNode; pageVariant?: 'signin' | 'recovery' }) {
+  const brand = pageVariant === 'signin'
+    ? <Link to="/login" className="brand signin-brand" aria-label="DevRank home"><img src={devrankMark} alt=""/><span>DevRank</span></Link>
+    : <Link to="/login" className="brand"><span className="brand-mark">d.</span><span>devrank<span className="brand-period">.</span></span></Link>;
+  const isRecovery = pageVariant === 'recovery';
+  return <main className={`login-page auth-page${pageVariant === 'signin' ? ' signin-auth-page' : ''}${isRecovery ? ' auth-recovery-page' : ''}`}><div className="login-brand">{brand}<div className="login-trust">✦ <span>Smarter hiring, backed by data.</span></div></div><div className="login-layout"><section className="login-form-wrap"><span className="login-kicker">{eyebrow}</span><h1>{title}<span className="brand-period">.</span></h1>{!isRecovery && <p className="login-intro">A secure workspace for recruiters to make thoughtful, data-informed hiring decisions.</p>}{children}<p className="auth-recruiter-note">Recruiter accounts only. DevRank does not offer candidate sign-in or registration.</p>{footer}</section><aside className="login-visual" aria-hidden="true"><div className="visual-orbit orbit-one"/><div className="visual-orbit orbit-two"/><div className="visual-sun">d.</div><div className="floating-score"><span>RECRUITER WORKSPACE</span><strong>✦</strong><em>Insight for every decision</em></div><div className="visual-quote"><span>✦ &nbsp; BUILT FOR BETTER HIRING</span><blockquote>“Great teams start with<br/>clearer insight.”</blockquote><small>DevRank candidate intelligence</small></div></aside></div><footer className="login-footer"><span>© 2026 DevRank</span><span>Recruiter workspace <i/></span></footer></main>;
 }
 
 function FormError({ message }: { message?: string }) { return message ? <small className="auth-field-error" role="alert">{message}</small> : null; }
@@ -40,7 +47,7 @@ export function LoginPage() {
     if (authError) { setMessage(authError.code === 'email_not_confirmed' ? 'Confirm your email using the link Supabase sent before signing in.' : 'We could not sign you in. Check your email and password, then try again.'); return; }
     navigate(returnTo, { replace: true });
   }
-  return <AuthLayout eyebrow="RECRUITER SIGN IN" title={<>Welcome back</>} footer={<p className="auth-switch">New to DevRank? <Link to="/signup">Create a recruiter account</Link></p>}>
+  return <AuthLayout eyebrow="RECRUITER SIGN IN" title={<>Welcome back</>} pageVariant="signin" footer={<p className="auth-switch">New to DevRank? <Link to="/signup">Create a recruiter account</Link></p>}>
     <ConfigMessage/>{state==='error'&&authError&&<p className="form-feedback form-feedback-error" role="alert">{authError}</p>}<form className="login-form auth-form" onSubmit={submit} noValidate><label className="auth-field" htmlFor="email"><span>Work email</span><input id="email" type="email" autoComplete="email" value={email} onChange={(e) => {setEmail(e.target.value);setErrors({...errors,email:undefined});}} placeholder="you@company.com" aria-invalid={Boolean(errors.email)}/><FormError message={errors.email}/></label><div className="auth-forgot-row"><Link to="/forgot-password">Forgot password?</Link></div><PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="current-password" error={errors.password}/>{message && <p className="form-feedback form-feedback-error" role="alert">{message}</p>}<button className="primary-button login-submit" type="submit" disabled={busy || !supabase}>{busy ? 'Signing in…' : 'Sign in'} <span>→</span></button></form>
   </AuthLayout>;
 }
@@ -64,15 +71,43 @@ export function SignupPage() {
     } catch { setMessage('The signup service could not be reached. Check your connection and try again.'); }
     finally { setBusy(false); }
   }
-  return <AuthLayout eyebrow="RECRUITER SIGN UP" title={<>Build your<br/>workspace</>} footer={<p className="auth-switch">Already have an account? <Link to="/login">Sign in</Link></p>}>
-    <ConfigMessage/><form className="login-form auth-form" onSubmit={submit} noValidate><label className="auth-field" htmlFor="full-name"><span>Full name</span><input id="full-name" autoComplete="name" value={fullName} onChange={(e)=>setFullName(e.target.value)} aria-invalid={Boolean(errors.fullName)}/><FormError message={errors.fullName}/></label><label className="auth-field" htmlFor="signup-email"><span>Work email</span><input id="signup-email" type="email" autoComplete="email" value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@company.com" aria-invalid={Boolean(errors.email)}/><FormError message={errors.email}/></label><PasswordField id="signup-password" label={`Password (at least ${MIN_PASSWORD_LENGTH} characters)`} value={password} onChange={setPassword} autoComplete="new-password" error={errors.password}/><PasswordField id="confirm-password" label="Confirm password" value={confirm} onChange={setConfirm} autoComplete="new-password" error={errors.confirm}/>{message&&<p className="form-feedback" role="status">{message}</p>}<button className="primary-button login-submit" type="submit" disabled={busy || !supabase}>{busy?'Creating account…':'Create recruiter account'} <span>→</span></button></form>
-  </AuthLayout>;
+  return <main className="signup-page auth-page">
+    <header className="signup-header">
+      <Link to="/login" className="signup-brand" aria-label="DevRank home">
+        <img src={devrankMark} alt="" />
+        <span>DevRank</span>
+      </Link>
+      <p>Already have recruiter access? <Link to="/login">Sign in</Link></p>
+    </header>
+    <div className="signup-layout">
+      <section className="signup-form-panel" aria-labelledby="signup-title">
+        <div className="signup-form-content">
+          <span className="signup-eyebrow"><i/> RECRUITER WORKSPACE</span>
+          <h1 id="signup-title">Build your developer hiring workspace.</h1>
+          <p className="signup-lead">Bring candidate evidence and role-specific evaluations into one considered workflow.</p>
+          <ConfigMessage/>
+          <form className="login-form auth-form signup-form" onSubmit={submit} noValidate>
+            <label className="auth-field" htmlFor="full-name"><span>Full name</span><input id="full-name" autoComplete="name" value={fullName} onChange={(e)=>setFullName(e.target.value)} aria-invalid={Boolean(errors.fullName)}/><FormError message={errors.fullName}/></label>
+            <label className="auth-field" htmlFor="signup-email"><span>Work email</span><input id="signup-email" type="email" autoComplete="email" value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@company.com" aria-invalid={Boolean(errors.email)}/><FormError message={errors.email}/></label>
+            <PasswordField id="signup-password" label={`Password (at least ${MIN_PASSWORD_LENGTH} characters)`} value={password} onChange={setPassword} autoComplete="new-password" error={errors.password}/>
+            <PasswordField id="confirm-password" label="Confirm password" value={confirm} onChange={setConfirm} autoComplete="new-password" error={errors.confirm}/>
+            {message&&<p className="form-feedback" role="status">{message}</p>}
+            <button className="primary-button login-submit" type="submit" disabled={busy || !supabase}>{busy?'Creating account…':'Create recruiter account'} <span>→</span></button>
+          </form>
+          <p className="auth-recruiter-note">Recruiter accounts only. Email confirmation is followed by administrator approval before workspace access.</p>
+          <p className="signup-login-link">Already have an account? <Link to="/login">Sign in</Link></p>
+        </div>
+        <footer className="signup-footer"><span>© 2026 DevRank</span><span>Private recruiter workspace</span></footer>
+      </section>
+      <SignupFeatureShowcase/>
+    </div>
+  </main>;
 }
 
 export function ForgotPasswordPage() {
   const [email,setEmail]=useState(''); const [error,setError]=useState(''); const [message,setMessage]=useState(''); const [busy,setBusy]=useState(false);
   async function submit(event:FormEvent){event.preventDefault();if(busy)return;const invalid=validateEmail(email);setError(invalid??'');setMessage('');if(invalid)return;const authClient=supabase;if(!authClient){setMessage('Authentication is temporarily unavailable because Supabase is not configured.');return;}setBusy(true);try{await requestPasswordReset((address,options)=>authClient.auth.resetPasswordForEmail(address,options),email.trim(),`${window.location.origin}/reset-password`);setMessage('If an account matches that address, password reset instructions will be sent.');}catch(cause){setMessage(passwordResetRequestFailureMessage(cause));}finally{setBusy(false);}}
-  return <AuthLayout eyebrow="ACCOUNT RECOVERY" title={<>Reset password</>} footer={<p className="auth-switch"><Link to="/login">← Back to sign in</Link></p>}><ConfigMessage/><form className="login-form auth-form" onSubmit={submit} noValidate><p className="login-intro">Enter your work email and we’ll send password reset instructions if an account matches.</p><label className="auth-field" htmlFor="reset-email"><span>Work email</span><input id="reset-email" type="email" autoComplete="email" value={email} onChange={(e)=>{setEmail(e.target.value);setError('');setMessage('');}} placeholder="you@company.com" aria-invalid={Boolean(error)}/><FormError message={error}/></label>{message&&<p className="form-feedback" role="status">{message}</p>}<button className="primary-button login-submit" disabled={busy||!supabase}>{busy?'Sending…':'Send reset link'} <span>→</span></button></form></AuthLayout>;
+  return <AuthLayout pageVariant="recovery" eyebrow="ACCOUNT RECOVERY" title={<>Reset password</>} footer={<p className="auth-switch"><Link to="/login">← Back to sign in</Link></p>}><ConfigMessage/><form className="login-form auth-form" onSubmit={submit} noValidate><p className="login-intro">Enter your work email and we’ll send password reset instructions if an account matches.</p><label className="auth-field" htmlFor="reset-email"><span>Work email</span><input id="reset-email" type="email" autoComplete="email" value={email} onChange={(e)=>{setEmail(e.target.value);setError('');setMessage('');}} placeholder="you@company.com" aria-invalid={Boolean(error)}/><FormError message={error}/></label>{message&&<p className="form-feedback" role="status">{message}</p>}<button className="primary-button login-submit" disabled={busy||!supabase}>{busy?'Sending…':'Send reset link'} <span>→</span></button></form></AuthLayout>;
 }
 
 export function ResetPasswordPage() {
@@ -80,10 +115,10 @@ export function ResetPasswordPage() {
   const location=useLocation();const query=new URLSearchParams(location.search);const hash=new URLSearchParams(location.hash.replace(/^#/,''));
   const invalidLink=['error','error_description','error_code'].some((key)=>query.has(key)||hash.has(key));
   async function submit(event:FormEvent){event.preventDefault();if(busy)return;const next=validatePasswordReset(password,confirm);setErrors(next);setMessage('');if(Object.values(next).some(Boolean))return;if(!passwordRecovery||!session?.access_token){setMessage('This reset link is invalid or expired. Request a new password reset email.');return;}const authClient=supabase;if(!authClient){setMessage('Authentication is temporarily unavailable because Supabase is not configured.');return;}setBusy(true);try{await updatePasswordFromRecovery((attributes)=>authClient.auth.updateUser(attributes),password,passwordRecovery&&Boolean(session.access_token));setCompleted(true);setMessage('Your password has been updated. Sign in with your new password.');clearPasswordRecovery();await signOut().catch(()=>undefined);}catch(cause){setMessage(passwordUpdateFailureMessage(cause));}finally{setBusy(false);}}
-  if(completed)return <AuthLayout eyebrow="PASSWORD UPDATED" title={<>You’re all<br/>set</>} footer={<p className="auth-switch"><Link to="/login">Continue to recruiter sign in</Link></p>}><p className="form-feedback" role="status">{message}</p></AuthLayout>;
-  if(authState==='loading'&&!(passwordRecovery&&session?.access_token))return <AuthLayout eyebrow="SECURE YOUR ACCOUNT" title={<>Checking<br/>reset link</>} footer={<p className="auth-switch"><Link to="/login">Back to sign in</Link></p>}><p className="login-intro" role="status">Restoring the secure recovery session…</p></AuthLayout>;
-  if(invalidLink||!passwordRecovery||!session?.access_token)return <AuthLayout eyebrow="SECURE YOUR ACCOUNT" title={<>Reset link<br/>expired</>} footer={<p className="auth-switch"><Link to="/forgot-password">Request another reset email</Link> · <Link to="/login">Sign in</Link></p>}><p className="login-intro">This password recovery link is invalid, expired, or already used. Request a new reset email to continue.</p></AuthLayout>;
-  return <AuthLayout eyebrow="SECURE YOUR ACCOUNT" title={<>Choose a new<br/>password</>} footer={<p className="auth-switch"><Link to="/login">Cancel and return to sign in</Link></p>}><form className="login-form auth-form" onSubmit={submit} noValidate><PasswordField id="new-password" label={`New password (at least ${MIN_PASSWORD_LENGTH} characters)`} value={password} onChange={setPassword} autoComplete="new-password" error={errors.password}/><PasswordField id="new-password-confirm" label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" error={errors.confirm}/>{message&&<p className="form-feedback form-feedback-error" role="alert">{message}</p>}<button className="primary-button login-submit" disabled={busy||!supabase}>{busy?'Updating…':'Update password'} <span>→</span></button></form></AuthLayout>;
+  if(completed)return <AuthLayout pageVariant="recovery" eyebrow="PASSWORD UPDATED" title={<>You’re all<br/>set</>} footer={<p className="auth-switch"><Link to="/login">Continue to recruiter sign in</Link></p>}><p className="form-feedback" role="status">{message}</p></AuthLayout>;
+  if(authState==='loading'&&!(passwordRecovery&&session?.access_token))return <AuthLayout pageVariant="recovery" eyebrow="SECURE YOUR ACCOUNT" title={<>Checking<br/>reset link</>} footer={<p className="auth-switch"><Link to="/login">Back to sign in</Link></p>}><p className="login-intro" role="status">Restoring the secure recovery session…</p></AuthLayout>;
+  if(invalidLink||!passwordRecovery||!session?.access_token)return <AuthLayout pageVariant="recovery" eyebrow="SECURE YOUR ACCOUNT" title={<>Reset link<br/>expired</>} footer={<p className="auth-switch"><Link to="/forgot-password">Request another reset email</Link> · <Link to="/login">Sign in</Link></p>}><p className="login-intro">This password recovery link is invalid, expired, or already used. Request a new reset email to continue.</p></AuthLayout>;
+  return <AuthLayout pageVariant="recovery" eyebrow="SECURE YOUR ACCOUNT" title={<>Choose a new<br/>password</>} footer={<p className="auth-switch"><Link to="/login">Cancel and return to sign in</Link></p>}><form className="login-form auth-form" onSubmit={submit} noValidate><PasswordField id="new-password" label={`New password (at least ${MIN_PASSWORD_LENGTH} characters)`} value={password} onChange={setPassword} autoComplete="new-password" error={errors.password}/><PasswordField id="new-password-confirm" label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" error={errors.confirm}/>{message&&<p className="form-feedback form-feedback-error" role="alert">{message}</p>}<button className="primary-button login-submit" disabled={busy||!supabase}>{busy?'Updating…':'Update password'} <span>→</span></button></form></AuthLayout>;
 }
 
 export function AccessPendingPage() {

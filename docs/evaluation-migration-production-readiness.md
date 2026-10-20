@@ -1,6 +1,6 @@
 # Evaluation persistence migration: production-readiness audit
 
-**Audit date:** 2026-10-14
+**Audit date:** 2026-10-16 (local verification updated; production audit remains unperformed)
 **Intended environment:** Supabase project `vamxpxhhsoruuqeezxgs`, identified by the requester as **PRODUCTION**
 **Audit state:** Production was not queried. This is a local repository and test-runtime audit plus an operator-ready read-only SQL procedure. All production catalog/data conclusions below remain unverified except where explicitly identified as prior operator-supplied context.
 
@@ -14,13 +14,15 @@ No production SQL, migration, ledger operation, link change, or data change was 
 
 | Command | Result | Evidence |
 |---|---|---|
-| `npm run test:migration:integration` | PASS | PGlite PostgreSQL 18.6 (0.5.9); legacy/current fixtures, actual reconciliation SQL, rerun, catalog checks, FK/RLS/grant preservation, null and invalid-data rollback checks passed. |
-| `npm test` | PASS | Web 32 tests, API 155 tests, contracts 10 tests; 197 total. |
-| `npm run typecheck` | PASS | Contracts build and API/web TypeScript checks exited 0. |
-| `npm run build` | PASS | Contracts, API, and web builds exited 0. Vite emitted its existing >500 kB chunk advisory. |
-| `git diff --check` | PASS | No whitespace errors. |
+| `npm run test:migration:integration` | PASS (2026-10-16) | PGlite PostgreSQL 18.6 (0.5.9); legacy/current fixtures, actual reconciliation SQL, rerun, column/status checks, FK/RLS-policy/index/privilege checks, role-flow inserts, FK/null rejection, and invalid JSON/target/status rollback checks passed. |
+| `npm run test:migration:acl` | PASS (2026-10-16) | Supabase-style default grants, unexpected direct grants, PUBLIC grants, and inherited privilege cases passed in PGlite. |
+| `npm test` | PASS (2026-10-16) | Web 43 tests, API 187 tests, contracts 10 tests; 240 total. |
+| `npm run typecheck` | PASS (2026-10-16) | Contracts build and API/web TypeScript checks exited 0. |
+| `npm run build` | PASS (2026-10-16) | Contracts, API, and web builds exited 0. Vite emitted a 717.65 kB main-JS advisory (>500 kB). |
+| `npm run lint` | NO LINTER CONFIGURED (2026-10-16) | Root wrapper exited 0, but workspace manifests define no lint scripts. |
+| `git diff --check` | PASS (2026-10-16) | No whitespace errors. |
 
-The integration dependency is scoped as a root `devDependency` and invoked by a dedicated `test:migration:integration` script. It is excluded from `npm test`; the runtime creates fresh in-memory databases and needs no database URL or Supabase credential. The lockfile change records this package. The test runs historical fixture migrations and then reads and executes the exact reconciliation migration file. PGlite is PostgreSQL compiled to WASM, not the Supabase server. Its PostgreSQL 18.6 catalog output may differ from the production major/minor version, extension set, roles, and Supabase-managed objects.
+The PGlite dependency is an existing root `devDependency`; `test:migration:integration` is a dedicated script and is excluded from `npm test`. The runtime creates fresh in-memory databases and needs no database URL or Supabase credential. The test runs historical fixture migrations and then reads and executes the exact reconciliation migration file. ACL normalization behavior is tested separately by `test:migration:acl`. PGlite is PostgreSQL compiled to WASM, not the Supabase server. Its PostgreSQL 18.6 catalog output may differ from the production major/minor version, extension set, roles, and Supabase-managed objects.
 
 ## Facts, assumptions, and classification
 

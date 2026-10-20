@@ -16,33 +16,44 @@ function mapRpcError(code: string | undefined): HttpError {
   return new HttpError(503, 'APPROVAL_SERVICE_UNAVAILABLE', 'Recruiter approvals are temporarily unavailable');
 }
 
-export const adminRouter = Router();
-adminRouter.use(authenticate, requireAdmin);
+export function createAdminRouter(
+  authMiddleware = authenticate,
+  adminMiddleware = requireAdmin,
+  clientFactory = getSupabaseClient,
+) {
+  const router = Router();
+  router.use(authMiddleware, adminMiddleware);
 
-adminRouter.get('/recruiters', asyncHandler(async (request, response) => {
-  const rawStatus = request.query.status;
-  const status = rawStatus === undefined || rawStatus === 'all' ? null : rawStatus;
-  if (status !== null && (typeof status !== 'string' || !['pending', 'approved', 'rejected'].includes(status))) {
-    throw new HttpError(400, 'VALIDATION_ERROR', 'Status must be pending, approved, rejected, or all');
-  }
-  let client;
-  try { client = getSupabaseClient(request.auth!.accessToken); }
-  catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Recruiter approvals are not configured'); }
-  const { data, error } = await client.rpc('list_recruiter_applications', { p_status: status });
-  if (error) throw mapRpcError(error.code);
-  response.json({ recruiters: data ?? [] });
-}));
+  router.get('/recruiters', asyncHandler(async (request, response) => {
+    const rawStatus = request.query.status;
+    const status = rawStatus === undefined || rawStatus === 'all' ? null : rawStatus;
+    if (status !== null && (typeof status !== 'string' || !['pending', 'approved', 'rejected'].includes(status))) {
+      throw new HttpError(400, 'VALIDATION_ERROR', 'Status must be pending, approved, rejected, or all');
+    }
+    let client;
+    try { client = clientFactory(request.auth!.accessToken); }
+    catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Recruiter approvals are not configured'); }
+    const { data, error } = await client.rpc('list_recruiter_applications', { p_status: status });
+    if (error) throw mapRpcError(error.code);
+    response.json({ recruiters: data ?? [] });
+  }));
 
-adminRouter.patch('/recruiters/:id/decision', validateBody(decisionSchema), asyncHandler(async (request, response) => {
-  const parsedId = uuidSchema.safeParse(request.params.id);
-  if (!parsedId.success) throw new HttpError(400, 'VALIDATION_ERROR', 'Recruiter ID is invalid');
-  let client;
-  try { client = getSupabaseClient(request.auth!.accessToken); }
-  catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Recruiter approvals are not configured'); }
-  const { data, error } = await client.rpc('decide_recruiter_application', {
-    p_user_id: parsedId.data,
-    p_decision: request.body.decision,
-  });
-  if (error) throw mapRpcError(error.code);
-  response.json({ updated: Boolean(data), status: request.body.decision });
-}));
+  router.patch('/recruiters/:id/decision', validateBody(decisionSchema), asyncHandler(async (request, response) => {
+    const parsedId = uuidSchema.safeParse(request.params.id);
+    if (!parsedId.success) throw new HttpError(400, 'VALIDATION_ERROR', 'Recruiter ID is invalid');
+    let client;
+    try { client = clientFactory(request.auth!.accessToken); }
+    catch { throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Recruiter approvals are not configured'); }
+    const { data, error } = await client.rpc('decide_recruiter_application', {
+      p_user_id: parsedId.data,
+      p_decision: request.body.decision,
+    });
+    if (error) throw mapRpcError(error.code);
+    if (data !== true) throw mapRpcError('P0002');
+    response.json({ updated: true, status: request.body.decision });
+  }));
+
+  return router;
+}
+
+export const adminRouter = createAdminRouter();

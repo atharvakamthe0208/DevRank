@@ -13,6 +13,7 @@ import { InsightsPage } from '../features/insights/InsightsPage';
 import { EvaluationCreatePage } from '../features/evaluations/EvaluationCreatePage';
 import { EvaluationResultPage } from '../features/evaluations/EvaluationResultPage';
 import { ResumeScreeningPage } from '../features/screening/ResumeScreeningPage';
+import { AiAnalysisReportPage } from '../features/evaluation/AiAnalysisReportPage';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh, signOut } = useAuth();
@@ -159,6 +160,7 @@ export const router = createBrowserRouter([
           { path: 'screening', element: <ResumeScreeningPage /> },
           { path: 'evaluations', element: <EvaluationPage /> },
           { path: 'evaluations/:evaluationId', element: <EvaluationResultPage /> },
+          { path: 'evaluations/:evaluationId/analysis', element: <AiAnalysisReportPage /> },
           { path: 'candidates/new', element: <AddCandidatePage /> },
           { path: 'candidates/:id', element: <CandidateDetailsPage /> },
           { path: 'candidates/:id/evaluate', element: <EvaluationCreatePage /> },

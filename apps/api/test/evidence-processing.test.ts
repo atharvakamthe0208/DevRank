@@ -12,8 +12,6 @@ import {
 } from '../src/modules/evidence-processing/index.js';
 
 const candidates = JSON.parse(readFileSync(new URL('../../../fixtures/dummy-candidates.json', import.meta.url), 'utf8')) as Array<Record<string, any>>;
-const expected = JSON.parse(readFileSync(new URL('../../../fixtures/expected-evaluations.json', import.meta.url), 'utf8')) as Array<Record<string, any>>;
-
 function rawEvidence(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     evidenceId: 'raw-tech-001',
@@ -121,74 +119,59 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     expect(() => normalizeEvidence(parsed, { technical_screen: () => Number.NaN })).toThrow(/invalid normalizedValue/i);
   });
 
-  it('loads the explicit type-to-category mapping and maps each supported type to the shared category ID', () => {
+  it('does not map legacy generic assessment types into the active GitHub + LeetCode rubric', () => {
     const mapping = loadEvidenceCategoryMapping();
     expect(evidenceCategoryMappingSchema.safeParse(mapping).success).toBe(true);
-    const expectedByType = {
-      technical_screen: 'technical_skills',
-      coding_assessment: 'problem_solving_dsa',
-      project: 'relevant_project_experience',
-      work_sample: 'practical_assessment_performance',
-      structured_interview: 'communication_skills',
-      learning_record: 'learning_adaptability',
-      portfolio: 'relevant_project_experience',
-    };
-    for (const [evidenceType, categoryId] of Object.entries(expectedByType)) {
+    for (const evidenceType of Object.keys(mapping) as Array<keyof typeof mapping>) {
       const item = rawEvidenceSchema.parse(rawEvidence({ evidenceType, normalizedValue: 50, originalValue: undefined }));
       const result = mapEvidenceCategory(item, mapping);
-      expect(result.mapped).toBe(true);
-      if (result.mapped) expect(result.evidence.categoryId).toBe(categoryId);
+      expect(result).toMatchObject({ mapped: false, reason: expect.stringContaining('no configured category mapping') });
     }
-    expect(Object.values(expectedByType)).toEqual(expect.arrayContaining(scoringCategories.map(({ id }) => id)));
-    const interview = mapEvidenceCategory(rawEvidenceSchema.parse(rawEvidence({ evidenceType: 'structured_interview', normalizedValue: 80 })), mapping);
-    expect(interview).toMatchObject({ mapped: true, evidence: { categoryId: 'communication_skills' } });
+    expect(scoringCategories.map(({ id }) => id)).toEqual(['project_portfolio', 'technical_skills', 'development_activity', 'collaboration', 'current_year_contributions', 'problem_solving_dsa']);
   });
 
   it('reports unmapped types and category conflicts instead of guessing', () => {
     const mapping = loadEvidenceCategoryMapping();
     const other = mapEvidenceCategory(rawEvidenceSchema.parse(rawEvidence({ evidenceType: 'other' })), mapping);
     expect(other).toMatchObject({ mapped: false, reason: expect.stringContaining('no configured category mapping') });
-    const conflict = mapEvidenceCategory(rawEvidenceSchema.parse(rawEvidence({ evidenceType: 'coding_assessment', categoryId: 'technical_skills' })), mapping);
+    const conflict = mapEvidenceCategory(rawEvidenceSchema.parse(rawEvidence({ evidenceType: 'coding_assessment', categoryId: 'technical_skills' })), { ...mapping, coding_assessment: 'problem_solving_dsa' });
     expect(conflict).toMatchObject({ mapped: false, reason: expect.stringContaining('conflicts with configured category') });
   });
 
-  it('maps structured interview evidence to communication without inventing other category scores', () => {
+  it('does not turn a historical structured interview into an active v4 collaboration score', () => {
     const interview = rawEvidence({ evidenceId: 'interview-unscored', evidenceType: 'structured_interview', normalizedValue: 94 });
     const result = processCandidateEvidence({
       candidateId: 'candidate-interview-only',
       targetRole: 'software_developer',
       evidence: [interview],
     });
-    expect(result.unmappedEvidence).toEqual([]);
-    expect(result.evaluation.evidence).toEqual([expect.objectContaining({ evidenceId: 'interview-unscored', categoryId: 'communication_skills' })]);
-    expect(result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'communication_skills')?.score).toBe(94);
+    expect(result.unmappedEvidence).toEqual([expect.objectContaining({ evidenceId: 'interview-unscored' })]);
+    expect(result.evaluation.evidence).toEqual([]);
+    expect(result.evaluation.categoryScores.every(({ status, score }) => status === 'insufficient_evidence' && score === undefined)).toBe(true);
     expect(result.evaluation.evaluationStatus).toBe('insufficient_evidence');
     expect(result.evaluation.overallScore).toBeUndefined();
   });
 
-  it('processes complete raw data through normalization, mapping, Day 2 scoring, and the Day 1 response schema', () => {
+  it('keeps generic historical assessment data out of the active v4 evaluation result', () => {
     const result = processCandidateEvidence(completeRawCandidate(), { normalizationRules: testNormalizationRules });
     expect(result.rejectedEvidence).toEqual([]);
-    expect(result.unmappedEvidence).toEqual([]);
+    expect(result.unmappedEvidence).toHaveLength(6);
     expect(result.unnormalizedEvidence).toEqual([]);
     expect(result.evaluation.categoryScores.map(({ categoryId }) => categoryId)).toEqual(scoringCategories.map(({ id }) => id));
-    expect(result.evaluation.categoryScores.map(({ score }) => score)).toEqual([80, 75, 78, 82, 80, 72]);
-    expect(result.evaluation.overallScore).toBeDefined();
-    expect(result.evaluation.evidence.map(({ evidenceId }) => evidenceId)).toEqual(['raw-tech', 'raw-dsa', 'raw-project', 'raw-practical', 'raw-communication', 'raw-learning']);
-    expect(result.evaluation.evidence[0]).toMatchObject({ originalValue: '4/5', normalizedValue: 80, categoryId: 'technical_skills' });
+    expect(result.evaluation.categoryScores.every(({ score }) => score === undefined)).toBe(true);
+    expect(result.evaluation.overallScore).toBeUndefined();
+    expect(result.evaluation.evidence).toEqual([]);
     expect(evaluationResponseSchema.safeParse(result.evaluation).success).toBe(true);
   });
 
-  it('matches Day 2 fixture outputs for already-normalized complete and partial candidates', () => {
-    for (const expectedResult of expected) {
-      const input = candidates.find(({ candidateId }) => candidateId === expectedResult.candidateId)!;
+  it('keeps historical synthetic fixtures from satisfying the active provider-specific rubric', () => {
+    for (const input of candidates) {
       const result = processCandidateEvidence(input);
-      expect(result.evaluation.scoringVersion).toBe(expectedResult.scoringVersion);
-      expect(result.evaluation.evaluationStatus).toBe(expectedResult.evaluationStatus);
-      expect(result.evaluation.overallScore).toBe(expectedResult.overallScore);
-      expect(result.evaluation.missingEvidence).toEqual(expectedResult.missingEvidence ?? []);
       expect(result.rejectedEvidence).toEqual([]);
-      expect(result.unmappedEvidence).toEqual([]);
+      expect(result.evaluation.scoringVersion).toBe('4.0.0');
+      expect(result.evaluation.evaluationStatus).toBe('insufficient_evidence');
+      expect(result.evaluation.overallScore).toBeUndefined();
+      expect(result.unmappedEvidence.length).toBeGreaterThan(0);
     }
   });
 
@@ -200,14 +183,14 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     const result = processCandidateEvidence(candidate, { normalizationRules: testNormalizationRules });
     expect(result.rejectedEvidence).toHaveLength(1);
     expect(result.rejectedEvidence[0]).toMatchObject({ evidenceId: 'invalid', index: 1 });
-    expect(result.unmappedEvidence).toHaveLength(1);
-    expect(result.unmappedEvidence[0].evidenceId).toBe('unmapped');
+    expect(result.unmappedEvidence).toHaveLength(8);
+    expect(result.unmappedEvidence.some(({ evidenceId }) => evidenceId === 'unmapped')).toBe(true);
     expect(result.unnormalizedEvidence).toContainEqual(expect.objectContaining({ evidenceId: 'no-rule', reason: expect.stringContaining('No normalization rule') }));
-    expect(result.evaluation.evaluationStatus).toBe('completed');
-    expect(result.evaluation.overallScore).toBe(78.1);
+    expect(result.evaluation.evaluationStatus).toBe('insufficient_evidence');
+    expect(result.evaluation.overallScore).toBeUndefined();
     expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'invalid')).toBe(false);
     expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'unmapped')).toBe(false);
-    expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'no-rule')).toBe(true);
+    expect(result.evaluation.evidence.some(({ evidenceId }) => evidenceId === 'no-rule')).toBe(false);
   });
 
   it('returns explicit insufficient evidence for one, several, or all missing categories and empty input', () => {

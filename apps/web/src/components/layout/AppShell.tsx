@@ -31,7 +31,7 @@ export function AppShell() {
         : 'Overview';
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${location.pathname === '/dashboard' || /^\/evaluations\/[^/]+\/analysis$/.test(location.pathname) ? ' refined-workspace' : ''}`}>
       <aside className="sidebar">
         <NavLink to="/dashboard" className="brand"><span className="brand-mark">d.</span><span>devrank<span className="brand-period">.</span></span></NavLink>
         <div className="workspace-label">WORKSPACE</div>
@@ -39,7 +39,6 @@ export function AppShell() {
           {navItems.map((item) => <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'} aria-label={item.label} title={item.label} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></NavLink>)}
         </nav>
         <div className="sidebar-bottom">
-          <div className="upgrade-card"><span className="upgrade-spark">✦</span><strong>Better hiring starts here.</strong><p>Make confident decisions with candidate insights.</p><button type="button" className="text-button">Explore DevRank <span aria-hidden="true">↗</span></button></div>
           <div className="user-mini"><div className="avatar avatar-user">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</div><div className="user-copy"><strong>{profile?.display_name || 'Recruiter'}</strong><span>Recruiter</span></div><button type="button" className="logout-button" onClick={() => { setSignOutError(''); void signOut().catch(() => setSignOutError('Could not sign out. Check your connection and try again.')); }}>Log out</button></div>
         </div>
       </aside>

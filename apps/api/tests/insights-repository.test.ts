@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scoringCategories, type AuthContext } from '@devrank/contracts';
+import { buildFinalEvaluationReport, scoringCategories, type AuthContext, type PlatformEvaluationEvidence } from '@devrank/contracts';
 import { scoreCandidate } from '../src/modules/scoring/index.js';
 import { createInsightsRepository } from '../src/repositories/insights-repository.js';
 
@@ -28,7 +28,7 @@ function evaluation(overrides: Record<string, unknown> = {}) {
   const snapshot = overrides.evaluation_result ?? result(candidateId);
   return {
     id: evaluationA, candidate_id: candidateId, status: 'completed', overall_score: 80,
-    scoring_version: '3.0.0', target_role: role, evaluation_result: snapshot,
+    scoring_version: '4.0.0', target_role: role, evaluation_result: snapshot,
     role_weights_snapshot: typeof snapshot === 'object' && snapshot !== null && 'roleWeightsUsed' in snapshot ? snapshot.roleWeightsUsed : null,
     created_at: '2026-10-13T00:00:00.000Z', owner_id: ownerId, ...overrides,
   };
@@ -95,25 +95,24 @@ describe('insights repository', () => {
     expect(dashboard.recentEvaluations.map(({ candidateName }) => candidateName)).not.toContain('Other owner');
   });
 
-  it('includes proposal report values from owner-scoped saved evidence without changing active dashboard scores', async () => {
-    const saved = {
-      ...result(candidateA),
-      platformEvidence: [{
+  it('includes final rubric report values from saved evidence without changing active dashboard scores', async () => {
+    const savedEvidence: PlatformEvaluationEvidence[] = [{
         evidenceId: 'github-row:current-year', candidateId: candidateA, source: 'github', evidenceType: 'current_year_contributions',
         availability: 'partial', observedAt: '2026-10-17T00:00:00.000Z', normalizedValue: { year: 2026, timezone: 'UTC', totalContributions: 44, observedThrough: '2026-10-16T23:59:59.999Z' },
         verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed', limitations: [],
-        categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions', relation: 'supporting' }],
-      }],
-    };
-    const repo = repository([evaluation({ evaluation_result: saved })], [
+      categoryMappings: [{ rubricId: 'github_leetcode_v4', categoryId: 'current_year_contributions', relation: 'supporting' }],
+      }];
+    const finalReport = buildFinalEvaluationReport(savedEvidence);
+    const saved = { ...scoreCandidate({ candidateId: candidateA, targetRole: role, evidence: [] }), platformEvidence: savedEvidence, finalReport };
+    const repo = repository([evaluation({ status: 'insufficient_evidence', overall_score: null, evaluation_result: saved })], [
       { id: candidateA, full_name: 'Candidate A', owner_id: ownerId, archived_at: null },
     ]);
     const dashboard = await repo.dashboard(auth);
-    expect(dashboard.recentEvaluations[0]?.score).toBe(80);
-    expect(dashboard.recentEvaluations[0]?.proposedReport?.status).toBe('partial');
-    expect(dashboard.recentEvaluations[0]?.proposedReport?.categories.find(({ categoryId }) => categoryId === 'project_portfolio')?.status).toBe('unavailable');
-    expect(dashboard.recentEvaluations[0]?.proposedReport?.categories.find(({ categoryId }) => categoryId === 'current_year_contributions')).toMatchObject({ status: 'partial', metrics: { totalContributions: 44 } });
-    expect(dashboard.recentEvaluations[0]?.proposedReport).not.toHaveProperty('overallScore');
+    expect(dashboard.recentEvaluations[0]).not.toHaveProperty('score');
+    expect(dashboard.recentEvaluations[0]?.finalReport?.status).toBe('partial');
+    expect(dashboard.recentEvaluations[0]?.finalReport?.categories.find(({ categoryId }) => categoryId === 'project_portfolio')?.status).toBe('unavailable');
+    expect(dashboard.recentEvaluations[0]?.finalReport?.categories.find(({ categoryId }) => categoryId === 'current_year_contributions')).toMatchObject({ status: 'partial', metrics: { totalContributions: 44 } });
+    expect(dashboard.recentEvaluations[0]?.finalReport).not.toHaveProperty('overallScore');
   });
 
   it('does not omit an unknown persisted status from dashboard totals', async () => {
@@ -127,7 +126,7 @@ describe('insights repository', () => {
       evaluation({ id: evaluationB, candidate_id: candidateB, role_profile_id: '99999999-9999-4999-8999-999999999999', overall_score: 90, evaluation_result: result(candidateB, 90) }),
     ]);
     const comparison = await repo.compare(auth, { candidateIds: [candidateA, candidateB], evaluationIds: [evaluationA, evaluationB] });
-    expect(comparison).toMatchObject({ roleId: role, scoringVersion: '3.0.0', items: [{ candidateId: candidateA }, { candidateId: candidateB }] });
+    expect(comparison).toMatchObject({ roleId: role, scoringVersion: '4.0.0', items: [{ candidateId: candidateA }, { candidateId: candidateB }] });
 
     const mixedRole = repository([
       evaluation({ id: evaluationA, candidate_id: candidateA }),
@@ -143,7 +142,7 @@ describe('insights repository', () => {
     await expect(mixedVersion.compare(auth, { candidateIds: [candidateA, candidateB], evaluationIds: [evaluationA, evaluationB] }))
       .rejects.toMatchObject({ statusCode: 409, code: 'SCORING_VERSION_MISMATCH' });
 
-    const differentWeights = { ...result(candidateB), roleWeightsUsed: { ...result(candidateB).roleWeightsUsed, technical_skills: 24, learning_adaptability: 11 } };
+    const differentWeights = { ...result(candidateB), roleWeightsUsed: { ...result(candidateB).roleWeightsUsed, project_portfolio: 19, technical_skills: 21 } };
     const mixedWeights = repository([
       evaluation({ id: evaluationA, candidate_id: candidateA }),
       evaluation({ id: evaluationB, candidate_id: candidateB, evaluation_result: differentWeights }),
@@ -195,7 +194,7 @@ describe('insights repository', () => {
   it('refuses to rank candidates whose eligible evaluations use different role-weight snapshots', async () => {
     const candidateC = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
     const evaluationC = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
-    const customResult = { ...result(candidateC), roleWeightsUsed: { ...result(candidateC).roleWeightsUsed, technical_skills: 24, learning_adaptability: 11 } };
+    const customResult = { ...result(candidateC), roleWeightsUsed: { ...result(candidateC).roleWeightsUsed, project_portfolio: 19, technical_skills: 21 } };
     const repo = repository([
       evaluation({ id: evaluationA, candidate_id: candidateA }),
       evaluation({ id: evaluationC, candidate_id: candidateC, evaluation_result: customResult }),

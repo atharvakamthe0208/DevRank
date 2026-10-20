@@ -5,17 +5,16 @@ import {
   leetCodeSyncResponseSchema,
   type Candidate,
   type CandidatePlatformDataResponse,
+  type CandidatePlatformResponse,
   type GitHubSyncResponse,
   type LeetCodeSyncResponse,
 } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
-import { normalizePlatformProfile, platformSyncCapabilities, type CandidateCodingPlatform } from './candidate-platform-form';
+import { normalizePlatformProfile, platformSyncCapabilities } from './candidate-platform-form';
 import { parseCandidateApiResponse } from './candidate-response-validation';
-import { ProposedRubricPanel } from './ProposedRubricPanel';
 import { useAuth } from '../auth/AuthProvider';
 import './candidate-platform-data.css';
 
-type PlatformName = CandidateCodingPlatform;
 type ProfileSaveState = { status: 'idle' | 'saving' } | { status: 'saved' } | { status: 'error'; message: string };
 type SyncState = { status: 'idle' | 'loading' | 'syncing' } | { status: 'synced'; result: GitHubSyncResponse } | { status: 'error'; message: string; retry: 'load' | 'sync' };
 type LeetCodeState = { status: 'idle' | 'syncing' } | { status: 'synced'; result: LeetCodeSyncResponse } | { status: 'error'; message: string };
@@ -33,8 +32,8 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
   const { session } = useAuth();
   const [githubProfile, setGithubProfile] = useState(candidate.githubUsername ?? '');
   const [githubState, setGithubState] = useState<SyncState>({ status: 'loading' });
-  const [profiles, setProfiles] = useState<Record<PlatformName, string>>({ leetcode: candidate.leetcodeUsername ?? '', hackerrank: candidate.hackerrankUsername ?? '' });
-  const [profileSave, setProfileSave] = useState<Record<PlatformName, ProfileSaveState>>({ leetcode: { status: 'idle' }, hackerrank: { status: 'idle' } });
+  const [leetcodeProfile, setLeetCodeProfile] = useState(candidate.leetcodeUsername ?? '');
+  const [profileSave, setProfileSave] = useState<ProfileSaveState>({ status: 'idle' });
   const [saved, setSaved] = useState<CandidatePlatformDataResponse['items']>([]);
   const [leetcodeState, setLeetCodeState] = useState<LeetCodeState>({ status: 'idle' });
 
@@ -53,7 +52,7 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
       if (leetcode && 'syncedAt' in leetcode) {
         const result = leetCodeSyncResponseSchema.parse(leetcode);
         setLeetCodeState({ status: 'synced', result });
-        setProfiles((state) => ({ ...state, leetcode: result.handle }));
+        setLeetCodeProfile(result.handle);
       } else setLeetCodeState({ status: 'idle' });
     } catch (error) {
       setGithubState({ status: 'error', message: requestErrorMessage(error), retry: 'load' });
@@ -79,7 +78,7 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
   }
 
   async function syncLeetCode() {
-    const profile = profiles.leetcode.trim();
+    const profile = leetcodeProfile.trim();
     if (!profile) { setLeetCodeState({ status: 'error', message: 'Enter a LeetCode username or HTTPS profile URL.' }); return; }
     if (!session?.access_token) { setLeetCodeState({ status: 'error', message: 'Your secure session expired. Sign in again to continue.' }); return; }
     setLeetCodeState({ status: 'syncing' });
@@ -88,32 +87,30 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
         method: 'POST', body: JSON.stringify({ profile }),
       }, session.access_token));
       setLeetCodeState({ status: 'synced', result });
-      setProfiles((state) => ({ ...state, leetcode: result.handle }));
+      setLeetCodeProfile(result.handle);
       setSaved((current) => [result, ...current.filter((item) => !('platform' in item && item.platform === 'leetcode' && item.provenance === 'alfa_leetcode_api'))]);
     } catch (error) { setLeetCodeState({ status: 'error', message: requestErrorMessage(error) }); }
   }
 
-  async function saveProfile(platform: PlatformName, event: FormEvent<HTMLFormElement>) {
+  async function saveLeetCodeProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const normalized = normalizePlatformProfile(platform, profiles[platform]);
-    if (!normalized.success) { setProfileSave((state) => ({ ...state, [platform]: { status: 'error', message: normalized.message } })); return; }
-    if (!session?.access_token) { setProfileSave((state) => ({ ...state, [platform]: { status: 'error', message: 'Your secure session expired. Sign in again to continue.' } })); return; }
-    setProfileSave((state) => ({ ...state, [platform]: { status: 'saving' } }));
+    const normalized = normalizePlatformProfile('leetcode', leetcodeProfile);
+    if (!normalized.success) { setProfileSave({ status: 'error', message: normalized.message }); return; }
+    if (!session?.access_token) { setProfileSave({ status: 'error', message: 'Your secure session expired. Sign in again to continue.' }); return; }
+    setProfileSave({ status: 'saving' });
     try {
-      const field = platform === 'leetcode' ? 'leetcodeUsername' : 'hackerrankUsername';
-      const response = await apiRequest<unknown>(`/candidates/${candidate.id}`, { method: 'PATCH', body: JSON.stringify({ [field]: normalized.handle }) }, session.access_token);
+      const response = await apiRequest<unknown>(`/candidates/${candidate.id}`, { method: 'PATCH', body: JSON.stringify({ leetcodeUsername: normalized.handle }) }, session.access_token);
       const updated = parseCandidateApiResponse(response);
       if (!updated) throw new Error('The profile link was saved, but the candidate response could not be validated. Reload this page.');
-      setProfiles((state) => ({ ...state, [platform]: normalized.handle }));
+      setLeetCodeProfile(normalized.handle);
       onCandidateUpdated?.(updated);
-      setProfileSave((state) => ({ ...state, [platform]: { status: 'saved' } }));
+      setProfileSave({ status: 'saved' });
     } catch (error) {
-      setProfileSave((state) => ({ ...state, [platform]: { status: 'error', message: requestErrorMessage(error) } }));
+      setProfileSave({ status: 'error', message: requestErrorMessage(error) });
     }
   }
 
-  const latest = (platform: PlatformName) => saved.find((item) => 'platform' in item && item.platform === platform) as Extract<CandidatePlatformDataResponse['items'][number], { platform: PlatformName }> | undefined;
-  const githubInsights = githubState.status === 'synced' ? githubState.result.profile.insights : undefined;
+  const latestLeetCode = saved.find((item): item is CandidatePlatformResponse => 'platform' in item && item.platform === 'leetcode' && 'submittedAt' in item);
   return <section className="detail-section platform-data-section" aria-labelledby="platform-data-heading">
     <div className="section-heading"><div><h2 id="platform-data-heading">Platform data</h2><p>GitHub syncs through its public API. Coding profile links are saved to the candidate record; unsupported stats are never fabricated.</p></div></div>
     <article className="platform-data-card github-sync-card">
@@ -123,27 +120,18 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
       {githubState.status === 'synced' && <div className="github-sync-result" role="status"><p>Saved public snapshot for <strong>@{githubState.result.profile.username}</strong>: {githubState.result.profile.publicRepositoryCount} public repositories, {githubState.result.profile.followers} followers, {githubState.result.profile.following} following.</p><small>Updated {when(githubState.result.syncedAt)}. {githubState.result.profile.repositoriesTruncated ? `Showing ${githubState.result.profile.repositoriesReturned} of the available repositories.` : 'No score is calculated from this data.'}</small>{githubState.result.profile.repositories.length > 0 && <ul>{githubState.result.profile.repositories.slice(0, 3).map((repository) => <li key={repository.id}><a href={repository.url} target="_blank" rel="noreferrer">{repository.name}</a><span>{repository.stars} stars{repository.primaryLanguage ? ` · ${repository.primaryLanguage}` : ''}</span></li>)}</ul>}
       </div>}
     </article>
-    <ProposedRubricPanel insights={githubInsights} snapshotState={githubState.status === 'synced' ? 'synced' : githubState.status === 'loading' ? 'loading' : githubState.status === 'error' ? 'error' : 'idle'} />
-    {(['leetcode', 'hackerrank'] as const).map((platform) => {
-      const label = platform === 'leetcode' ? 'LeetCode' : 'HackerRank';
-      const current = profileSave[platform];
-      const previous = latest(platform);
-      const capability = platformSyncCapabilities[platform];
-      return <article className={`platform-data-card platform-data-card-${platform}`} key={platform}>
-        <div className="platform-data-heading"><span className={`platform-mark ${platform === 'leetcode' ? 'leetcode-mark' : 'hackerrank-mark'}`}>{platform === 'leetcode' ? 'LC' : 'HR'}</span><div><h3>{label}</h3><p>Profile link and any previously saved candidate-provided summary</p></div><span className={`source-status ${previous?.availability === 'available' ? 'is-available' : previous ? 'is-unavailable' : 'is-idle'}`} role="status">{previous ? previous.availability.replace('_', ' ') : 'No stats saved'}</span></div>
-        <form className="platform-data-form" onSubmit={(event) => void saveProfile(platform, event)}>
-          <label>{label} username or profile URL<input value={profiles[platform]} onChange={(event) => { setProfiles((state) => ({ ...state, [platform]: event.target.value })); setProfileSave((state) => ({ ...state, [platform]: { status: 'idle' } })); }} placeholder={platform === 'leetcode' ? 'username or https://leetcode.com/u/username' : 'username or https://hackerrank.com/profile/username'} autoComplete="off" /></label>
-          <div className="platform-submit-row"><p>{platform === 'leetcode' ? capability.explanation : 'Profile link metadata is saved separately from candidate-reported statistics.'}</p><button className="primary-button" type="submit" disabled={current.status === 'saving'}>{current.status === 'saving' ? 'Saving…' : `Save ${label} profile`}</button></div>
-          {platform === 'leetcode'
-            ? <button type="button" className="secondary-button" onClick={() => void syncLeetCode()} disabled={leetcodeState.status === 'syncing'}>{leetcodeState.status === 'syncing' ? 'Syncing…' : 'Sync LeetCode'}</button>
-            : <><p className="platform-feedback is-unavailable">{capability.explanation}</p><button type="button" className="text-button" disabled title={capability.explanation}>Sync unavailable</button></>}
-          {platform === 'leetcode' && leetcodeState.status === 'error' && <div className="platform-feedback is-error" role="alert"><p>{leetcodeState.message}</p><button type="button" className="text-button" onClick={() => void syncLeetCode()}>Try again</button></div>}
-          {platform === 'leetcode' && leetcodeState.status === 'synced' && <div className="saved-platform-data" role="status"><p>Synced {when(leetcodeState.result.syncedAt)} via {leetcodeState.result.provider}. Public profile data does not independently verify identity and is not used as an evaluation score.</p></div>}
-          {current.status === 'error' && <p className="platform-feedback is-error" role="alert">{current.message}</p>}
-          {current.status === 'saved' && <p className="platform-feedback is-success" role="status">{label} profile link saved to this candidate.</p>}
-          {previous && <div className="saved-platform-data"><p>Last saved {when('syncedAt' in previous ? previous.syncedAt : previous.submittedAt)} · {previous.provenance.replaceAll('_', ' ')}</p>{previous.statistics && <ul>{Object.entries(previous.statistics).map(([name, value]) => <li key={name}><span>{name.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</span><strong>{value}</strong></li>)}</ul>}</div>}
-        </form>
-      </article>;
-    })}
+    <article className="platform-data-card platform-data-card-leetcode">
+      <div className="platform-data-heading"><span className="platform-mark leetcode-mark">LC</span><div><h3>LeetCode</h3><p>Profile link and any previously saved candidate-provided summary</p></div><span className={`source-status ${latestLeetCode?.availability === 'available' ? 'is-available' : latestLeetCode ? 'is-unavailable' : 'is-idle'}`} role="status">{latestLeetCode ? latestLeetCode.availability.replace('_', ' ') : 'No stats saved'}</span></div>
+      <form className="platform-data-form" onSubmit={(event) => void saveLeetCodeProfile(event)}>
+        <label>LeetCode username or profile URL<input value={leetcodeProfile} onChange={(event) => { setLeetCodeProfile(event.target.value); setProfileSave({ status: 'idle' }); }} placeholder="username or https://leetcode.com/u/username" autoComplete="off" /></label>
+        <div className="platform-submit-row"><p>{platformSyncCapabilities.leetcode.explanation}</p><button className="primary-button" type="submit" disabled={profileSave.status === 'saving'}>{profileSave.status === 'saving' ? 'Saving…' : 'Save LeetCode profile'}</button></div>
+        <button type="button" className="secondary-button" onClick={() => void syncLeetCode()} disabled={leetcodeState.status === 'syncing'}>{leetcodeState.status === 'syncing' ? 'Syncing…' : 'Sync LeetCode'}</button>
+        {leetcodeState.status === 'error' && <div className="platform-feedback is-error" role="alert"><p>{leetcodeState.message}</p><button type="button" className="text-button" onClick={() => void syncLeetCode()}>Try again</button></div>}
+        {leetcodeState.status === 'synced' && <div className="saved-platform-data" role="status"><p>Synced {when(leetcodeState.result.syncedAt)} via {leetcodeState.result.provider}. Public profile data does not independently verify identity and is not used as an evaluation score.</p></div>}
+        {profileSave.status === 'error' && <p className="platform-feedback is-error" role="alert">{profileSave.message}</p>}
+        {profileSave.status === 'saved' && <p className="platform-feedback is-success" role="status">LeetCode profile link saved to this candidate.</p>}
+        {latestLeetCode && <div className="saved-platform-data"><p>Last saved {when(latestLeetCode.submittedAt)} · {latestLeetCode.provenance.replaceAll('_', ' ')}</p>{latestLeetCode.statistics && <ul>{Object.entries(latestLeetCode.statistics).map(([name, value]) => <li key={name}><span>{name.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</span><strong>{value}</strong></li>)}</ul>}</div>}
+      </form>
+    </article>
   </section>;
 }

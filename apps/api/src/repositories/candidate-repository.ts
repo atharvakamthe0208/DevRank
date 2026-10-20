@@ -23,7 +23,7 @@ export interface CandidateRepository {
   list(auth: AuthContext, query: CandidateListQuery): Promise<CandidateList>;
   get(auth: AuthContext, id: string): Promise<ReturnType<typeof candidateSchema.parse>>;
   update(auth: AuthContext, id: string, input: CandidateUpdateInput): Promise<ReturnType<typeof candidateSchema.parse>>;
-  archive(auth: AuthContext, id: string): Promise<void>;
+  delete(auth: AuthContext, id: string): Promise<void>;
 }
 
 function toCandidate(row: CandidateRow): ReturnType<typeof candidateSchema.parse> {
@@ -234,16 +234,10 @@ export const candidateRepository: CandidateRepository = {
     }
   },
 
-  async archive(auth, id) {
+  async delete(auth, id) {
     try {
       const { data, error } = await clientFor(auth)
-        .from('candidates')
-        .update({ archived_at: new Date().toISOString() })
-        .eq('id', id)
-        .eq('owner_id', auth.userId)
-        .is('archived_at', null)
-        .select('id')
-        .maybeSingle();
+        .rpc('delete_candidate_and_data', { p_candidate_id: id });
       if (error) return databaseError(error, 'delete the candidate', 'supabase_response');
       if (!data) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
     } catch (error) {

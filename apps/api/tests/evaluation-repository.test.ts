@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { createEvaluationRepository } from '../src/repositories/evaluation-repository.js';
 import { HttpError } from '../src/middleware/http-error.js';
-import { legacyEvaluationResponseV1Schema } from '@devrank/contracts';
+import { buildProposedEvaluationReport, legacyEvaluationResponseV1Schema, parseProposedPlatformEvidence } from '@devrank/contracts';
 
 const userId = '1d4b1d45-e136-4f50-a46e-8ef29735ec26';
 const candidateId = 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c';
@@ -22,14 +22,49 @@ const legacyResult = legacyEvaluationResponseV1Schema.parse({
   aiExplanation: { summary: '', strengths: [], skillGaps: [], recommendations: [] },
   decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
 });
+const legacyResultSnapshot = JSON.stringify(legacyResult);
 
 describe('evaluation persistence repository', () => {
+  it('reports unexpected processing failures as sanitized application errors, not database outages', async () => {
+    const sensitiveDetail = 'candidate-private-value-do-not-log';
+    const brokenRow = new Proxy({}, {
+      get(_target, key) {
+        if (key === 'source') throw new TypeError(sensitiveDetail);
+        return undefined;
+      },
+    });
+    const client = {
+      from: (table: string) => {
+        const query: Record<string, any> = {};
+        for (const method of ['select', 'eq', 'is']) query[method] = vi.fn(() => query);
+        query.maybeSingle = vi.fn(async () => ({ data: { id: candidateId, full_name: 'Taylor Example' }, error: null }));
+        query.order = vi.fn(async () => ({ data: table === 'platform_evidence' ? [brokenRow] : [], error: null }));
+        query.insert = vi.fn(() => query);
+        query.single = vi.fn(async () => ({ data: null, error: null }));
+        return query;
+      },
+    } as unknown as SupabaseClient;
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const repository = createEvaluationRepository(() => client);
+
+    await expect(repository.run(auth, { candidateId, roleId: 'software_developer' })).rejects.toMatchObject({
+      statusCode: 500, code: 'EVALUATION_PROCESSING_FAILED', message: 'Unable to prepare the evaluation right now',
+    });
+    expect(diagnostic).toHaveBeenCalledWith('Evaluation processing failed', {
+      stage: 'evidence_normalization', errorType: 'TypeError',
+    });
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain(sensitiveDetail);
+    diagnostic.mockRestore();
+  });
+
   it('persists configured-role results and reads the stored snapshot back', async () => {
     const insert = vi.fn();
+    const updates = vi.fn();
     let record: Record<string, unknown> | undefined;
     let legacy = false;
     let omitTargetRole = false;
     let evaluationRows: Array<Record<string, unknown>> = [];
+    const platformSelects: string[] = [];
     const platformRows: Array<Record<string, unknown>> = [
       {
         id: 'github-row', source: 'github', availability: 'available', created_at: '2026-10-14T12:00:00.000Z', observed_at: '2026-10-14T12:00:00.000Z',
@@ -44,8 +79,8 @@ describe('evaluation persistence repository', () => {
       },
       {
         id: 'leetcode-provider-row', source: 'leetcode', availability: 'available', created_at: '2026-10-14T13:00:00.000Z', observed_at: '2026-10-14T13:00:00.000Z',
-        raw_evidence: { provenance: 'alfa_leetcode_api', handle: 'example', profileUrl: 'https://leetcode.com/u/example/' },
-        normalized_evidence: { platform: 'leetcode', provenance: 'alfa_leetcode_api', statistics: { problemsSolved: 12, easySolved: 5, contestsAttended: 2, contestRating: 1400 } },
+        raw_evidence: { provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example', profileUrl: 'https://leetcode.com/u/example/' },
+        normalized_evidence: { platform: 'leetcode', provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle: 'example', profileUrl: 'https://leetcode.com/u/example/', statistics: { problemsSolved: 208, easySolved: 100, mediumSolved: 92, hardSolved: 16, contestsAttended: 2, contestRating: 1400 } },
       },
       {
         id: 'leetcode-candidate-row', source: 'leetcode', availability: 'available', created_at: '2026-10-14T11:00:00.000Z', observed_at: null,
@@ -58,7 +93,7 @@ describe('evaluation persistence repository', () => {
       from: (table: string) => {
         let values: Record<string, unknown> | undefined;
         const query: Record<string, any> = {};
-        query.select = vi.fn(() => query);
+        query.select = vi.fn((columns?: string) => { if (table === 'platform_evidence' && columns) platformSelects.push(columns); return query; });
         query.eq = vi.fn(() => query);
         query.is = vi.fn(() => query);
         query.order = vi.fn(() => table === 'evaluations' ? query : Promise.resolve({ data: table === 'platform_evidence' ? platformRows : [], error: null }));
@@ -66,9 +101,10 @@ describe('evaluation persistence repository', () => {
         query.maybeSingle = vi.fn(async () => table === 'candidates'
           ? { data: { id: candidateId, full_name: 'Taylor Example' }, error: null }
           : table === 'role_profiles'
-            ? { data: { id: roleProfileId, name: 'software_developer', weights: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 } }, error: null }
+            ? { data: { id: roleProfileId, name: 'software_developer', weights: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 } }, error: null }
           : { data: legacy ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: null, status: 'insufficient_evidence', created_at: '2026-10-12T00:00:00.000Z', evaluation_result: legacyResult } : record ? { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: omitTargetRole ? null : record.target_role, status: record.status, created_at: '2026-10-13T00:00:00.000Z', evaluation_result: record.evaluation_result } : null, error: null });
         query.insert = vi.fn((value: Record<string, unknown>) => { values = value; insert(value); return query; });
+        query.update = vi.fn((value: unknown) => { updates(value); return query; });
         query.single = vi.fn(async () => {
           record = values;
           return { data: insertError ? null : { id: evaluationId, candidate_id: candidateId, role_profile_id: values?.role_profile_id ?? null, target_role: values?.target_role, status: values?.status, created_at: '2026-10-13T00:00:00.000Z', evaluation_result: values?.evaluation_result }, error: insertError };
@@ -79,27 +115,44 @@ describe('evaluation persistence repository', () => {
     const repository = createEvaluationRepository(() => client);
 
     const created = await repository.run(auth, { candidateId, roleId: 'software_developer' });
+    expect(updates).not.toHaveBeenCalled();
+    expect(platformSelects).toContain('id,source,availability,raw_evidence,normalized_evidence,observed_at,created_at');
+    expect(JSON.stringify(legacyResult)).toBe(legacyResultSnapshot);
     expect(created.status).toBe('insufficient_evidence');
     expect(created.evaluation).not.toHaveProperty('overallScore');
     expect(created.evaluation.platformEvidence).toEqual(expect.arrayContaining([
-      expect.objectContaining({ source: 'github', provenance: 'github_api', verificationStatus: 'unverified', freshness: 'unassessed', categoryMappings: expect.arrayContaining([{ categoryId: 'relevant_project_experience', relation: 'supporting' }]) }),
-      expect.objectContaining({ source: 'github', evidenceType: 'current_year_contributions', availability: 'partial', categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions', relation: 'supporting' }] }),
-      expect.objectContaining({ source: 'github', evidenceType: 'development_activity', categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'development_activity', relation: 'supporting' }] }),
-      expect.objectContaining({ source: 'github', evidenceType: 'collaboration_activity', categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'collaboration', relation: 'supporting' }] }),
-      expect.objectContaining({ source: 'leetcode', provenance: 'alfa_leetcode_api', evidenceType: 'solved_statistics', normalizedValue: { statistics: { problemsSolved: 12, easySolved: 5 } }, categoryMappings: expect.arrayContaining([{ categoryId: 'problem_solving_dsa', relation: 'supporting' }, { rubricId: 'github_leetcode_proposal_v1', categoryId: 'problem_solving_dsa', relation: 'supporting' }]) }),
+      expect.objectContaining({ source: 'github', provenance: 'github_api', verificationStatus: 'unverified', freshness: 'unassessed', categoryMappings: expect.arrayContaining([{ categoryId: 'project_portfolio', relation: 'supporting' }]) }),
+      expect.objectContaining({ source: 'github', evidenceType: 'current_year_contributions', availability: 'partial', categoryMappings: expect.arrayContaining([{ rubricId: 'github_leetcode_v4', categoryId: 'current_year_contributions', relation: 'supporting' }]) }),
+      expect.objectContaining({ source: 'github', evidenceType: 'development_activity', categoryMappings: expect.arrayContaining([{ rubricId: 'github_leetcode_v4', categoryId: 'development_activity', relation: 'supporting' }]) }),
+      expect.objectContaining({ source: 'github', evidenceType: 'collaboration_activity', categoryMappings: expect.arrayContaining([{ rubricId: 'github_leetcode_v4', categoryId: 'collaboration', relation: 'supporting' }]) }),
+      expect.objectContaining({ source: 'leetcode', provenance: 'alfa_leetcode_api', evidenceType: 'solved_statistics', normalizedValue: { statistics: { problemsSolved: 208, easySolved: 100, mediumSolved: 92, hardSolved: 16 } }, categoryMappings: expect.arrayContaining([{ categoryId: 'problem_solving_dsa', relation: 'supporting' }, { rubricId: 'github_leetcode_v4', categoryId: 'problem_solving_dsa', relation: 'supporting' }]) }),
       expect.objectContaining({ source: 'leetcode', provenance: 'alfa_leetcode_api', evidenceType: 'contest_statistics', normalizedValue: { statistics: { contestsAttended: 2, contestRating: 1400 } } }),
       expect.objectContaining({ source: 'leetcode', provenance: 'candidate_provided', evidenceType: 'candidate_reported_statistics' }),
     ]));
     expect(created.evaluation.platformEvidence).toHaveLength(7);
-    expect(created.evaluation.categoryScores.map(({ categoryId }) => categoryId)).not.toContain('current_year_contributions');
+    expect(created.evaluation.categoryScores.map(({ categoryId }) => categoryId)).toContain('current_year_contributions');
+    expect(created.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).toMatchObject({ status: 'scored', score: 100 });
+    const proposal = buildProposedEvaluationReport(parseProposedPlatformEvidence(created.evaluation.platformEvidence));
+    expect(created.evaluation.finalReport).toEqual(proposal);
+    expect(proposal.categories.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).toMatchObject({
+      status: 'scored', score: 100, metrics: {
+        easySolved: 100, mediumSolved: 92, hardSolved: 16, difficultyWeightedSolved: 332,
+        scoringBasis: 'Difficulty-weighted count (easy=1, medium=2, hard=3)',
+      },
+    });
+    expect(proposal.categories.find(({ categoryId }) => categoryId === 'problem_solving_dsa')?.formula).toContain('caps at 100 once count reaches 300');
+    expect(proposal.notice).toContain('threshold needs future calibration');
+    expect(platformRows[1]?.normalized_evidence).toMatchObject({ statistics: { easySolved: 100, mediumSolved: 92, hardSolved: 16 } });
+    expect(created.evaluation.schemaVersion).toBe('4.0.0');
+    expect(created.evaluation.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ categoryId: 'problem_solving_dsa', normalizedValue: 100, source: 'leetcode · alfa_leetcode_api' })]));
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       owner_id: userId,
       candidate_id: candidateId,
       role_profile_id: null,
       target_role: 'software_developer',
       status: 'insufficient_evidence',
-      scoring_version: '3.0.0',
-      evidence_snapshot: [],
+      scoring_version: '4.0.0',
+      evidence_snapshot: created.evaluation.evidence,
       role_weights_snapshot: created.role.weights,
       evaluation_result: created.evaluation,
     }));
@@ -119,7 +172,7 @@ describe('evaluation persistence repository', () => {
     record = { ...record!, target_role: 'software_developer', evaluation_result: resultWithoutVersion };
     omitTargetRole = false;
     const withoutScoringVersion = await repository.get(auth, evaluationId);
-    expect(withoutScoringVersion).toMatchObject({ result: { schemaVersion: '3.0.0' } });
+    expect(withoutScoringVersion).toMatchObject({ result: { schemaVersion: '4.0.0' } });
     expect(withoutScoringVersion).not.toHaveProperty('result.scoringVersion');
     record = { ...record!, evaluation_result: { ...resultWithoutVersion, scoringVersion: '9.9.9' } };
     await expect(repository.get(auth, evaluationId)).rejects.toMatchObject({ statusCode: 409, code: 'SCORING_VERSION_UNSUPPORTED' });
@@ -147,17 +200,18 @@ describe('evaluation persistence repository', () => {
     diagnostic.mockRestore();
   });
 
-  it('keeps a previous v2 five-weight profile unchanged and rejects it explicitly under v3', async () => {
+  it('keeps a previous v2 five-weight profile unchanged and rejects it explicitly under v4', async () => {
     const legacyWeights = {
       technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22,
       practical_assessment_performance: 16.67, learning_adaptability: 11.11,
     };
+    let profileWeights: unknown = legacyWeights;
     const from = vi.fn((table: string) => {
       const query: Record<string, any> = {};
       for (const method of ['select', 'eq', 'is']) query[method] = vi.fn(() => query);
       query.maybeSingle = vi.fn(async () => table === 'candidates'
         ? { data: { id: candidateId, full_name: 'Taylor Example' }, error: null }
-        : { data: { id: roleProfileId, name: 'software_developer', weights: legacyWeights }, error: null });
+        : { data: { id: roleProfileId, name: 'software_developer', weights: profileWeights }, error: null });
       return query;
     });
     const client = { from } as unknown as SupabaseClient;
@@ -165,7 +219,13 @@ describe('evaluation persistence repository', () => {
 
     await expect(repository.create(auth, candidateId, { roleProfileId })).rejects.toMatchObject({
       statusCode: 422,
-      code: 'ROLE_PROFILE_REQUIRES_V3_WEIGHTS',
+      code: 'ROLE_PROFILE_REQUIRES_V4_WEIGHTS',
+    });
+    profileWeights = { project_portfolio: 25, technical_skills: 15, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 };
+    await expect(repository.create(auth, candidateId, { roleProfileId })).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'ROLE_PROFILE_REQUIRES_V4_WEIGHTS',
+      message: expect.stringContaining('20/20/15/10/10/25'),
     });
     expect(legacyWeights).toEqual({
       technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22,

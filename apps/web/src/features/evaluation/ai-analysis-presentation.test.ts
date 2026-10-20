@@ -13,15 +13,15 @@ const evaluation: PersistedEvaluation = {
   status: 'completed',
   createdAt: '2026-10-12T00:00:00.000Z',
   result: {
-    schemaVersion: '3.0.0',
-    scoringVersion: '3.0.0',
+    schemaVersion: '4.0.0',
+    scoringVersion: '4.0.0',
     candidateId,
     targetRole: 'software_developer',
     overallScore: 80,
     categoryScores: scoringCategories.map(({ id, displayName }, index) => ({
       categoryId: id, displayName, score: 80, status: 'scored', evidenceRefs: [`evidence-${index + 1}`], explanation: 'Supported by evidence.',
     })),
-    roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+    roleWeightsUsed: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
     evidence: scoringCategories.map(({ id }, index) => ({ evidenceId: `evidence-${index + 1}`, evidenceType: 'technical_screen', source: 'Technical screen', description: 'Completed a structured technical screen.', normalizedValue: 80, verificationStatus: 'verified', categoryId: id, availability: 'available' })),
     strengths: [], skillGaps: [], recommendations: [], missingEvidence: [],
     calculationExplanation: 'Deterministic scoring explanation.', evaluationStatus: 'completed',
@@ -33,9 +33,29 @@ const evaluation: PersistedEvaluation = {
 describe('AI analysis presentation helpers', () => {
   it('turns only recognized evidence and category references into supporting descriptions', () => {
     expect(analysisReferenceDescriptions(evaluation, ['evidence-1', 'technical_skills', 'unknown-ref'])).toEqual([
-      'Technical screen · Completed a structured technical screen.',
+      'Technical Screen · Completed a structured technical screen.',
       'Technical Skills: Supported by evidence.',
     ]);
+  });
+
+  it('describes provider snapshot references with readable provenance, availability, and capture time', () => {
+    const withSnapshot: PersistedEvaluation = {
+      ...evaluation,
+      result: {
+        ...evaluation.result,
+        platformEvidence: [{
+          evidenceId: 'saved-leetcode-row', candidateId, source: 'leetcode', evidenceType: 'solved_statistics',
+          availability: 'partial', observedAt: '2026-10-12T00:00:00.000Z',
+          normalizedValue: { problemsSolved: 50 }, verificationStatus: 'unverified', provenance: 'alfa_leetcode_api',
+          freshness: 'unassessed', limitations: [], categoryMappings: [],
+        }],
+      },
+    };
+    const [description] = analysisReferenceDescriptions(withSnapshot, ['saved-leetcode-row']);
+    expect(description).toContain('LeetCode · Solved Statistics');
+    expect(description).toContain('LeetCode statistics provider · partial');
+    expect(description).toContain('saved');
+    expect(description).not.toContain('alfa_leetcode_api');
   });
 
   it('shows a clear unavailable state when the API has insufficient evidence', () => {
