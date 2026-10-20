@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import type { HumanMessage as HumanMessageType, SystemMessage as SystemMessageType } from '@langchain/core/messages' with { 'resolution-mode': 'require' };
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import { screeningCategoryIdSchema, type RequirementResult, type ScreeningRequirement } from '@devrank/contracts';
@@ -11,8 +12,11 @@ import { extractCandidateName } from './candidate-name.js';
 
 const require = createRequire(import.meta.url);
 const { ChatGroq } = require('@langchain/groq') as { ChatGroq: typeof import('@langchain/groq').ChatGroq };
-type Message = new (content: string) => { content: string };
-const { HumanMessage, SystemMessage } = require('@langchain/core/messages') as { HumanMessage: Message; SystemMessage: Message };
+const langchainMessages = require('@langchain/core/messages') as {
+  HumanMessage: new (...args: ConstructorParameters<typeof HumanMessageType>) => HumanMessageType;
+  SystemMessage: new (...args: ConstructorParameters<typeof SystemMessageType>) => SystemMessageType;
+};
+const { HumanMessage, SystemMessage } = langchainMessages;
 
 const extractedRequirements = z.object({ requirements: z.array(z.object({
   categoryId: screeningCategoryIdSchema,

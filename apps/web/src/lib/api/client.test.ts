@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { classifyRecruiterAccess } from '../../features/auth/access-state';
 import { ApiNetworkError, ApiRequestError, apiRequest } from './client';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -44,6 +45,21 @@ describe('apiRequest', () => {
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       headers: { Authorization: 'Bearer test-access-token' },
     });
+  });
+
+  it('parses the confirmed admin profile from /auth/me so the admin route guard receives admin state', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      user: { id: 'admin-1', email: 'admin@example.com' },
+      profile: { id: 'admin-1', display_name: 'Admin', role: 'admin', approval_status: 'approved' },
+      emailConfirmed: true,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    const identity = await apiRequest<{ user: { id: string }; profile: { id: string; display_name: string | null; role: 'recruiter' | 'admin'; approval_status: 'pending' | 'approved' | 'rejected' | 'suspended' } | null; emailConfirmed: boolean }>(
+      '/auth/me', undefined, 'test-access-token',
+    );
+
+    expect(identity.profile).toMatchObject({ id: 'admin-1', role: 'admin', approval_status: 'approved' });
+    expect(classifyRecruiterAccess(identity.profile, identity.emailConfirmed)).toBe('admin');
   });
 
   it('accepts a successful no-content response', async () => {
