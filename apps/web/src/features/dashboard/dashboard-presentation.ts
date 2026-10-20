@@ -26,3 +26,10 @@ export function dashboardScoreAvailabilityLabel(status: DashboardResponse['recen
   if (status === 'pending' || status === 'in_progress') return 'Not scored yet';
   return 'Score unavailable';
 }
+
+export function recentScoredEvaluationAverage(evaluations: readonly { score?: number }[]): { average?: number; count: number } {
+  const scores = evaluations.flatMap(({ score }) => score === undefined ? [] : [score]);
+  return scores.length
+    ? { average: scores.reduce((total, score) => total + score, 0) / scores.length, count: scores.length }
+    : { average: undefined, count: 0 };
+}

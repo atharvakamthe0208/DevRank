@@ -14,7 +14,9 @@ import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { supabase } from '../../lib/supabase/client';
 import { useAuth } from '../auth/AuthProvider';
 import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
+import { KpiCard } from '../../components/metrics/KpiCards';
 import { comparableRecentEvaluations } from './insights-presentation';
+import { recentScoredEvaluationAverage } from '../dashboard/dashboard-presentation';
 import { ActiveDashboardReports } from './ProposedDashboardReports';
 import './insights-page.css';
 
@@ -89,6 +91,12 @@ export function InsightsPage() {
   }, [session?.access_token, roleId, loading, attempt]);
 
   const evaluations = comparableRecentEvaluations(dashboard);
+  const recentScoreSummary = recentScoredEvaluationAverage(dashboard?.recentEvaluations ?? []);
+  const recentAverageProgress = recentScoreSummary.average;
+  const recentAverageProgressBar: { value: number; max: number; label: string } | undefined = typeof recentAverageProgress === 'number'
+    ? { value: recentAverageProgress, max: 100, label: 'Recent scored evaluation average out of 100' }
+    : undefined;
+  const recentScoreTrend = dashboard?.recentEvaluations.flatMap((item) => item.score === undefined ? [] : [item.score]) ?? [];
   const canCompare = selected.length >= 2 && !comparing;
 
   function toggleEvaluation(id: string) {
@@ -126,6 +134,12 @@ export function InsightsPage() {
     <DelayedAuthLoadingScreen loading={loading} message="Preparing insights…"/>
     <section className="insights-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER WORKSPACE</span><h1>Insights &amp; rankings</h1><p className="page-subtitle">Workspace activity and comparable evaluation results.</p></div><Link className="secondary-button insights-run-evaluation" to="/evaluations">Run an evaluation</Link></section>
     {loading ? <section className="insights-state" role="status">Loading recruiter insights…</section> : error ? <section className="insights-state" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></section> : dashboard && <>
+      <section className="workspace-kpi-grid" aria-label="Workspace metrics">
+        <KpiCard icon="♙" label="Candidates" value={dashboard.candidateCount} detail="Recruiter workspace"/>
+        <KpiCard icon="▤" label="Evaluations" value={dashboard.evaluationCount} detail="All saved evaluation runs"/>
+        <KpiCard icon="✓" label="Completed" value={dashboard.statusCounts.completed ?? 0} detail="Completed evaluation runs" progress={dashboard.evaluationCount > 0 ? { value: dashboard.statusCounts.completed ?? 0, max: dashboard.evaluationCount, label: 'Completed evaluations out of all saved evaluations' } : undefined}/>
+        <KpiCard icon="◉" label="Recent average" value={recentAverageProgress} decimals={1} suffix=" / 100" detail={recentScoreSummary.count ? `Across ${recentScoreSummary.count} scored recent evaluations` : 'No scored evaluations yet'} progress={recentAverageProgressBar} trend={recentScoreTrend}/>
+      </section>
       <section className="insights-panel" aria-labelledby="ranking-title">
         <div className="insights-panel-heading"><div><h2 id="ranking-title">Candidate rankings</h2><p>Ranked results for the selected role. Incomplete or incompatible evaluations are excluded.</p></div><label htmlFor="ranking-role">Role<select id="ranking-role" value={roleId} onChange={(event) => changeRole(event.target.value as EvaluationRole['id'])}>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label></div>
         {!roles.length ? <div className="insights-state"><h3>No evaluation roles available</h3><p>Rankings will appear when a supported evaluation role is available.</p></div> : rankingLoading ? <p className="insights-state" role="status">Loading rankings…</p> : rankingError ? <div className="insights-state" role="alert"><p>{rankingError}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : ranking?.items.length ? <div className="insights-table-wrap"><table className="insights-table"><caption className="visually-hidden">Ranked candidate evaluations for {roles.find(({ id }) => id === roleId)?.displayName ?? 'selected role'}</caption><thead><tr><th scope="col">Rank</th><th scope="col">Candidate</th><th scope="col">Score</th><th scope="col">Evaluated</th></tr></thead><tbody>{ranking.items.map((item) => <tr key={item.evaluationId}><td>#{item.rank}</td><td><Link aria-label={`Open ${dashboard.recentEvaluations.find((row) => row.candidateId === item.candidateId)?.candidateName ?? 'candidate'} profile`} to={`/candidates/${item.candidateId}`}>{dashboard.recentEvaluations.find((row) => row.candidateId === item.candidateId)?.candidateName ?? 'View candidate'}</Link></td><td><strong>{item.score}</strong> / 100</td><td><time dateTime={item.evaluatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(item.evaluatedAt))}</time></td></tr>)}</tbody></table><p className="insights-footnote">{ranking.total} ranked · {ranking.excluded.incomplete} incomplete excluded · scoring version {ranking.scoringVersion}</p></div> : <div className="insights-state"><h3>No comparable rankings yet</h3><p>Complete an evaluation with sufficient evidence for this role to appear here. Missing or incomplete evidence is not assigned a zero score.</p><Link className="primary-button link-button" to="/evaluations">Start an evaluation</Link></div>}

@@ -5,6 +5,8 @@ import { candidateListView } from './candidate-list-state';
 import { candidateDeletionMessage } from './candidate-delete-confirmation';
 import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
+import { AnimatedMetric } from '../../components/metrics/KpiCards';
+import { filterAndSortCandidates, type CandidatePlatformFilter, type CandidateSortOrder } from './candidate-list-filtering';
 import './candidate-workflow.css';
 
 function CandidateTable({ items, deletingId, onDelete }: { items: ReturnType<typeof useCandidates>['items']; deletingId: string | null; onDelete: (candidate: ReturnType<typeof useCandidates>['items'][number]) => void }) {
@@ -21,6 +23,9 @@ export function CandidateListPage() {
   const location = useLocation();
   const notice = (location.state as { notice?: unknown } | null)?.notice;
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState('');
+  const [platformFilter, setPlatformFilter] = useState<CandidatePlatformFilter>('all');
+  const [sortOrder, setSortOrder] = useState<CandidateSortOrder>('newest');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [candidateToDelete, setCandidateToDelete] = useState<ReturnType<typeof useCandidates>['items'][number] | null>(null);
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
@@ -29,6 +34,7 @@ export function CandidateListPage() {
   const pageSize = 20;
   const { items, total, loading, error, reload, deleteCandidate } = useCandidates(page, pageSize);
   const view = candidateListView(loading, error, items.length);
+  const visibleItems = filterAndSortCandidates(items, query, platformFilter, sortOrder);
   useEffect(() => {
     const dialog = deleteDialogRef.current;
     if (candidateToDelete && dialog && !dialog.open) dialog.showModal();
@@ -56,8 +62,9 @@ export function CandidateListPage() {
     {typeof notice === 'string' && <p className="form-feedback candidate-success-message" role="status">{notice}</p>}
     {deleteNotice && <p className="form-feedback candidate-success-message" role="status">{deleteNotice}</p>}
     {deleteError && <p className="candidate-delete-error" role="alert">{deleteError}</p>}
-    <section className="candidate-management-panel" aria-labelledby="candidate-list-title"><div className="candidate-management-panel-head"><div><h2 id="candidate-list-title">All candidates</h2><p>{total} {total === 1 ? 'candidate' : 'candidates'} in your workspace</p></div></div>
-      {view === 'loading' ? <div className="candidate-list-state" role="status">Loading your candidates…</div> : view === 'error' ? <div className="candidate-list-state" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={reload}>Try again</button></div> : view === 'empty' ? <div className="candidate-list-state"><span className="placeholder-mark">♙</span><h3>No candidates yet</h3><p>Add a candidate to start building your recruiter workspace.</p><Link className="primary-button link-button" to="/candidates/new">Add your first candidate</Link></div> : <><CandidateTable items={items} deletingId={deletingId} onDelete={setCandidateToDelete}/><div className="candidate-management-foot"><span>Showing {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} of {total}</span><div className="pagination"><button disabled={page <= 1} onClick={() => setPage((current) => current - 1)} aria-label="Previous page">‹</button><button className="current-page" aria-current="page">{page}</button><button disabled={total <= page * pageSize} onClick={() => setPage((current) => current + 1)} aria-label="Next page">›</button></div></div></>}
+    <section className="candidate-management-panel" aria-labelledby="candidate-list-title"><div className="candidate-management-panel-head"><div><h2 id="candidate-list-title">All candidates</h2><p>{view === 'loading' ? 'Loading candidate count…' : view === 'error' ? 'Candidate count unavailable' : <><AnimatedMetric value={total}/> {total === 1 ? 'candidate' : 'candidates'} in your workspace</>}</p></div></div>
+      {view !== 'loading' && view !== 'error' && view !== 'empty' && <div className="candidate-list-toolbar" role="group" aria-label="Filter and sort candidates on this page"><label>Search this page<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, email, or profile handle"/></label><label>Profile links<select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value as CandidatePlatformFilter)}><option value="all">All candidates</option><option value="github">GitHub linked</option><option value="leetcode">LeetCode linked</option><option value="unlinked">No linked profiles</option></select></label><label>Sort this page<select value={sortOrder} onChange={(event) => setSortOrder(event.target.value as CandidateSortOrder)}><option value="newest">Recently added</option><option value="oldest">Oldest added</option><option value="name">Name A–Z</option></select></label></div>}
+      {view === 'loading' ? <div className="candidate-list-state" role="status">Loading your candidates…</div> : view === 'error' ? <div className="candidate-list-state" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={reload}>Try again</button></div> : view === 'empty' ? <div className="candidate-list-state"><span className="placeholder-mark">♙</span><h3>No candidates yet</h3><p>Add a candidate to start building your recruiter workspace.</p><Link className="primary-button link-button" to="/candidates/new">Add your first candidate</Link></div> : visibleItems.length === 0 ? <div className="candidate-list-state"><h3>No matches on this page</h3><p>Try a different name, email, profile handle, or link filter.</p><button className="secondary-button" type="button" onClick={() => { setQuery(''); setPlatformFilter('all'); }}>Clear filters</button></div> : <><CandidateTable items={visibleItems} deletingId={deletingId} onDelete={setCandidateToDelete}/><div className="candidate-management-foot"><span>Showing {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} of {total} · {visibleItems.length} on this page</span><div className="pagination"><button disabled={page <= 1} onClick={() => setPage((current) => current - 1)} aria-label="Previous page">‹</button><button className="current-page" aria-current="page">{page}</button><button disabled={total <= page * pageSize} onClick={() => setPage((current) => current + 1)} aria-label="Next page">›</button></div></div></>}
     </section>
     <p className="candidate-management-note"><span aria-hidden="true">ⓘ</span> Candidate information is private to your recruiter account and protected by workspace authorization.</p>
     <dialog className="candidate-delete-dialog" ref={deleteDialogRef} aria-labelledby="candidate-delete-title" aria-describedby="candidate-delete-description" onCancel={() => setCandidateToDelete(null)} onClose={() => setCandidateToDelete(null)}>
