@@ -12,9 +12,17 @@ export function screeningReportCsv(report: ScreeningReportResponse): string {
     ['Filename', 'Candidate name', 'Processing status', 'Rank', 'Score / 100', 'Score status', 'Matched requirements', 'Missing or unsupported requirements', 'Error'],
     ...report.details.resumes.map((resume) => {
       const requirements = resume.evaluation?.requirements ?? [];
-      return [resume.filename, resume.candidate?.name ?? '', resume.status, rankById.get(resume.id) ?? '', resume.evaluation?.score ?? '', resume.evaluation?.status ?? '',
-        requirements.filter((item) => item.status === 'demonstrated').map((item) => item.description).join('; '),
-        requirements.filter((item) => item.status !== 'demonstrated').map((item) => `${item.description} (${item.status.replaceAll('_', ' ')})`).join('; '), resume.error ?? ''];
+      const preliminary = resume.preliminaryEvaluation;
+      const score = resume.evaluation?.score ?? preliminary?.score ?? '';
+      const scoreLabel = resume.evaluation?.score !== undefined ? `Validated ${resume.evaluation.status}` : preliminary ? 'Preliminary match' : '';
+      const matched = requirements.length
+        ? requirements.filter((item) => item.status === 'demonstrated').map((item) => item.description)
+        : preliminary?.criteria.filter((item) => item.status === 'supported').map((item) => item.description) ?? [];
+      const missing = requirements.length
+        ? requirements.filter((item) => item.status !== 'demonstrated').map((item) => `${item.description} (${item.status.replaceAll('_', ' ')})`)
+        : preliminary?.criteria.filter((item) => item.status === 'unverified').map((item) => `${item.description} (unverified in resume text)`) ?? [];
+      return [resume.filename, resume.candidate?.name ?? '', resume.status, rankById.get(resume.id) ?? '', score, scoreLabel,
+        matched.join('; '), missing.join('; '), resume.error ?? ''];
     }),
   ];
   return `\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\r\n')}`;

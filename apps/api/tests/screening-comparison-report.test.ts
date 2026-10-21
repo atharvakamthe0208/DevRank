@@ -8,6 +8,10 @@ const ownerId = '1d4b1d45-e136-4f50-a46e-8ef29735ec26';
 const ids = ['a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d', 'b8e8c2c8-72ea-49ca-ae8e-42c9c63ce94e', 'c9f9d3d9-83fb-4adb-bf9f-53dad74dfa5f'];
 const unscoredId = 'd0d0d0d0-0000-4000-8000-000000000000';
 const higherScoreId = 'e1e1e1e1-1111-4111-8111-111111111111';
+const preliminary = { rubricVersion: 'resume-document-match-1.0.0' as const, score: 62, evidenceCoverage: 40, criteria: [{
+  id: 'req-tech', categoryId: 'required_technical_skills' as const, description: 'TypeScript and API design', importance: 'required' as const,
+  status: 'supported' as const, matchedTerms: ['typescript'], matchPercentage: 50, evidenceExcerpt: 'Built TypeScript services',
+}] };
 const auth = { userId: ownerId, email: 'recruiter@example.test', emailConfirmed: true, accessToken: 'jwt', profile: { id: ownerId, display_name: 'Recruiter', role: 'recruiter' as const, approval_status: 'approved' as const } };
 const score = (value: number): ScreeningScore => ({
   rubricVersion: 'resume-job-match-1.0.0', scoreType: 'resume_job_match', status: 'complete', score: value, evidenceCoverage: 100,
@@ -23,7 +27,7 @@ const dbRows = [
   { id: ids[0], original_filename: 'alpha.pdf', status: 'completed', extracted_data: { candidate: { name: 'Alpha' } }, evaluation: score(80), safe_error_message: null },
   { id: ids[1], original_filename: 'beta.pdf', status: 'completed', extracted_data: { candidate: { name: 'Beta' } }, evaluation: score(80), safe_error_message: null },
   { id: ids[2], original_filename: 'failed.pdf', status: 'failed', extracted_data: null, evaluation: null, safe_error_message: 'Could not extract text.' },
-  { id: unscoredId, original_filename: 'partial.pdf', status: 'completed', extracted_data: { candidate: { name: 'Partial' } }, evaluation: null, safe_error_message: null },
+  { id: unscoredId, original_filename: 'partial.pdf', status: 'completed', extracted_data: { candidate: { name: 'Partial' } }, evaluation: null, preliminary_evaluation: preliminary, safe_error_message: null },
   { id: higherScoreId, original_filename: 'higher.pdf', status: 'completed', extracted_data: { candidate: { name: 'Higher' } }, evaluation: score(91), safe_error_message: null },
 ];
 const clientFactory = vi.fn(() => ({
@@ -48,9 +52,10 @@ async function invoke(name: 'get' | 'compare' | 'report' | 'ranking', idsToSelec
 
 describe('screening comparison and report endpoints', () => {
   it('returns the persisted verified candidate name through screening details', async () => {
-    const result = await invoke('get') as { resumes: Array<{ id: string; candidate: { name: string } | null }> };
+    const result = await invoke('get') as { resumes: Array<{ id: string; candidate: { name: string } | null; preliminaryEvaluation: typeof preliminary | null }> };
     expect(result.resumes.find((resume) => resume.id === ids[0])?.candidate).toEqual({ name: 'Alpha' });
     expect(result.resumes.find((resume) => resume.id === ids[2])?.candidate).toBeNull();
+    expect(result.resumes.find((resume) => resume.id === unscoredId)?.preliminaryEvaluation).toEqual(preliminary);
   });
 
   it('returns all 20 persisted resumes without truncating the results query', async () => {
@@ -72,7 +77,7 @@ describe('screening comparison and report endpoints', () => {
     const result = await invoke('compare', ids.slice(0, 2)) as { ranking: { ranked: Array<{ resumeId: string; rank: number; score: number }>; unranked: Array<{ resumeId: string; status: string; reason: string }> } };
     expect(result.ranking.ranked).toEqual([{ resumeId: higherScoreId, rank: 1, score: 91 }, { resumeId: ids[0], rank: 2, score: 80 }, { resumeId: ids[1], rank: 2, score: 80 }]);
     expect(result.ranking.unranked).toContainEqual(expect.objectContaining({ resumeId: ids[2], status: 'failed' }));
-    expect(result.ranking.unranked).toContainEqual(expect.objectContaining({ resumeId: unscoredId, status: 'completed', reason: 'No deterministic overall score is available.' }));
+    expect(result.ranking.unranked).toContainEqual(expect.objectContaining({ resumeId: unscoredId, status: 'completed', reason: 'A preliminary document match is available but is not included in validated ranking.' }));
   });
 
   it('rejects fewer than two selected resumes and IDs outside this screening', async () => {

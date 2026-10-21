@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { screeningRequirementsSchema } from '@devrank/contracts';
 import { env } from '../../config/env.js';
 import { HttpError } from '../../middleware/http-error.js';
 import { createScreeningProcessor, extractResumeText, type ScreeningProcessor } from './processor.js';
+import { extractCandidateName } from './candidate-name.js';
+import { preliminaryResumePatch, scorePreliminaryMatch } from './preliminary-scoring.js';
 
 type ScreeningJob = { id: string; resume_id: string; owner_id: string; attempt: number };
 type WorkerClient = SupabaseClient;
@@ -61,7 +64,7 @@ async function processJob(client: WorkerClient, processor: ScreeningProcessor, j
     return;
   }
   const { data: session, error: sessionError } = await client.from('screening_sessions')
-    .select('normalized_requirements').eq('id', resume.session_id).eq('owner_id', job.owner_id).single();
+    .select('job_description,normalized_requirements').eq('id', resume.session_id).eq('owner_id', job.owner_id).single();
   if (sessionError || !session) throw sessionError ?? new Error('Screening job has no matching session.');
 
   const started = await client.from('resume_screenings').update({ status: 'processing', safe_error_code: null, safe_error_message: null, updated_at: new Date().toISOString() }).eq('id', job.resume_id);
@@ -72,7 +75,13 @@ async function processJob(client: WorkerClient, processor: ScreeningProcessor, j
     const buffer = Buffer.from(await stored.arrayBuffer());
     const file = { mimetype: resume.mime_type } as Express.Multer.File;
     const text = await extractResumeText(file, buffer);
-    const assessment = await processor.assess(session.normalized_requirements, text);
+    const requirements = screeningRequirementsSchema.parse(session.normalized_requirements);
+    const preliminaryEvaluation = scorePreliminaryMatch(requirements, text, session.job_description);
+    const preliminarySaved = await client.from('resume_screenings').update(
+      preliminaryResumePatch(extractCandidateName(text), preliminaryEvaluation, new Date().toISOString()),
+    ).eq('id', job.resume_id).eq('owner_id', job.owner_id);
+    if (preliminarySaved.error) throw preliminarySaved.error;
+    const assessment = await processor.assess(requirements, text);
     const saved = await client.from('resume_screenings').update({
       status: 'completed', extracted_data: { candidate: assessment.candidate }, evaluation: assessment.evaluation,
       safe_error_code: null, safe_error_message: null, processed_at: new Date().toISOString(), updated_at: new Date().toISOString(),

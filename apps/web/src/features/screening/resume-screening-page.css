@@ -80,6 +80,10 @@
 .screening-candidate-name { display: block; min-width: 132px; max-width: 190px; overflow: hidden; color: #353830; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .screening-resume-name { display: block; width: 190px; overflow: hidden; color: #65685f; text-overflow: ellipsis; white-space: nowrap; }
 .screening-score-cell { display: flex; align-items: center; gap: 8px; min-width: 128px; }
+.screening-score-copy { display: grid; justify-items: center; gap: 3px; }
+.screening-score-copy small { color: #777a70; font-size: 9px; white-space: nowrap; }
+.screening-score-badge.score-preliminary { border-style: dashed; }
+.score-fill-preliminary { background: repeating-linear-gradient(135deg, currentColor 0 3px, transparent 3px 6px); }
 .screening-score-badge { min-width: 48px; padding: 5px 7px; border: 1px solid transparent; border-radius: 6px; font-size: 11px; font-weight: 800; text-align: center; }
 .score-high { border-color: #d1e2d2; background: #edf5ed; color: #315f3a; }
 .score-medium { border-color: #e8dec4; background: #f8f4e9; color: #735b23; }

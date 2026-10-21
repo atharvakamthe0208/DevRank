@@ -16,16 +16,20 @@ const scored = {
 describe('screening CSV export', () => {
   it('exports only persisted results with rank and scores and escapes spreadsheet formulas', () => {
     const report: ScreeningReportResponse = {
-      generatedAt: '2026-10-18T09:30:00.000Z', selectedResumeIds: ['a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d'],
-      ranking: { ranked: [{ resumeId: 'a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d', rank: 1, score: 82 }], unranked: [], rankingCriteria: 'Saved score.' },
+      generatedAt: '2026-10-18T09:30:00.000Z', selectedResumeIds: ['a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d', 'b8e8c2c8-72ea-49ca-ae8e-42c9c63ce94e'],
+      ranking: { ranked: [{ resumeId: 'a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d', rank: 1, score: 82 }], unranked: [{ resumeId: 'b8e8c2c8-72ea-49ca-ae8e-42c9c63ce94e', filename: 'preliminary.pdf', status: 'failed', reason: 'Preliminary only.' }], rankingCriteria: 'Saved score.' },
       details: { sessionId: '146ec40d-88c1-4575-8c08-e28601b26b4d', jobTitle: 'Engineer', status: 'completed', resumes: [
         { id: 'a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d', filename: '=cmd.pdf', status: 'completed', candidate: { name: 'Alex' }, evaluation: scored },
+        { id: 'b8e8c2c8-72ea-49ca-ae8e-42c9c63ce94e', filename: 'preliminary.pdf', status: 'failed', candidate: null, evaluation: null,
+          preliminaryEvaluation: { rubricVersion: 'resume-document-match-1.0.0', score: 47, evidenceCoverage: 25, criteria: [{ id: 'req-1', categoryId: 'required_technical_skills', description: 'TypeScript', importance: 'required', status: 'supported', matchedTerms: ['typescript'], matchPercentage: 100, evidenceExcerpt: 'TypeScript services' }] } },
       ] },
     };
     const csv = screeningReportCsv(report);
     expect(csv).toContain('"Filename","Candidate name"');
     expect(csv).toContain("\"'=cmd.pdf\"");
     expect(csv).toContain('"1","82"');
+    expect(csv).toContain('"47","Preliminary match"');
+    expect(csv).toContain('"TypeScript"');
     expect(csv).not.toContain('"0"');
   });
 });
