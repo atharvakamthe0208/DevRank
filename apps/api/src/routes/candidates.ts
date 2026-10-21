@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import {
   candidateCreateSchema,
+  candidateBulkImportRequestSchema,
+  candidateImportRowsSchema,
   candidateIdParamsSchema,
   candidateListQuerySchema,
   candidatePlatformSubmissionSchema,
@@ -25,6 +27,8 @@ export function createCandidatesRouter(
   const router = Router();
   router.use(authMiddleware, requireApprovedRecruiter);
   router.get('/', validateQuery(candidateListQuerySchema), controller.list);
+  router.post('/bulk-import/preview', validateBody(candidateImportRowsSchema), controller.previewImport);
+  router.post('/bulk-import', validateBody(candidateBulkImportRequestSchema), controller.bulkImport);
   router.post('/', validateBody(candidateCreateSchema), controller.create);
   router.post(
     '/:id/evaluations',

@@ -2,6 +2,10 @@ import {
   candidateListResponseSchema,
   candidateSchema,
   candidateIdParamsSchema,
+  candidateImportPreviewResponseSchema,
+  candidateBulkImportResponseSchema,
+  type CandidateBulkImportRequest,
+  type CandidateImportRows,
   candidateListQuerySchema,
   type CandidateListQuery,
 } from '@devrank/contracts';
@@ -60,6 +64,19 @@ export function createCandidateController(repository: CandidateRepository = cand
     }),
     create: asyncHandler(async (request, response) => {
       response.status(201).json(checkedCandidate(await repository.create(authContext(request), request.body)));
+    }),
+    previewImport: asyncHandler(async (request, response) => {
+      const result = await repository.previewImport(authContext(request), (request.body as CandidateImportRows).rows);
+      response.json(candidateImportPreviewResponseSchema.parse(result));
+    }),
+    bulkImport: asyncHandler(async (request, response) => {
+      const idempotencyKey = request.get('Idempotency-Key');
+      if (!idempotencyKey || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
+        throw new HttpError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'A valid Idempotency-Key UUID is required');
+      }
+      const input = request.body as CandidateBulkImportRequest;
+      const result = await repository.bulkImport(authContext(request), input.rows, idempotencyKey, input.skipDuplicates);
+      response.status(200).json(candidateBulkImportResponseSchema.parse(result));
     }),
     get: asyncHandler(async (request, response) => {
       response.json(checkedCandidate(await repository.get(authContext(request), candidateId(request))));

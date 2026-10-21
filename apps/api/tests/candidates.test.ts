@@ -59,6 +59,11 @@ function createTestRepository(): CandidateRepository {
       if (auth.userId === otherUserId) throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to create the candidate right now');
       return { ...candidate, name: input.name, ...(input.email ? { email: input.email } : {}) };
     }),
+    previewImport: vi.fn(async (_auth, rows) => ({ rows: rows.map((row) => ({ rowNumber: row.rowNumber, status: 'ready' as const, potentialDuplicate: false, candidateId: null })) })),
+    bulkImport: vi.fn(async (_auth, rows) => ({
+      results: rows.map((row, index) => ({ rowNumber: row.rowNumber, status: 'created' as const, candidateId: index === 0 ? candidateId : 'cc235ee8-a6cf-407b-b8b6-66e4e540f14c' })),
+      createdCount: rows.length, skippedCount: 0, failedCount: 0,
+    })),
     list: vi.fn(async (auth, query) => {
       if (auth.userId === otherUserId) throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to list candidates right now');
       return { items: [candidate], page: query.page, pageSize: query.pageSize, total: 1 };
@@ -212,6 +217,48 @@ describe('candidate API authorization and CRUD', () => {
     const response = await fetch(`${origin}/api/candidates`, { headers: { Authorization: 'Bearer valid-owner-token' } });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ items: [], page: 1, pageSize: 20, total: 0 });
+  });
+
+  it('previews validated CSV rows only for an approved recruiter and derives scope from the auth context', async () => {
+    const response = await fetch(`${origin}/api/candidates/bulk-import/preview`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer valid-other-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: [{ rowNumber: 2, candidate: { name: 'New Candidate', email: 'new@example.com' } }] }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ rows: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null }] });
+    expect(repository.previewImport).toHaveBeenCalledWith(expect.objectContaining({ userId: otherUserId }), [{ rowNumber: 2, candidate: { name: 'New Candidate', email: 'new@example.com' } }]);
+
+    const pending = await fetch(`${origin}/api/candidates/bulk-import/preview`, {
+      method: 'POST', headers: { Authorization: 'Bearer pending-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: [{ rowNumber: 2, candidate: { name: 'Blocked' } }] }),
+    });
+    expect(pending.status).toBe(403);
+    expect(repository.previewImport).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires an idempotency key, rejects ownership fields, and returns structured per-row import results', async () => {
+    const body = { rows: [{ rowNumber: 2, candidate: { name: 'Taylor Example', email: 'taylor@example.com' } }], skipDuplicates: true };
+    const missingKey = await fetch(`${origin}/api/candidates/bulk-import`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    expect(missingKey.status).toBe(400);
+    expect(await missingKey.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_KEY_REQUIRED' } });
+
+    const withOwner = await fetch(`${origin}/api/candidates/bulk-import`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json', 'Idempotency-Key': '11111111-1111-4111-8111-111111111111' },
+      body: JSON.stringify({ rows: [{ rowNumber: 2, candidate: { name: 'Taylor Example', owner_id: otherUserId } }], skipDuplicates: true }),
+    });
+    expect(withOwner.status).toBe(400);
+    expect(repository.bulkImport).not.toHaveBeenCalled();
+
+    const response = await fetch(`${origin}/api/candidates/bulk-import`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json', 'Idempotency-Key': '11111111-1111-4111-8111-111111111111' },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ createdCount: 1, skippedCount: 0, failedCount: 0, results: [{ rowNumber: 2, status: 'created', candidateId }] });
+    expect(repository.bulkImport).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId }), body.rows, '11111111-1111-4111-8111-111111111111', true);
   });
 
   it('returns the owner candidate details from the authenticated details endpoint', async () => {

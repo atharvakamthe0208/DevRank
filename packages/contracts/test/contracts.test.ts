@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { candidateBulkImportRequestSchema, candidateBulkImportResponseSchema, candidateImportPreviewResponseSchema } from '../src/candidate-api.js';
 import {
   candidateInputSchema, categoryScoreSchema, confidenceSchema, evaluationResponseSchema,
   evidenceSchema, legacyEvaluationResponseV1Schema, previousEvaluationResponseV2Schema, roleWeightConfigurationSchema, roleWeightsSchema, scoreSchema, scoringCategories,
@@ -14,6 +15,22 @@ import {
 const roleWeights = JSON.parse(readFileSync(new URL('../../../config/role-weights.json', import.meta.url), 'utf8')) as unknown;
 const candidates = JSON.parse(readFileSync(new URL('../../../fixtures/dummy-candidates.json', import.meta.url), 'utf8')) as unknown[];
 const expected = JSON.parse(readFileSync(new URL('../../../fixtures/expected-evaluations.json', import.meta.url), 'utf8')) as Array<{ candidateId: string; targetRole: string; evaluationStatus: string; overallScore?: number; categoryScores: Record<string, number>; missingEvidence?: string[] }>;
+
+describe('candidate CSV import contracts', () => {
+  it('validates bounded rows and refuses duplicate source row numbers or ownership fields', () => {
+    const row = { rowNumber: 2, candidate: { name: 'Taylor', email: 'taylor@example.com', githubUsername: 'taylor-dev' } };
+    expect(candidateBulkImportRequestSchema.safeParse({ rows: [row], skipDuplicates: true }).success).toBe(true);
+    expect(candidateBulkImportRequestSchema.safeParse({ rows: [row, row], skipDuplicates: false }).success).toBe(false);
+    expect(candidateBulkImportRequestSchema.safeParse({ rows: [{ ...row, candidate: { ...row.candidate, owner_id: 'spoofed' } }], skipDuplicates: true }).success).toBe(false);
+    expect(candidateBulkImportRequestSchema.safeParse({ rows: Array.from({ length: 501 }, (_, index) => ({ ...row, rowNumber: index + 2 })), skipDuplicates: true }).success).toBe(false);
+  });
+
+  it('validates database preview and per-row results', () => {
+    expect(candidateImportPreviewResponseSchema.safeParse({ rows: [{ rowNumber: 2, status: 'duplicate', potentialDuplicate: true, candidateId: null }] }).success).toBe(true);
+    expect(candidateBulkImportResponseSchema.safeParse({ results: [{ rowNumber: 2, status: 'created', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c' }], createdCount: 1, skippedCount: 0, failedCount: 0 }).success).toBe(true);
+    expect(candidateBulkImportResponseSchema.safeParse({ results: [{ rowNumber: 2, status: 'failed' }], createdCount: 1, skippedCount: 0, failedCount: 0 }).success).toBe(false);
+  });
+});
 
 function responseFor(candidate: Record<string, any>, insufficient = false) {
   const parsedWeights = roleWeightConfigurationSchema.parse(roleWeights).roles[candidate.targetRole];
