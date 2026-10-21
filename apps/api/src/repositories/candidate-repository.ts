@@ -1,6 +1,7 @@
 import {
   candidateBulkImportResponseSchema,
   candidateImportPreviewResponseSchema,
+  candidateImportRpcPreviewResponseSchema,
   candidateSchema,
   type CandidateBulkImportResponse,
   type CandidateCreateInput,
@@ -199,9 +200,16 @@ export const candidateRepository: CandidateRepository = {
         p_preview: true,
       });
       if (error) return databaseError(error, 'preview candidate import', 'supabase_response');
-      const result = checkedImportResult(candidateImportPreviewResponseSchema, data, 'preview candidate import');
-      if (result.rows.length !== rows.length) throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Candidate import preview could not be processed');
-      return result;
+      const rpcResult = checkedImportResult(candidateImportRpcPreviewResponseSchema, data, 'preview candidate import');
+      const result = candidateImportPreviewResponseSchema.safeParse({ rows: rpcResult.results });
+      if (!result.success) {
+        console.error('Candidate import preview response mapping failed', {
+          issueCodes: result.error.issues.map((issue) => /^[a-z0-9_]{1,40}$/i.test(issue.code) ? issue.code : 'unknown'),
+        });
+        throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Candidate import preview could not be processed');
+      }
+      if (result.data.rows.length !== rows.length) throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Candidate import preview could not be processed');
+      return result.data;
     } catch (error) {
       if (error instanceof HttpError) throw error;
       return databaseError(error, 'preview candidate import', 'thrown_exception');

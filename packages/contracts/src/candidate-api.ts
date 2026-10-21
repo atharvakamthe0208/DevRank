@@ -67,6 +67,25 @@ export const candidateImportPreviewResponseSchema = z.object({
   }).strict()),
 }).strict();
 
+/** Raw JSONB envelope returned by public.candidate_bulk_import(..., p_preview => true).
+ * The API maps this database-specific `results` envelope to its public `rows` response.
+ */
+export const candidateImportRpcPreviewResponseSchema = z.object({
+  results: z.array(z.object({
+    rowNumber: z.number().int().positive(),
+    status: z.enum(['ready', 'duplicate']),
+    potentialDuplicate: z.boolean(),
+    candidateId: z.string().uuid().nullable(),
+  }).strict()),
+  createdCount: z.number().int().nonnegative(),
+  skippedCount: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
+}).strict().superRefine((value, context) => {
+  if (value.createdCount !== 0 || value.skippedCount !== 0 || value.failedCount !== 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['createdCount'], message: 'Preview calls must not create, skip, or fail candidate writes' });
+  }
+});
+
 export const candidateBulkImportRequestSchema = z.object({
   rows: z.array(candidateImportRowSchema).min(1).max(500),
   skipDuplicates: z.boolean(),
@@ -106,5 +125,6 @@ export type CandidateUpdateInput = z.infer<typeof candidateUpdateSchema>;
 export type CandidateListQuery = z.infer<typeof candidateListQuerySchema>;
 export type CandidateImportRows = z.infer<typeof candidateImportRowsSchema>;
 export type CandidateImportPreviewResponse = z.infer<typeof candidateImportPreviewResponseSchema>;
+export type CandidateImportRpcPreviewResponse = z.infer<typeof candidateImportRpcPreviewResponseSchema>;
 export type CandidateBulkImportRequest = z.infer<typeof candidateBulkImportRequestSchema>;
 export type CandidateBulkImportResponse = z.infer<typeof candidateBulkImportResponseSchema>;

@@ -5,6 +5,30 @@ export const CSV_IMPORT_MAX_ROWS = 500;
 export const CSV_IMPORT_MAX_FIELDS = 500;
 export const CSV_IMPORT_MAX_COLUMNS = 50;
 
+export function openCsvFilePicker(input: Pick<HTMLInputElement, 'click' | 'value'> | null) {
+  if (!input) return;
+  input.value = '';
+  input.click();
+}
+
+export function takeSelectedCsvFile(input: Pick<HTMLInputElement, 'files' | 'value'>): File | null {
+  const file = input.files?.[0] ?? null;
+  input.value = '';
+  return file;
+}
+
+export async function readCandidateCsvFile(file: Pick<File, 'name' | 'size' | 'arrayBuffer'>): Promise<ParsedCsv> {
+  if (!file.name.toLowerCase().endsWith('.csv')) throw new Error('Choose a .csv file.');
+  if (file.size > CSV_IMPORT_MAX_BYTES) throw new Error('CSV files must be 1 MB or smaller.');
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
+  } catch {
+    throw new Error('The file is not valid UTF-8 CSV. Save it as UTF-8 and upload it again.');
+  }
+  return parseCsvText(text);
+}
+
 export type CsvField = 'name' | 'email' | 'githubUsername' | 'leetcodeUsername';
 export type CsvMapping = Record<CsvField, number | null>;
 export type ParsedCsvRow = { rowNumber: number; values: string[]; parseError?: string };

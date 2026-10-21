@@ -31,3 +31,23 @@ After starting the API, verify health with `curl http://localhost:3000/api/healt
 Review and apply the four migrations in timestamp order: initial schema, candidate API fields, recruiter authorization/RLS, then admin approval functions. The new migrations preserve table data and existing policies while adding restrictive access gates. See [Recruiter authentication](authentication.md) for project settings and the one-time first-admin provisioning process. Do not apply migrations automatically from the API or local startup. The target live database was not inspected from this checkout.
 
 Lint is not configured in this repository; `npm run lint` currently performs no lint checks.
+
+## CSV candidate import
+
+On the Candidates page, choose **Import CSV**, upload a UTF-8 `.csv`, map the columns, correct the editable preview rows, check potential duplicates, and explicitly confirm the import. The first column row is treated as headers. Common aliases include `name`/`full name`/`candidate name`, `email`/`email address`, `github`/`github username`/`github profile URL`, and `leetcode`/`leetcode username`/`leetcode profile URL`. Name is required; email and GitHub/LeetCode fields are optional, matching individual candidate creation. Profile values may be usernames or recognized HTTPS profile URLs (`github.com/<username>` and `leetcode.com/u/<username>`). Unsupported URLs must be corrected manually.
+
+The importer accepts files up to 1 MiB, at most 500 candidate rows, 50 columns, and 500 characters per cell. It supports quoted cells, commas and escaped double quotes inside quoted cells, and Unicode. Unclosed quoted fields stop the import with an error; rows with inconsistent column counts or invalid fields remain visible and are not submitted until corrected. Duplicate headers are retained for manual column mapping. Original row values remain available in the preview.
+
+Potential duplicate matching is owner-scoped and case-insensitive on exact email, GitHub username, or LeetCode username. Candidate name is not a duplicate key, and these identifiers are not schema uniqueness constraints. The default policy skips potential matches; a recruiter can explicitly choose to create additional records, which never overwrites the match. Rows with no email or profile usernames cannot be matched heuristically. Existing candidate data and platform evidence are not modified. Candidate creation and provider synchronization are separate; use the existing profile actions to sync after import.
+
+`supabase/migrations/20261020211405_candidate_bulk_import_idempotency.sql` adds the owner-scoped, RLS-protected idempotency receipt table and transactional RPC. Receipts contain only a request digest and row outcomes/IDs, not the uploaded CSV or candidate fields. Import requests require an `Idempotency-Key` UUID; replaying the same key and payload returns the saved outcome, while reusing a key with different input is rejected. Successful, skipped, and failed row outcomes are stored in the same transaction as candidate creation. The migration is not applied automatically.
+
+Run the isolated database migration test with `npm run test:candidate-import:db`. It applies the real schema/auth/import SQL to a fresh in-memory PGlite database and covers owner isolation, potential matches, both duplicate policies, idempotent replay/key mismatch, client access to the receipt table, and a row-level database constraint failure. This does not contact Supabase or validate PostgREST/JWT behavior against a Supabase server. For end-to-end UI/API testing, start the disposable local stack and apply only to its local database with explicit local flags:
+
+```powershell
+.\node_modules\.bin\supabase start
+.\node_modules\.bin\supabase migration up --local
+.\node_modules\.bin\supabase status
+```
+
+Verify the status output identifies localhost endpoints before configuring the local API/web environment. Provision an approved test recruiter using the existing local-auth procedure, run `npm run dev`, and upload a small test CSV. Confirm that a repeated request with the same idempotency key returns the original result without creating extra candidates; verify a different payload gets a conflict, potential matches are skipped by default, and platform sync remains a separate action. Use `supabase stop` when finished. These commands are for the local stack only; never use `--linked`, `--db-url`, `supabase db push`, or a hosted project for this procedure.

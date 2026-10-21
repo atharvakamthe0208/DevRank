@@ -98,6 +98,8 @@ try {
     const result = await database.query(`select public.candidate_bulk_import($1::jsonb, null, true, true) as result`, [JSON.stringify(initialRows)]);
     return result.rows[0].result;
   });
+  assert.deepEqual(Object.keys(preview).sort(), ['createdCount', 'failedCount', 'results', 'skippedCount'], 'preview RPC uses the same result envelope as the import RPC');
+  assert.deepEqual(Object.keys(preview.results[0]).sort(), ['candidateId', 'potentialDuplicate', 'rowNumber', 'status'], 'preview rows contain only the documented preview fields');
   assert.deepEqual(preview.results.map((row) => row.status), ['duplicate', 'ready', 'duplicate']);
   assert.equal(preview.createdCount, 0);
   assert.equal(preview.skippedCount, 0);
