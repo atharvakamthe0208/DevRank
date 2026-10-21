@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   candidateBulkImportResponseSchema,
+  githubSyncResponseSchema,
+  leetCodeSyncResponseSchema,
   type CandidateBulkImportResponse,
   type CandidateImportPreviewResponse,
 } from '@devrank/contracts';
@@ -20,6 +22,8 @@ import {
   type CsvMapping,
   type ParsedCsv,
 } from './candidate-csv-import';
+import { getImportSyncCandidates, getImportSyncRetryCandidates, runImportPlatformSync, type ImportSyncPlatform } from './candidate-csv-import-sync';
+import { CandidateImportPlatformSyncActions, type PlatformSyncState } from './CandidateImportPlatformSyncActions';
 
 const fields: Array<{ key: CsvField; label: string; required?: boolean }> = [
   { key: 'name', label: 'Candidate name', required: true },
@@ -28,10 +32,13 @@ const fields: Array<{ key: CsvField; label: string; required?: boolean }> = [
   { key: 'leetcodeUsername', label: 'LeetCode username or profile URL' },
 ];
 
+const emptyPlatformSyncState = (): PlatformSyncState => ({ running: false, completed: 0, total: 0, outcomes: [] });
+
 export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, onImported }: { initialFile: File | null; onChooseFile: () => void; onClose: () => void; onImported: () => void }) {
   const { session } = useAuth();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const importAttemptRef = useRef<Awaited<ReturnType<typeof getCandidateImportAttempt>> | null>(null);
+  const platformSyncInFlight = useRef<Record<ImportSyncPlatform, boolean>>({ github: false, leetcode: false });
   const [parsed, setParsed] = useState<ParsedCsv | null>(null);
   const [mapping, setMapping] = useState<CsvMapping>({ name: null, email: null, githubUsername: null, leetcodeUsername: null });
   const [edits, setEdits] = useState<Record<number, Partial<Record<CsvField, string>>>>({});
@@ -43,6 +50,7 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
   const [readingFile, setReadingFile] = useState(false);
   const [error, setError] = useState('');
   const [sessionError, setSessionError] = useState('');
+  const [platformSync, setPlatformSync] = useState<Record<ImportSyncPlatform, PlatformSyncState>>({ github: emptyPlatformSyncState(), leetcode: emptyPlatformSyncState() });
   const rows = useMemo(() => parsed ? mapCsvRows(parsed.rows, mapping, edits) : [], [parsed, mapping, edits]);
   const importableRows = rows.filter((row) => row.candidate && !row.errors.length);
   const previewByRow = new Map(preview?.rows.map((row) => [row.rowNumber, row]) ?? []);
@@ -80,6 +88,8 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
 
   async function chooseFile(file: File) {
     clearReview();
+    platformSyncInFlight.current = { github: false, leetcode: false };
+    setPlatformSync({ github: emptyPlatformSyncState(), leetcode: emptyPlatformSyncState() });
     setParsed(null);
     setEdits({});
     setError('');
@@ -150,28 +160,64 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
     } finally { setBusy(false); }
   }
 
+  async function syncPlatform(platform: ImportSyncPlatform) {
+    if (!result || platformSyncInFlight.current[platform]) return;
+    const eligible = getImportSyncCandidates(result, rows, platform);
+    const state = platformSync[platform];
+    const candidates = getImportSyncRetryCandidates(eligible.candidates, state.outcomes);
+    if (!candidates.length) return;
+    if (!session?.access_token) {
+      setPlatformSync((current) => ({ ...current, [platform]: { ...current[platform], error: 'Your secure session expired. Sign in again before syncing.' } }));
+      return;
+    }
+
+    platformSyncInFlight.current[platform] = true;
+    setPlatformSync((current) => ({ ...current, [platform]: { ...current[platform], running: true, completed: 0, total: candidates.length, error: undefined } }));
+    try {
+      const outcomes = await runImportPlatformSync(candidates, async (candidate) => {
+        const path = platform === 'github'
+          ? `/candidates/${candidate.candidateId}/platform-data/github-sync`
+          : `/candidates/${candidate.candidateId}/platform-data/leetcode-sync`;
+        const response = await apiRequest<unknown>(path, { method: 'POST', body: JSON.stringify({ profile: candidate.profile }) }, session.access_token);
+        if (platform === 'github') githubSyncResponseSchema.parse(response);
+        else leetCodeSyncResponseSchema.parse(response);
+      }, (completed, total) => {
+        setPlatformSync((current) => ({ ...current, [platform]: { ...current[platform], completed, total } }));
+      });
+      setPlatformSync((current) => ({
+        ...current,
+        [platform]: { ...current[platform], running: false, completed: candidates.length, total: candidates.length, outcomes: [...current[platform].outcomes.filter((item) => !outcomes.some((next) => next.rowNumber === item.rowNumber)), ...outcomes] },
+      }));
+    } finally {
+      platformSyncInFlight.current[platform] = false;
+      setPlatformSync((current) => ({ ...current, [platform]: { ...current[platform], running: false } }));
+    }
+  }
+
   function close() {
+    if (Object.values(platformSyncInFlight.current).some(Boolean)) return;
     dialogRef.current?.close();
     onClose();
   }
 
+  const anyPlatformSyncRunning = Object.values(platformSync).some((state) => state.running);
   return <dialog className="candidate-import-dialog" ref={dialogRef} aria-labelledby="candidate-import-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <header className="candidate-import-heading"><div><h2 id="candidate-import-title">Import candidates from CSV</h2><p>UTF-8 CSV · up to 1 MB and {CSV_IMPORT_MAX_ROWS} candidate rows. Imports create candidate records only.</p></div><button type="button" className="candidate-import-close" aria-label="Close CSV import" onClick={close}>×</button></header>
+    <header className="candidate-import-heading"><div><h2 id="candidate-import-title">Import candidates from CSV</h2><p>UTF-8 CSV · up to 1 MB and {CSV_IMPORT_MAX_ROWS} candidate rows. Imports create candidate records only.</p></div><button type="button" className="candidate-import-close" aria-label="Close CSV import" onClick={close} disabled={anyPlatformSyncRunning}>×</button></header>
     <section className="candidate-import-file">
       <span className="candidate-import-file-label">CSV file</span>
-      <button type="button" className="secondary-button" onClick={onChooseFile} disabled={busy}>{initialFile ? 'Choose another CSV' : 'Choose CSV file'}</button>
+      <button type="button" className="secondary-button" onClick={onChooseFile} disabled={busy || anyPlatformSyncRunning}>{initialFile ? 'Choose another CSV' : 'Choose CSV file'}</button>
       {initialFile && <p role="status">Selected file: {initialFile.name}</p>}
       {readingFile && <p role="status">Reading CSV file…</p>}
       {parsed && <p>{parsed.rows.length} data rows detected. Name is required; email and developer profile fields follow the existing optional candidate fields.</p>}
     </section>
-    {parsed && parsed.headers.length > 0 && <section className="candidate-import-mapping" aria-labelledby="candidate-import-mapping-title"><h3 id="candidate-import-mapping-title">Map CSV columns</h3><div className="candidate-import-mapping-grid">{fields.map((field) => <label key={field.key} htmlFor={`candidate-import-map-${field.key}`}>{field.label}{field.required ? ' *' : ''}<select id={`candidate-import-map-${field.key}`} value={mapping[field.key] ?? ''} onChange={(event) => { const value = event.currentTarget.value; setMapping((current) => ({ ...current, [field.key]: value === '' ? null : Number(value) })); clearReview(); }} disabled={busy}><option value="">{field.required ? 'Choose a column' : 'Not mapped'}</option>{parsed.headers.map((header, index) => <option key={`${header}-${index}`} value={index}>{csvHeaderLabel(header, index, parsed.headers)}</option>)}</select></label>)}</div></section>}
+    {parsed && parsed.headers.length > 0 && <section className="candidate-import-mapping" aria-labelledby="candidate-import-mapping-title"><h3 id="candidate-import-mapping-title">Map CSV columns</h3><div className="candidate-import-mapping-grid">{fields.map((field) => <label key={field.key} htmlFor={`candidate-import-map-${field.key}`}>{field.label}{field.required ? ' *' : ''}<select id={`candidate-import-map-${field.key}`} value={mapping[field.key] ?? ''} onChange={(event) => { const value = event.currentTarget.value; setMapping((current) => ({ ...current, [field.key]: value === '' ? null : Number(value) })); clearReview(); }} disabled={busy || !!result}><option value="">{field.required ? 'Choose a column' : 'Not mapped'}</option>{parsed.headers.map((header, index) => <option key={`${header}-${index}`} value={index}>{csvHeaderLabel(header, index, parsed.headers)}</option>)}</select></label>)}</div></section>}
     {error && <p className="candidate-import-error" role="alert">{error}</p>}
     {sessionError && <p className="candidate-import-error" role="alert">{sessionError}</p>}
     {result && completedCounts && <section className="candidate-import-results" aria-live="polite"><h3>Import results</h3><p>{completedCounts.created} created · {completedCounts.skipped} skipped · {completedCounts.failed} failed</p><ul>{allResults.map((item) => {
       const sourceRow = rows.find((row) => row.rowNumber === item.rowNumber);
       const title = sourceRow?.candidate?.name ?? `CSV row ${item.rowNumber}`;
-      return <li key={`${item.rowNumber}-${item.status}`}><span>Row {item.rowNumber}: {title} — {item.status === 'created' ? 'created' : item.reason === 'potential_duplicate' ? 'skipped as a potential match' : item.status === 'failed' ? 'could not be created' : 'skipped'}</span>{item.status === 'created' && item.candidateId && <Link to={`/candidates/${item.candidateId}`} onClick={close}>Open profile to sync GitHub or LeetCode separately</Link>}</li>;
-    })}</ul><p>Platform synchronization remains a separate action on each candidate profile; a provider outage cannot undo candidate creation.</p></section>}
+      return <li key={`${item.rowNumber}-${item.status}`}><span>Row {item.rowNumber}: {title} — {item.status === 'created' ? 'created' : item.reason === 'potential_duplicate' ? 'skipped as a potential match' : item.status === 'failed' ? 'could not be created' : 'skipped'}</span>{item.status === 'created' && item.candidateId && <Link to={`/candidates/${item.candidateId}`} aria-disabled={anyPlatformSyncRunning} onClick={(event) => { if (Object.values(platformSyncInFlight.current).some(Boolean)) { event.preventDefault(); return; } close(); }}>Open profile</Link>}</li>;
+    })}</ul><CandidateImportPlatformSyncActions result={result} rows={rows} stateByPlatform={platformSync} onSync={(platform) => void syncPlatform(platform)}/></section>}
     {preview && !result && <section className="candidate-import-policy" aria-label="Duplicate handling"><p>Potential matches use exact, case-insensitive email, GitHub username, or LeetCode username matches within your workspace. Candidate names are not treated as unique, and existing records are never overwritten.</p><label><input type="checkbox" checked={skipDuplicates} onChange={(event) => { setSkipDuplicates(event.currentTarget.checked); setConfirming(false); setError(''); }} disabled={busy}/> Skip potential matches (recommended). Uncheck to explicitly import them.</label><p>{preview.rows.filter((row) => row.status === 'ready').length} rows have no potential match; {preview.rows.filter((row) => row.status === 'duplicate').length} potential matches.</p><button type="button" className="primary-button" disabled={busy || !importableRows.length} onClick={() => setConfirming(true)}>Continue to confirmation</button></section>}
     {confirming && preview && !result && <section className="candidate-import-confirm" aria-labelledby="candidate-import-confirm-title"><h3 id="candidate-import-confirm-title">Confirm candidate import</h3><p>{importableRows.length} valid rows will be submitted. {skipDuplicates ? 'Potential matches will be skipped.' : 'Potential matches will also be created as new records.'} Rows with validation errors will not be sent.</p><div><button type="button" className="secondary-button" disabled={busy} onClick={() => setConfirming(false)}>Cancel</button><button type="button" className="primary-button" disabled={busy} onClick={() => void confirmImport()}>{busy ? 'Importing…' : error ? 'Retry import' : 'Confirm and import'}</button></div></section>}
     {parsed?.rows.length ? <section className="candidate-import-preview" aria-labelledby="candidate-import-preview-title"><div className="candidate-import-preview-heading"><div><h3 id="candidate-import-preview-title">Review rows</h3><p>{importableRows.length} valid · {rows.length - importableRows.length} need correction{preview ? ' · duplicate check complete' : ''}</p></div><button type="button" className="secondary-button" disabled={busy || mapping.name === null} onClick={() => void reviewRows()}>{busy && !confirming ? 'Checking…' : preview ? 'Check duplicates again' : 'Check duplicates'}</button></div>
@@ -180,12 +226,12 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
         const status = row.errors.length ? 'Needs correction' : checked?.status === 'duplicate' ? 'Potential match' : checked ? 'Ready' : row.duplicateInFile ? 'Possible CSV duplicate' : 'Not checked';
         return <tr key={row.rowNumber}>
           <td>{row.rowNumber}</td>
-          {fields.map((field) => <td key={field.key}><input aria-label={`Row ${row.rowNumber} ${field.label}`} value={row.candidate?.[field.key] ?? (edits[row.rowNumber]?.[field.key] ?? (mapping[field.key] === null ? '' : row.original[mapping[field.key]!] ?? ''))} onChange={(event) => changeField(row.rowNumber, field.key, event.currentTarget.value)} disabled={busy} maxLength={field.key === 'name' ? 120 : field.key === 'email' ? 254 : 500}/></td>)}
+          {fields.map((field) => <td key={field.key}><input aria-label={`Row ${row.rowNumber} ${field.label}`} value={row.candidate?.[field.key] ?? (edits[row.rowNumber]?.[field.key] ?? (mapping[field.key] === null ? '' : row.original[mapping[field.key]!] ?? ''))} onChange={(event) => changeField(row.rowNumber, field.key, event.currentTarget.value)} disabled={busy || !!result} maxLength={field.key === 'name' ? 120 : field.key === 'email' ? 254 : 500}/></td>)}
           <td className={row.errors.length ? 'candidate-import-invalid' : checked?.potentialDuplicate || row.duplicateInFile ? 'candidate-import-duplicate' : ''}>{status}{row.errors.length > 0 && <ul>{row.errors.map((message) => <li key={message}>{message}</li>)}</ul>}{checked?.potentialDuplicate && <small>Existing candidate ID: {checked.candidateId ?? 'another row in this CSV'}</small>}</td>
           <td><details><summary>Original</summary><dl>{parsed!.headers.map((header, index) => <div key={`${header}-${index}`}><dt>{csvHeaderLabel(header, index, parsed!.headers)}</dt><dd>{row.original[index] || '—'}</dd></div>)}</dl>{row.errors.some((message) => message.includes('columns') || message.includes('quoted') || message.includes('character after')) && <p>This row has CSV structure errors. Correct the source file and upload it again.</p>}</details></td>
         </tr>;
       })}</tbody></table></div>
     </section> : null}
-    <footer className="candidate-import-footer"><span>Invalid rows are not discarded silently. Correct their fields or upload a corrected CSV.</span><button type="button" className="secondary-button" onClick={close}>Close</button></footer>
+    <footer className="candidate-import-footer"><span>Invalid rows are not discarded silently. Correct their fields or upload a corrected CSV.</span><button type="button" className="secondary-button" onClick={close} disabled={anyPlatformSyncRunning}>Close</button></footer>
   </dialog>;
 }
