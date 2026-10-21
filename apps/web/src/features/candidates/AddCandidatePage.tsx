@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase/client';
 import { validateCandidateForm, type CandidateFormValues } from './candidate-form-validation';
 import { parseCandidateApiResponse } from './candidate-response-validation';
+import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 
 const emptyValues: CandidateFormValues = { name: '', email: '', githubUsername: '', leetcodeUsername: '' };
 
@@ -60,7 +61,7 @@ export function AddCandidatePage() {
     } finally { setBusy(false); }
   }
 
-  function field(id: keyof CandidateFormValues, label: string, type = 'text', required = false, hint?: string) {
+  function field(id: keyof CandidateFormValues, label: ReactNode, type = 'text', required = false, hint?: string) {
     return <label className="candidate-form-field" htmlFor={id}><span>{label}{required && <b aria-hidden="true"> *</b>}</span><input id={id} name={id} type={type} value={values[id]} onChange={(event) => update(id, event.target.value)} required={required} maxLength={id === 'name' ? 120 : id === 'email' ? 254 : 100} autoComplete={id === 'email' ? 'email' : 'off'} aria-invalid={Boolean(errors[id])} aria-describedby={errors[id] ? `${id}-error` : undefined} placeholder={hint}/>{errors[id] && <small id={`${id}-error`} className="auth-field-error" role="alert">{errors[id]}</small>}</label>;
   }
 
@@ -68,8 +69,8 @@ export function AddCandidatePage() {
       {field('name', 'Full name', 'text', true, 'Candidate name')}
       {field('email', 'Email address', 'email', false, 'name@example.com')}
       <div className="candidate-form-divider"><span>Developer profiles</span><small>Optional · enter usernames, not profile URLs</small></div>
-      {field('githubUsername', 'GitHub username', 'text', false, 'e.g. octocat')}
-      {field('leetcodeUsername', 'LeetCode username', 'text', false, 'e.g. leetcode_user')}
+      {field('githubUsername', <span className="platform-field-label"><PlatformLogo platform="github"/>GitHub username</span>, 'text', false, 'e.g. octocat')}
+      {field('leetcodeUsername', <span className="platform-field-label"><PlatformLogo platform="leetcode"/>LeetCode username</span>, 'text', false, 'e.g. leetcode_user')}
       {message && <p className="form-feedback form-feedback-error candidate-form-message" role="alert">{message}</p>}
       <div className="candidate-form-actions"><Link className="secondary-button" to="/dashboard/candidates">Cancel</Link><button className="primary-button" type="submit" disabled={busy}>{busy ? 'Adding candidate…' : 'Add candidate'} <span>→</span></button></div>
     </form></section></div>;

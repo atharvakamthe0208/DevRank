@@ -3,9 +3,12 @@ import { Link } from 'react-router-dom';
 import { dashboardResponseSchema, persistedEvaluationReadSchema, type DashboardResponse } from '@devrank/contracts';
 import { apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
+import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
 import { useCandidates } from '../candidates/useCandidates';
+import { PlatformLogo } from '../../components/platforms/PlatformLogo';
+import { KpiCard } from '../../components/metrics/KpiCards';
 import { ActiveDashboardReports } from '../insights/ProposedDashboardReports';
-import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel } from './dashboard-presentation';
+import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
 
 export function DashboardPage() {
   const { profile, session } = useAuth();
@@ -76,12 +79,26 @@ export function DashboardPage() {
   const error = dashboardError;
   const firstName = profile?.display_name?.split(/\s+/)[0];
   const displayDate = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
+  const recentScoreSummary = recentScoredEvaluationAverage(dashboard?.recentEvaluations ?? []);
+  const recentAverageProgress = recentScoreSummary.average;
+  const recentAverageProgressBar: { value: number; max: number; label: string } | undefined = typeof recentAverageProgress === 'number'
+    ? { value: recentAverageProgress, max: 100, label: 'Recent scored evaluation average out of 100' }
+    : undefined;
+  const recentScoreTrend = dashboard?.recentEvaluations.flatMap((item) => item.score === undefined ? [] : [item.score]) ?? [];
 
   return <div className="dashboard-page">
+    <DelayedAuthLoadingScreen loading={dashboardLoading || candidatesLoading} message="Loading your workspace…"/>
     <section className="dashboard-hero">
       <div><div className="eyebrow"><span className="eyebrow-line" />{displayDate.toUpperCase()}</div><h1>{firstName ? `Welcome, ${firstName}` : 'Recruiter overview'}</h1><p className="page-subtitle">A clear view of your candidates and evaluation workload.</p></div>
       <Link className="primary-button link-button" to="/candidates/new"><span aria-hidden="true">＋</span> Add candidate</Link>
     </section>
+
+    {!loading && dashboard && !error && <section className="workspace-kpi-grid" aria-label="Workspace metrics">
+      <KpiCard icon="♙" label="Total candidates" value={dashboard.candidateCount} detail="Recruiter workspace"/>
+      <KpiCard icon="▤" label="Evaluations" value={dashboard.evaluationCount} detail="All saved evaluation runs"/>
+      <KpiCard icon="✓" label="Completed" value={dashboard.statusCounts.completed ?? 0} detail="Completed evaluation runs" progress={dashboard.evaluationCount > 0 ? { value: dashboard.statusCounts.completed ?? 0, max: dashboard.evaluationCount, label: 'Completed evaluations out of all saved evaluations' } : undefined}/>
+      <KpiCard icon="◉" label="Recent average" value={recentAverageProgress} decimals={1} suffix=" / 100" detail={recentScoreSummary.count ? `Across ${recentScoreSummary.count} scored recent evaluations` : 'No scored evaluations yet'} progress={recentAverageProgressBar} trend={recentScoreTrend}/>
+    </section>}
 
     <section className="dashboard-panel" aria-labelledby="recent-evaluations-heading">
       <div className="dashboard-section-heading"><div><span className="dashboard-kicker">WORKSPACE ACTIVITY</span><h2 id="recent-evaluations-heading">Recent evaluations</h2></div><Link className="dashboard-text-link" to="/evaluations">Run evaluation <span aria-hidden="true">→</span></Link></div>
@@ -100,14 +117,17 @@ export function DashboardPage() {
     <section className="dashboard-panel" aria-labelledby="recent-candidates-heading">
       <div className="dashboard-section-heading"><div><span className="dashboard-kicker">CANDIDATE WORKSPACE</span><h2 id="recent-candidates-heading">Recently added candidates</h2></div><Link className="dashboard-text-link" to="/dashboard/candidates">Manage candidates <span aria-hidden="true">→</span></Link></div>
       {candidatesLoading ? <p className="dashboard-state" role="status">Loading candidates…</p> : candidatesError ? <div className="dashboard-state" role="alert"><p>{candidatesError}</p><button className="dashboard-secondary-button" type="button" onClick={reload}>Try again</button></div> : items.length ? <div className="dashboard-candidate-list">{items.map((candidate) => {
-        const linked = [candidate.githubUsername && 'GitHub', candidate.leetcodeUsername && 'LeetCode'].filter((value): value is string => Boolean(value));
-        return <Link className="dashboard-candidate-row" to={`/candidates/${candidate.id}`} key={candidate.id}><span className="dashboard-avatar" aria-hidden="true">{candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span className="dashboard-candidate-name"><strong>{candidate.name}</strong></span><span className="dashboard-platforms">{linked.length ? linked.map((name) => <span key={name}>{name}</span>) : <small>No profiles linked</small>}</span><span aria-hidden="true" className="dashboard-row-arrow">↗</span></Link>;
+        const linked = [
+          candidate.githubUsername ? { platform: 'github' as const, name: 'GitHub' } : null,
+          candidate.leetcodeUsername ? { platform: 'leetcode' as const, name: 'LeetCode' } : null,
+        ].filter((platform): platform is NonNullable<typeof platform> => Boolean(platform));
+        return <Link className="dashboard-candidate-row" to={`/candidates/${candidate.id}`} key={candidate.id}><span className="dashboard-avatar" aria-hidden="true">{candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span className="dashboard-candidate-name"><strong>{candidate.name}</strong></span><span className="dashboard-platforms">{linked.length ? linked.map(({ platform, name }) => <span className="platform-badge" key={name}><PlatformLogo platform={platform}/>{name}</span>) : <small>No profiles linked</small>}</span><span aria-hidden="true" className="dashboard-row-arrow">↗</span></Link>;
       })}</div> : <div className="dashboard-state"><h3>No candidates yet</h3><p>Add your first candidate profile to begin.</p><Link className="dashboard-secondary-button" to="/candidates/new">Add candidate</Link></div>}
     </section>
 
     <section className="dashboard-panel dashboard-proposal-panel" aria-labelledby="proposal-indexes-title">
       <details>
-        <summary><span><span className="dashboard-kicker">DRAFT EVIDENCE · SEPARATE FROM SCORING</span><strong id="proposal-indexes-title">GitHub + LeetCode evidence indexes</strong><small>Draft indexes only · not active evaluation scores or rankings</small></span><span className="dashboard-disclosure" aria-hidden="true">＋</span></summary>
+        <summary><span><span className="dashboard-kicker">DRAFT EVIDENCE · SEPARATE FROM SCORING</span><strong id="proposal-indexes-title" className="dashboard-platform-title"><span className="platform-heading"><PlatformLogo platform="github"/>GitHub</span><span>+</span><span className="platform-heading"><PlatformLogo platform="leetcode"/>LeetCode</span><span>evidence indexes</span></strong><small>Draft indexes only · not active evaluation scores or rankings</small></span><span className="dashboard-disclosure" aria-hidden="true">＋</span></summary>
         {loading ? <p className="dashboard-state" role="status">Loading saved proposal indexes…</p> : error ? <div className="dashboard-state" role="alert"><p>Proposal indexes could not be loaded.</p><button className="dashboard-secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : dashboard && <ActiveDashboardReports evaluations={dashboard.recentEvaluations.slice(0, 3)}/>}
       </details>
     </section>

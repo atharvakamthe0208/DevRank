@@ -1,3 +1,5 @@
+import { PlatformLogo } from '../../components/platforms/PlatformLogo';
+
 const features = [
   {
     label: 'Role-specific evaluation',
@@ -47,8 +49,8 @@ function ReportPreview({ kind }: { kind: (typeof features)[number]['kind'] }) {
     </div>}
     {kind === 'profiles' && <div className="signup-preview-body signup-preview-profiles-body">
       <div className="signup-preview-profile"><span>AM</span><div><i/><i/></div><small>DEVELOPER</small></div>
-      <div className="signup-preview-profile-row"><b>GH</b><span><strong>GitHub</strong><small>Public profile</small></span><i/></div>
-      <div className="signup-preview-profile-row"><b>LC</b><span><strong>LeetCode</strong><small>Candidate-provided context</small></span><i/></div>
+      <div className="signup-preview-profile-row"><PlatformLogo platform="github" size="regular"/><span><strong>GitHub</strong><small>Public profile</small></span><i/></div>
+      <div className="signup-preview-profile-row"><PlatformLogo platform="leetcode" size="regular"/><span><strong>LeetCode</strong><small>Candidate-provided context</small></span><i/></div>
       <div className="signup-preview-profile-row"><b>CP</b><span><strong>Coding platform</strong><small>Candidate-provided context</small></span><i/></div>
     </div>}
     {kind === 'ranking' && <div className="signup-preview-body signup-preview-ranking-body">

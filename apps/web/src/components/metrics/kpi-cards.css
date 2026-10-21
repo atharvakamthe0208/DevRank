@@ -1,0 +1,42 @@
+.workspace-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
+}
+.workspace-kpi-card {
+  position: relative;
+  min-width: 0;
+  padding: 15px 17px 14px;
+  border: 1px solid #e1e7f2;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 4px 14px #23375b08;
+  transition: transform 190ms ease, border-color 190ms ease, box-shadow 190ms ease;
+}
+.workspace-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: #cbd5ee;
+  box-shadow: 0 9px 20px #23375b12;
+}
+.workspace-kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #71809b; font-size: 11px; font-weight: 600; }
+.workspace-kpi-icon { width: 29px; height: 29px; display: grid; place-items: center; flex: none; border-radius: 9px; background: #eef1ff; color: #485de2; font-size: 14px; }
+.workspace-kpi-value { display: block; margin-top: 11px; color: #14213d; font: 650 25px/1.1 Manrope, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.animated-metric { font-variant-numeric: tabular-nums; }
+.workspace-kpi-card > small { display: block; min-height: 15px; margin-top: 6px; color: #8793a8; font-size: 10px; line-height: 1.45; }
+.workspace-kpi-visuals { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+.workspace-kpi-progress { flex: 1; height: 5px; min-width: 0; overflow: hidden; border-radius: 99px; background: #edf0f7; }
+.workspace-kpi-progress > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4058e8, #7895f4); transform: scaleX(0); transform-origin: left center; animation: score-progress-enter 850ms cubic-bezier(.22,.7,.2,1) forwards; }
+.workspace-kpi-trend { display: block; flex: none; width: 52px; height: 20px; overflow: visible; opacity: .75; }
+.workspace-kpi-trend polyline { fill: none; stroke: #6579e9; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.evaluation-score-progress { transform: scaleX(0); transform-origin: left center; animation: score-progress-enter 850ms cubic-bezier(.22,.7,.2,1) forwards; }
+.overall-meter > span { transform: scaleX(0); transform-origin: left center; animation: score-progress-enter 850ms cubic-bezier(.22,.7,.2,1) forwards; }
+.report-score-track { height: 7px; margin: 10px 0 12px; overflow: hidden; border-radius: 99px; background: #edf0f7; }
+.report-score-track > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4058e8, #6388f2); transform: scaleX(0); transform-origin: left center; animation: score-progress-enter 850ms cubic-bezier(.22,.7,.2,1) forwards; }
+@keyframes score-progress-enter { to { transform: scaleX(1); } }
+@media (max-width: 960px) { .workspace-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .workspace-kpi-grid { gap: 8px; } .workspace-kpi-card { padding: 12px; border-radius: 11px; } .workspace-kpi-top { font-size: 10px; } .workspace-kpi-icon { width: 26px; height: 26px; } .workspace-kpi-value { margin-top: 8px; font-size: 22px; } .workspace-kpi-card > small { font-size: 9px; } }
+@media (prefers-reduced-motion: reduce) {
+  .workspace-kpi-card { transition: none; }
+  .workspace-kpi-card:hover { transform: none; box-shadow: 0 4px 14px #23375b08; }
+  .evaluation-score-progress, .overall-meter > span, .report-score-track > span, .workspace-kpi-progress > span { animation: none; transform: none; }
+}
