@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { candidateBulkImportRequestSchema, candidateBulkImportResponseSchema, candidateImportPreviewResponseSchema } from '../src/candidate-api.js';
+import { candidateBulkImportRequestSchema, candidateBulkImportResponseSchema, candidateImportPreviewResponseSchema, candidateImportRpcPreviewResponseSchema } from '../src/candidate-api.js';
 import {
   candidateInputSchema, categoryScoreSchema, confidenceSchema, evaluationResponseSchema,
   evidenceSchema, legacyEvaluationResponseV1Schema, previousEvaluationResponseV2Schema, roleWeightConfigurationSchema, roleWeightsSchema, scoreSchema, scoringCategories,
@@ -27,6 +27,24 @@ describe('candidate CSV import contracts', () => {
 
   it('validates database preview and per-row results', () => {
     expect(candidateImportPreviewResponseSchema.safeParse({ rows: [{ rowNumber: 2, status: 'duplicate', potentialDuplicate: true, candidateId: null }] }).success).toBe(true);
+    expect(candidateImportRpcPreviewResponseSchema.safeParse({
+      results: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null }],
+      createdCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+    }).success).toBe(true);
+    expect(candidateImportRpcPreviewResponseSchema.safeParse({
+      results: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null, email: 'unexpected@example.invalid' }],
+      createdCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+    }).success).toBe(false);
+    expect(candidateImportRpcPreviewResponseSchema.safeParse({
+      results: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null }],
+      createdCount: 1,
+      skippedCount: 0,
+      failedCount: 0,
+    }).success).toBe(false);
     expect(candidateBulkImportResponseSchema.safeParse({ results: [{ rowNumber: 2, status: 'created', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c' }], createdCount: 1, skippedCount: 0, failedCount: 0 }).success).toBe(true);
     expect(candidateBulkImportResponseSchema.safeParse({ results: [{ rowNumber: 2, status: 'failed' }], createdCount: 1, skippedCount: 0, failedCount: 0 }).success).toBe(false);
   });

@@ -49,6 +49,7 @@
 .candidate-management-primary-actions > button { min-height: 39px; padding: 0 15px; border: 1px solid #e8e9e4; border-radius: 5px; color: #477457; background: #fff; font-size: 10px; font-weight: 600; cursor: pointer; }
 .candidate-management-primary-actions > button:hover { background: #f7faf7; }
 .candidate-management-primary-actions :is(button, a):focus-visible { outline: 3px solid #8db69a; outline-offset: 3px; }
+.candidate-import-file-picker { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; }
 
 .candidate-import-dialog { width: min(1120px, calc(100vw - 28px)); max-width: none; max-height: min(92vh, 940px); overflow: auto; border: 1px solid #e8e9e4; border-radius: 10px; padding: 22px; color: #34362f; background: #fff; box-shadow: 0 18px 55px #2527202b; }
 .candidate-import-dialog::backdrop { background: #25272070; }
@@ -60,7 +61,7 @@
 .candidate-import-close:focus-visible,.candidate-import-dialog :is(button,select,input,summary,a):focus-visible { outline: 3px solid #8db69a; outline-offset: 2px; }
 .candidate-import-file,.candidate-import-mapping,.candidate-import-preview,.candidate-import-policy,.candidate-import-confirm,.candidate-import-results { margin-top: 16px; }
 .candidate-import-file { display: grid; gap: 7px; }
-.candidate-import-file label,.candidate-import-mapping label { color: #55574f; font-size: 11px; font-weight: 600; }
+.candidate-import-file-label,.candidate-import-mapping label { color: #55574f; font-size: 11px; font-weight: 600; }
 .candidate-import-file input { min-height: 39px; max-width: 100%; padding: 7px; border: 1px solid #e8e9e4; border-radius: 5px; font-size: 11px; }
 .candidate-import-file p { margin: 0; }
 .candidate-import-mapping h3,.candidate-import-preview h3,.candidate-import-confirm h3,.candidate-import-results h3 { margin: 0; font: 600 14px Manrope, sans-serif; }

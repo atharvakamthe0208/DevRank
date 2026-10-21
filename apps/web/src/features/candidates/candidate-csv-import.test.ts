@@ -1,5 +1,58 @@
 import { describe, expect, it } from 'vitest';
-import { csvHeaderLabel, createCsvMapping, getCandidateImportAttempt, mapCsvRows, parseCsvText } from './candidate-csv-import';
+import { csvHeaderLabel, createCsvMapping, getCandidateImportAttempt, mapCsvRows, openCsvFilePicker, parseCsvText, readCandidateCsvFile, takeSelectedCsvFile } from './candidate-csv-import';
+
+function csvFile(name: string, value: string): File {
+  const blob = new Blob([value]);
+  return { name, size: blob.size, arrayBuffer: () => blob.arrayBuffer() } as File;
+}
+
+describe('CSV file picker handoff', () => {
+  it('clears the native input and opens the picker synchronously', () => {
+    const clickValues: string[] = [];
+    const input = { value: 'C:\\fakepath\\people.csv', click: () => clickValues.push(input.value) };
+
+    openCsvFilePicker(input);
+
+    expect(clickValues).toEqual(['']);
+    expect(input.value).toBe('');
+    expect(openCsvFilePicker(null)).toBeUndefined();
+  });
+
+  it('hands the selected file to the import flow and resets the input for repeat selection', () => {
+    const file = { name: 'people.csv' } as File;
+    const input = { files: [file] as unknown as FileList, value: 'C:\\fakepath\\people.csv' };
+
+    expect(takeSelectedCsvFile(input)).toBe(file);
+    expect(input.value).toBe('');
+    expect(takeSelectedCsvFile({ files: null, value: '' })).toBeNull();
+  });
+
+  it('reads and maps all rows from a selected CSV, including when the same file is selected again', async () => {
+    const file = csvFile('devrank_dummy_candidates.csv', [
+      'Candidate Name,Email,GitHub,LeetCode',
+      'Ari Stone,ari@example.com,aristone,ari-lc',
+      'Bea Cruz,bea@example.com,beacruz,bea-lc',
+      'Cal Dean,cal@example.com,caldean,cal-lc',
+      'Dee Ellis,dee@example.com,deellis,dee-lc',
+      'Eli Fox,eli@example.com,elifox,eli-lc',
+    ].join('\n'));
+
+    const firstRead = await readCandidateCsvFile(file);
+    const secondRead = await readCandidateCsvFile(file);
+    const mappedRows = mapCsvRows(firstRead.rows, createCsvMapping(firstRead.headers));
+
+    expect(firstRead.headers).toEqual(['Candidate Name', 'Email', 'GitHub', 'LeetCode']);
+    expect(mappedRows).toHaveLength(5);
+    expect(mappedRows[0].candidate).toEqual({ name: 'Ari Stone', email: 'ari@example.com', githubUsername: 'aristone', leetcodeUsername: 'ari-lc' });
+    expect(secondRead.rows).toHaveLength(5);
+  });
+
+  it('returns a useful parser error for malformed CSV and a read error for invalid UTF-8', async () => {
+    await expect(readCandidateCsvFile(csvFile('bad.csv', 'Name,Email\n"Ari,ari@example.com'))).resolves.toMatchObject({ error: expect.stringMatching(/unclosed quoted/i) });
+    const invalidUtf8 = { name: 'bad.csv', size: 2, arrayBuffer: async () => new Uint8Array([0xff, 0xfe]).buffer } as File;
+    await expect(readCandidateCsvFile(invalidUtf8)).rejects.toThrow(/valid UTF-8 CSV/i);
+  });
+});
 
 describe('candidate CSV import parsing and mapping', () => {
   it('parses quoted commas, escaped quotes, Unicode, and LF/CRLF records', () => {

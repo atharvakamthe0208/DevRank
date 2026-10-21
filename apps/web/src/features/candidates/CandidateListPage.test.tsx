@@ -66,4 +66,11 @@ describe('candidate removal UI', () => {
     expect(html).toContain('tabindex="0"');
     expect(html).toContain('Scroll horizontally to see profile links and row actions.');
   });
+
+  it('exposes the CSV import action and a hidden CSV-only picker', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('>Import CSV</button>');
+    expect(html).toContain('class="candidate-import-file-picker" type="file" accept=".csv,text/csv"');
+  });
 });
