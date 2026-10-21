@@ -46,6 +46,22 @@ describe('resume screening processor', () => {
       .rejects.toMatchObject({ code: 'SCREENING_AI_UNAVAILABLE', statusCode: 503 });
   });
 
+  it('classifies provider rate limits as retryable without returning a score', async () => {
+    const rateLimited = createScreeningProcessor(config, async () => { throw Object.assign(new Error('rate limited'), { status: 429 }); });
+    await expect(rateLimited.requirements('Engineer', 'A valid job description of sufficient length for screening.'))
+      .rejects.toMatchObject({ code: 'SCREENING_AI_RATE_LIMITED', statusCode: 503 });
+  });
+
+  it('keeps a valid assessment completed when the resume contains no verifiable name', async () => {
+    const processor = createScreeningProcessor(config, async (input) => input.startsWith('REQUIREMENTS\n')
+      ? { requirements: [{ categoryId: 'required_technical_skills', description: 'Use TypeScript', importance: 'required' }] }
+      : { candidateName: null, results: [{ requirementId: 'req-1', status: 'demonstrated', evidence: [{ excerpt: 'Built services with TypeScript' }], explanation: 'The resume names TypeScript.', confidence: 0.9 }] });
+    const requirements = await processor.requirements('Engineer', 'Build backend services using TypeScript and maintain production systems.');
+    const result = await processor.assess(requirements, 'Built services with TypeScript\nExperience');
+    expect(result.candidate.name).toBeNull();
+    expect(result.evaluation.status).toBe('complete');
+  });
+
   it('rejects malformed PDF contents instead of treating extraction errors as empty success', async () => {
     const { extractResumeText } = await import('../src/modules/screening/processor.js');
     await expect(extractResumeText({ mimetype: 'application/pdf' } as Express.Multer.File, Buffer.from('not a PDF')))

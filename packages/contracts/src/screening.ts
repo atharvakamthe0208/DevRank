@@ -18,6 +18,7 @@ export const screeningRequirementSchema = z.object({
   description: z.string().min(1).max(500),
   importance: z.enum(['required', 'preferred']),
 });
+export const screeningRequirementsSchema = z.array(screeningRequirementSchema).min(1).max(40);
 export const requirementResultSchema = screeningRequirementSchema.extend({
   status: requirementStatusSchema,
   evidence: z.array(z.object({ excerpt: z.string().min(1).max(500), section: z.string().max(80).optional() })).max(10),
@@ -42,6 +43,22 @@ export const screeningScoreSchema = z.object({
   categories: z.array(screeningCategoryResultSchema).length(screeningCategories.length),
   requirements: z.array(requirementResultSchema),
 });
+export const preliminaryCriterionSchema = z.object({
+  id: z.string().min(1).max(80),
+  categoryId: screeningCategoryIdSchema,
+  description: z.string().min(1).max(500),
+  importance: z.enum(['required', 'preferred']),
+  status: z.enum(['supported', 'unverified']),
+  matchedTerms: z.array(z.string().min(1).max(40)).max(40),
+  matchPercentage: z.number().min(0).max(100).optional(),
+  evidenceExcerpt: z.string().min(1).max(240).optional(),
+}).strict();
+export const preliminaryEvaluationSchema = z.object({
+  rubricVersion: z.literal('resume-document-match-1.0.0'),
+  score: z.number().min(0).max(100),
+  evidenceCoverage: z.number().min(0).max(100),
+  criteria: z.array(preliminaryCriterionSchema).min(1).max(40),
+}).strict();
 export const screeningCreateSchema = z.object({
   jobTitle: z.string().trim().min(1).max(200),
   jobDescription: z.string().trim().min(50).max(30000),
@@ -61,6 +78,7 @@ export const screeningResumeDetailsSchema = z.object({
   status: screeningStatusSchema,
   candidate: z.object({ name: z.string().min(1).max(120).nullable() }).nullable(),
   evaluation: screeningScoreSchema.nullable(),
+  preliminaryEvaluation: preliminaryEvaluationSchema.nullable().optional(),
   errorCode: z.string().min(1).max(80).optional(),
   retryCount: z.number().int().min(0).max(3).optional(),
   error: z.string().optional(),

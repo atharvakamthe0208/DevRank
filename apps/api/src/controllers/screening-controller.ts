@@ -61,7 +61,9 @@ function buildScreeningRanking(details: ReturnType<typeof screeningDetailsRespon
   const rankedIds = new Set(ranked.map((item) => item.resumeId));
   const unranked = details.resumes.filter((resume) => !rankedIds.has(resume.id)).map((resume) => ({
     resumeId: resume.id, filename: resume.filename, status: resume.status,
-    reason: resume.status !== 'completed' ? (resume.error ?? 'Processing did not complete.') : 'No deterministic overall score is available.',
+    reason: resume.status !== 'completed' ? (resume.error ?? 'Processing did not complete.')
+      : resume.preliminaryEvaluation ? 'A preliminary document match is available but is not included in validated ranking.'
+        : 'No deterministic overall score is available.',
   }));
   return { ranked, unranked, rankingCriteria };
 }
@@ -85,14 +87,15 @@ export function createScreeningController(
       if (session.error?.code === 'PGRST116') throw new HttpError(404, 'SCREENING_NOT_FOUND', 'Screening session not found.');
       throw screeningDatabaseError('session_read', session.error);
     }
-    const resumes = await client.from('resume_screenings').select('id,original_filename,status,extracted_data,evaluation,safe_error_code,retry_count,safe_error_message').eq('session_id', sessionId).order('created_at');
+    const resumes = await client.from('resume_screenings').select('id,original_filename,status,extracted_data,evaluation,preliminary_evaluation,safe_error_code,retry_count,safe_error_message').eq('session_id', sessionId).order('created_at');
     if (resumes.error) throw screeningDatabaseError('resume_read', resumes.error);
     return screeningDetailsResponseSchema.parse({
       sessionId, jobTitle: session.data.job_title, status: session.data.status,
       resumes: (resumes.data ?? []).map((row) => ({
         id: row.id, filename: row.original_filename, status: row.status,
         candidate: row.extracted_data && typeof row.extracted_data === 'object' && 'candidate' in row.extracted_data ? row.extracted_data.candidate : null,
-        evaluation: row.evaluation, ...(row.safe_error_code ? { errorCode: row.safe_error_code } : {}),
+        evaluation: row.evaluation, preliminaryEvaluation: row.preliminary_evaluation ?? null,
+        ...(row.safe_error_code ? { errorCode: row.safe_error_code } : {}),
         ...(typeof row.retry_count === 'number' ? { retryCount: row.retry_count } : {}),
         ...(row.safe_error_message ? { error: row.safe_error_message } : {}),
       })),

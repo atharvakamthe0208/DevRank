@@ -3,7 +3,7 @@ import { screeningComparisonResponseSchema, screeningDetailsResponseSchema, scre
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { screeningReportCsv } from './report-export';
-import { filterAndSortScreeningResumes, scoreBand } from './ranking-table';
+import { filterAndSortScreeningResumes, scoreBand, scorePresentation } from './ranking-table';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
 import { screeningProgressLabel } from './screening-progress';
 import './resume-screening-page.css';
@@ -377,13 +377,16 @@ export function ResumeScreeningPage() {
           </div>}
           {rankingData && <section className="screening-comparison" aria-label="Candidate comparison">
             <h3>Candidate ranking · {rankingData.jobTitle}</h3>
-            <p>{rankingData.ranking.rankingCriteria} Score colours are presentation-only guidance, not validated hiring criteria.</p>
+            <p>{rankingData.ranking.rankingCriteria} Preliminary document matches appear in unranked rows and do not affect validated ranks. They measure text overlap; unverified criteria mean no supporting wording was found, not that the candidate lacks the qualification.</p>
             {details && (() => {
               const { scored, unscored, rankById } = filterAndSortScreeningResumes(details, rankingData.ranking, candidateSearch);
               const visibleEligibleIds = [...scored, ...unscored].filter((resume) => resume.status === 'completed').map((resume) => resume.id);
               const successfullyScored = rankingData.ranking.ranked.length;
               const statusLabel = (resume: ScreeningDetailsResponse['resumes'][number]) => resume.status === 'failed' ? 'Failed' : resume.status === 'queued' || resume.status === 'uploaded' ? 'Pending' : resume.status === 'processing' ? 'Processing' : resume.evaluation?.score !== undefined ? 'Scored' : 'Insufficient evidence';
-              const scoreCell = (resume: ScreeningDetailsResponse['resumes'][number]) => resume.evaluation?.score === undefined ? <span className="score-unavailable">Not scored</span> : <div className="screening-score-cell"><span className={`screening-score-badge score-${scoreBand(resume.evaluation.score)}`}>{resume.evaluation.score}%</span><span className="screening-score-track" role="progressbar" aria-label={`Job match score for ${resume.candidate?.name ?? 'candidate'}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={resume.evaluation.score}><span className={`score-fill score-${scoreBand(resume.evaluation.score)}`} style={{ width: `${resume.evaluation.score}%` }} /></span></div>;
+              const scoreCell = (resume: ScreeningDetailsResponse['resumes'][number]) => {
+                const presentation = scorePresentation(resume);
+                return presentation ? <div className="screening-score-cell"><div className="screening-score-copy"><span className={`screening-score-badge score-${scoreBand(presentation.score)}${presentation.preliminary ? ' score-preliminary' : ''}`}>{presentation.score}%</span><small>{presentation.label}</small></div><span className="screening-score-track" role="progressbar" aria-label={`${presentation.label} for ${resume.candidate?.name ?? 'candidate'}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={presentation.score}><span className={`score-fill score-${scoreBand(presentation.score)}${presentation.preliminary ? ' score-fill-preliminary' : ''}`} style={{ width: `${presentation.score}%` }} /></span></div> : <span className="score-unavailable">Unavailable</span>;
+              };
               const tableRow = (resume: ScreeningDetailsResponse['resumes'][number]) => {
                 const rank = rankById.get(resume.id)?.rank;
                 return <tr key={resume.id}>
@@ -405,7 +408,7 @@ export function ResumeScreeningPage() {
                 {(scored.length + unscored.length) === 0 ? <p className="screening-table-empty">No resumes match your search.</p> : <div className="screening-table-scroll" role="region" aria-label="Candidate ranking table" tabIndex={0}>
                   <table className="screening-ranking-table"><thead><tr><th scope="col" aria-label="Select" /><th scope="col">Rank</th><th scope="col">Candidate Name</th><th scope="col">Resume</th><th scope="col">Job Match Score</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
                     <tbody>{scored.map(tableRow)}</tbody>
-                    {unscored.length > 0 && <tbody className="screening-unscored-group"><tr><th colSpan={7} scope="rowgroup">Not scored · processing, insufficient evidence, or failed</th></tr>{unscored.map(tableRow)}</tbody>}
+                    {unscored.length > 0 && <tbody className="screening-unscored-group"><tr><th colSpan={7} scope="rowgroup">Unranked · preliminary matches are not part of validated ranking</th></tr>{unscored.map(tableRow)}</tbody>}
                   </table>
                 </div>}
                 {expandedDetailsId && details.resumes.find((resume) => resume.id === expandedDetailsId) && (() => {
@@ -413,10 +416,11 @@ export function ResumeScreeningPage() {
                   return <article className="screening-candidate-details" id={`resume-detail-${selectedResume.id}`}>
                     <h4>{selectedResume.candidate?.name ?? 'Name not identified'} · {selectedResume.filename}</h4>
                     {selectedResume.error && <p>{selectedResume.error}</p>}
-                    {selectedResume.evaluation ? <ul>{selectedResume.evaluation.requirements.map((item) => <li key={item.id}><strong>{item.description}:</strong> {item.status.replaceAll('_', ' ')}{item.evidence[0] ? ` — “${item.evidence[0].excerpt}”` : ' — Evidence not available'}</li>)}</ul> : <p>Detailed evaluation evidence is not available for this resume.</p>}
+                    {selectedResume.preliminaryEvaluation && <><p>Preliminary document match: {selectedResume.preliminaryEvaluation.score}% · {selectedResume.preliminaryEvaluation.evidenceCoverage}% of weighted criteria have text support. Unverified means the resume does not state matching text; it does not mean the candidate lacks that qualification.</p><ul>{selectedResume.preliminaryEvaluation.criteria.map((criterion) => <li key={`preliminary-${criterion.id}`}><strong>{criterion.description}:</strong> {criterion.status === 'supported' ? `Supported by ${criterion.matchedTerms.join(', ')}` : 'Unverified in resume text'}{criterion.evidenceExcerpt ? ` — “${criterion.evidenceExcerpt}”` : ''}</li>)}</ul></>}
+                    {selectedResume.evaluation ? <ul>{selectedResume.evaluation.requirements.map((item) => <li key={item.id}><strong>{item.description}:</strong> {item.status.replaceAll('_', ' ')}{item.evidence[0] ? ` — “${item.evidence[0].excerpt}”` : ' — Evidence not available'}</li>)}</ul> : <p>Detailed validated evaluation evidence is not available for this resume.</p>}
                   </article>;
                 })()}
-                {scored.length === 0 && unscored.length > 0 && <p className="screening-table-empty">No resumes have a deterministic score yet. Unscored resumes are listed separately and are not assigned a rank.</p>}
+                {scored.length === 0 && unscored.length > 0 && <p className="screening-table-empty">No validated scores are available yet. Preliminary matches remain separately labeled and are not assigned a rank.</p>}
               </>;
             })()}
           </section>}
@@ -428,7 +432,8 @@ export function ResumeScreeningPage() {
               <h2>Candidate results</h2>
               <table><thead><tr><th>Selected for comparison</th><th>Candidate name</th><th>Resume</th><th>Status</th><th>Rank</th><th>Score</th></tr></thead><tbody>{report.details.resumes.map((resume) => {
                 const rank = report.ranking.ranked.find((item) => item.resumeId === resume.id)?.rank;
-                return <tr key={resume.id}><td>{report.selectedResumeIds.includes(resume.id) ? 'Yes' : 'No'}</td><td>{resume.candidate?.name ?? 'Name not identified'}</td><td title={resume.filename}>{resume.filename}</td><td>{resume.status}</td><td>{rank ?? 'Not ranked'}</td><td>{resume.evaluation?.score === undefined ? 'Not scored' : `${resume.evaluation.score}%`}</td></tr>;
+                const score = scorePresentation(resume);
+                return <tr key={resume.id}><td>{report.selectedResumeIds.includes(resume.id) ? 'Yes' : 'No'}</td><td>{resume.candidate?.name ?? 'Name not identified'}</td><td title={resume.filename}>{resume.filename}</td><td>{resume.status}</td><td>{rank ?? 'Not ranked'}</td><td>{score ? `${score.score}% · ${score.label}` : 'Unavailable'}</td></tr>;
               })}</tbody></table>
               <h2>Ranking criteria and limitations</h2><p>Ranking is based on saved deterministic resume job-match scores in descending order; equal scores are ties. Failed or unscored resumes are excluded from scored ranking. Missing evidence is not treated as zero.</p>
               <p>Scores assist recruiter review and are not hiring decisions. Resume content may be incomplete or unverified. Review the source resume and independently validate qualifications.</p>
