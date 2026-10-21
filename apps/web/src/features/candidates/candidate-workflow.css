@@ -102,6 +102,15 @@
 .candidate-import-results p { margin: 5px 0; }
 .candidate-import-results ul { display: grid; gap: 7px; max-height: 260px; overflow: auto; padding-left: 18px; color: #55574f; font-size: 10px; }
 .candidate-import-results li a { display: block; margin-top: 3px; color: #477457; }
+.candidate-import-sync-actions { display: grid; gap: 10px; margin-top: 14px; border-top: 1px solid #e4e8df; padding-top: 12px; }
+.candidate-import-sync-actions > p,.candidate-import-sync-platform > p { margin: 0; }
+.candidate-import-sync-platform { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: 7px 12px; border: 1px solid #e4e8df; border-radius: 6px; padding: 10px; background: #fff; }
+.candidate-import-sync-platform > div:first-child { display: grid; gap: 3px; }
+.candidate-import-sync-platform > div:first-child strong { font-size: 11px; }
+.candidate-import-sync-platform > div:first-child span { color: #73766d; font-size: 10px; }
+.candidate-import-sync-platform > button { min-height: 34px; padding: 0 12px; font-size: 10px; }
+.candidate-import-sync-platform > ul,.candidate-import-sync-platform > p { grid-column: 1 / -1; }
+.candidate-import-sync-platform > ul { max-height: 120px; margin: 0; }
 .candidate-import-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; border-top: 1px solid #efefec; padding-top: 12px; }
 .candidate-import-footer span { color: #85877f; font-size: 9px; line-height: 1.5; }
 
