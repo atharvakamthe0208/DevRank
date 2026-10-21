@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useCandidates } from './useCandidates';
 import { candidateListView } from './candidate-list-state';
 import { candidateDeletionMessage } from './candidate-delete-confirmation';
+import { CandidateCsvImportDialog } from './CandidateCsvImportDialog';
 import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import { AnimatedMetric } from '../../components/metrics/KpiCards';
@@ -31,6 +32,7 @@ export function CandidateListPage() {
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
   const [deleteError, setDeleteError] = useState('');
   const [deleteNotice, setDeleteNotice] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
   const pageSize = 20;
   const { items, total, loading, error, reload, deleteCandidate } = useCandidates(page, pageSize);
   const view = candidateListView(loading, error, items.length);
@@ -58,7 +60,7 @@ export function CandidateListPage() {
   }
   return <div className="candidate-management-page">
     <DelayedAuthLoadingScreen loading={loading} message="Loading your candidates…"/>
-    <section className="candidate-management-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER WORKSPACE</span><h1>Candidates</h1><p className="page-subtitle">Manage the candidate profiles in your workspace.</p></div><Link className="primary-button link-button" to="/candidates/new"><span>＋</span> Add candidate</Link></section>
+    <section className="candidate-management-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER WORKSPACE</span><h1>Candidates</h1><p className="page-subtitle">Manage the candidate profiles in your workspace.</p></div><div className="candidate-management-primary-actions"><button type="button" className="secondary-button" onClick={() => setImportOpen(true)}>Import CSV</button><Link className="primary-button link-button" to="/candidates/new"><span>＋</span> Add candidate</Link></div></section>
     {typeof notice === 'string' && <p className="form-feedback candidate-success-message" role="status">{notice}</p>}
     {deleteNotice && <p className="form-feedback candidate-success-message" role="status">{deleteNotice}</p>}
     {deleteError && <p className="candidate-delete-error" role="alert">{deleteError}</p>}
@@ -70,5 +72,6 @@ export function CandidateListPage() {
     <dialog className="candidate-delete-dialog" ref={deleteDialogRef} aria-labelledby="candidate-delete-title" aria-describedby="candidate-delete-description" onCancel={() => setCandidateToDelete(null)} onClose={() => setCandidateToDelete(null)}>
       {candidateToDelete && <><h2 id="candidate-delete-title">Delete {candidateToDelete.name}?</h2><p id="candidate-delete-description">{candidateDeletionMessage(candidateToDelete.name)}</p><div className="candidate-delete-dialog-actions"><button className="candidate-delete-cancel" type="button" autoFocus onClick={() => deleteDialogRef.current?.close()}>Cancel</button><button className="candidate-delete-button" type="button" disabled={deletingId !== null} onClick={() => void handleDelete(candidateToDelete)}>{deletingId === candidateToDelete.id ? 'Deleting…' : 'Delete permanently'}</button></div></>}
     </dialog>
+    {importOpen && <CandidateCsvImportDialog onClose={() => setImportOpen(false)} onImported={reload}/>}
   </div>;
 }

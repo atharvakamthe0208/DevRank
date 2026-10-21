@@ -1,4 +1,14 @@
-import { candidateSchema, type CandidateCreateInput, type CandidateListQuery, type CandidateUpdateInput } from '@devrank/contracts';
+import {
+  candidateBulkImportResponseSchema,
+  candidateImportPreviewResponseSchema,
+  candidateSchema,
+  type CandidateBulkImportResponse,
+  type CandidateCreateInput,
+  type CandidateImportPreviewResponse,
+  type CandidateImportRows,
+  type CandidateListQuery,
+  type CandidateUpdateInput,
+} from '@devrank/contracts';
 import { getSupabaseClient } from '../config/supabase.js';
 import { HttpError } from '../middleware/http-error.js';
 import type { AuthContext } from '../types/auth.js';
@@ -20,6 +30,8 @@ export type CandidateList = { items: ReturnType<typeof candidateSchema.parse>[];
 
 export interface CandidateRepository {
   create(auth: AuthContext, input: CandidateCreateInput): Promise<ReturnType<typeof candidateSchema.parse>>;
+  previewImport(auth: AuthContext, rows: CandidateImportRows['rows']): Promise<CandidateImportPreviewResponse>;
+  bulkImport(auth: AuthContext, rows: CandidateImportRows['rows'], idempotencyKey: string, skipDuplicates: boolean): Promise<CandidateBulkImportResponse>;
   list(auth: AuthContext, query: CandidateListQuery): Promise<CandidateList>;
   get(auth: AuthContext, id: string): Promise<ReturnType<typeof candidateSchema.parse>>;
   update(auth: AuthContext, id: string, input: CandidateUpdateInput): Promise<ReturnType<typeof candidateSchema.parse>>;
@@ -135,6 +147,18 @@ function databaseError(error: unknown, operation: string, failureSource: Databas
   throw new HttpError(503, 'DATABASE_UNAVAILABLE', `Unable to ${operation} right now`);
 }
 
+function checkedImportResult<T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error: { issues: Array<{ code: string }> } } }, value: unknown, operation: string): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    console.error('Candidate import database response validation failed', {
+      operation,
+      issueCodes: parsed.error.issues.map((issue) => /^[a-z0-9_]{1,40}$/i.test(issue.code) ? issue.code : 'unknown'),
+    });
+    throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Candidate import results could not be processed');
+  }
+  return parsed.data;
+}
+
 function clientFor(auth: AuthContext) {
   try {
     return getSupabaseClient(auth.accessToken);
@@ -163,6 +187,45 @@ export const candidateRepository: CandidateRepository = {
     } catch (error) {
       if (error instanceof HttpError) throw error;
       return databaseError(error, 'create the candidate', 'thrown_exception');
+    }
+  },
+
+  async previewImport(auth, rows) {
+    try {
+      const { data, error } = await clientFor(auth).rpc('candidate_bulk_import', {
+        p_rows: rows,
+        p_idempotency_key: null,
+        p_skip_duplicates: true,
+        p_preview: true,
+      });
+      if (error) return databaseError(error, 'preview candidate import', 'supabase_response');
+      const result = checkedImportResult(candidateImportPreviewResponseSchema, data, 'preview candidate import');
+      if (result.rows.length !== rows.length) throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Candidate import preview could not be processed');
+      return result;
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      return databaseError(error, 'preview candidate import', 'thrown_exception');
+    }
+  },
+
+  async bulkImport(auth, rows, idempotencyKey, skipDuplicates) {
+    try {
+      const { data, error } = await clientFor(auth).rpc('candidate_bulk_import', {
+        p_rows: rows,
+        p_idempotency_key: idempotencyKey,
+        p_skip_duplicates: skipDuplicates,
+        p_preview: false,
+      });
+      if (error) {
+        if (error.code === '22023') throw new HttpError(409, 'IDEMPOTENCY_KEY_REUSED', 'This import retry key was already used with different rows or duplicate settings. Review the candidates list before starting a new import.');
+        return databaseError(error, 'import candidates', 'supabase_response');
+      }
+      const result = checkedImportResult(candidateBulkImportResponseSchema, data, 'import candidates');
+      if (result.results.length !== rows.length) throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Candidate import results could not be processed');
+      return result;
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      return databaseError(error, 'import candidates', 'thrown_exception');
     }
   },
 
