@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel } from './dashboard-presentation';
+import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
 
 describe('dashboard presentation', () => {
   it('shows canonical role labels for roles retrieved from saved evaluation details', () => {
@@ -17,5 +17,11 @@ describe('dashboard presentation', () => {
     expect(dashboardScoreAvailabilityLabel('in_progress')).toBe('Not scored yet');
     expect(dashboardEvaluationStatusLabel('completed')).toBe('Completed');
     expect(dashboardScoreAvailabilityLabel('completed')).toBe('Score unavailable');
+  });
+
+  it('averages only available recent scores and leaves an empty score set unavailable', () => {
+    expect(recentScoredEvaluationAverage([{ score: 80 }, {}, { score: 60 }])).toEqual({ average: 70, count: 2 });
+    expect(recentScoredEvaluationAverage([{}, {}])).toEqual({ average: undefined, count: 0 });
+    expect(recentScoredEvaluationAverage([{ score: 0 }])).toEqual({ average: 0, count: 1 });
   });
 });

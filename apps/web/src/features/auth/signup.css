@@ -175,7 +175,6 @@
 .signup-preview-profile > div i:last-child { width: 35%; }
 .signup-preview-profile > small { color: #abb9d2; font-size: 9px; letter-spacing: 1px; }
 .signup-preview-profile-row { display: flex; align-items: center; gap: 12px; }
-.signup-preview-profile-row > b { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: #263956; color: #bfd3ff; font-size: 9px; }
 .signup-preview-profile-row > span { display: grid; gap: 3px; }
 .signup-preview-profile-row strong { color: #e2eaf6; font-size: 11px; }
 .signup-preview-profile-row small { color: #8f9db5; font-size: 9px; }
@@ -320,6 +319,7 @@ html[data-theme='dark'] .signup-footer { color: #7e8ca4; }
 @media (prefers-reduced-motion: reduce) {
   .signup-page::before, .signup-page::after, .login-page.signin-auth-page::before, .login-page.signin-auth-page::after, .signup-orbit, .signup-diamond, .signup-light, .signup-showcase-slide, .signup-brand img, .login-page.signin-auth-page .signin-brand img { animation: none !important; }
   .signup-showcase-dots i, .signup-form .auth-field > input, .signup-form .auth-input-wrap, .signup-form .login-submit { transition: none !important; }
+  .login-page.auth-recovery-request .auth-reset-progress > span { animation: none !important; }
 }
 
 /* Sign-in uses the signup page's animated backdrop and shared blue palette. */
@@ -434,12 +434,21 @@ html[data-theme='dark'] .signup-footer { color: #7e8ca4; }
 .login-page.signin-auth-page .login-footer { width: min(1160px, 100%); margin: 0; color: #a0aec5; }
 .login-page.signin-auth-page .login-footer i { background: #7ba8ff; }
 
-/* Recovery tasks stay focused on the form; the shared recruiter promotion is
-   already available on sign-in and signup. */
+/* Password recovery requests share the sign-in presentation. Password-update
+   and recovery-status screens retain their existing focused form layout. */
 .login-page.auth-recovery-page .login-layout { width: min(560px, 100%); min-height: 0; grid-template-columns: minmax(0, 1fr); }
 .login-page.auth-recovery-page .login-form-wrap { padding: clamp(28px, 6vw, 62px); }
 .login-page.auth-recovery-page .login-visual { display: none; }
 .login-page.auth-recovery-page .login-form-wrap > .login-intro { margin-bottom: 20px; }
+.login-page.auth-recovery-request .login-brand,
+.login-page.auth-recovery-request .login-footer { width: min(560px, 100%); }
+.login-page.auth-recovery-request .login-layout { width: min(560px, 100%); min-height: 0; grid-template-columns: minmax(0, 1fr); }
+.login-page.auth-recovery-request .login-form-wrap { padding: clamp(30px, 5vw, 54px); }
+.login-page.auth-recovery-request .login-visual { display: none; }
+.login-page.auth-recovery-request .auth-form > .login-intro { margin: 12px 0 7px; }
+.login-page.auth-recovery-request .auth-reset-progress { display: flex; align-items: center; gap: 8px; margin: 0; color: #596a86; font-size: 12px; }
+.login-page.auth-recovery-request .auth-reset-progress > span { width: 13px; height: 13px; border: 2px solid #c8d5f3; border-top-color: #5148ef; border-radius: 50%; animation: auth-reset-spin 850ms linear infinite; }
+@keyframes auth-reset-spin { to { transform: rotate(360deg); } }
 
 @media (max-height: 820px) and (min-width: 861px) {
   .login-page.signin-auth-page { padding-top: 24px; padding-bottom: 24px; }

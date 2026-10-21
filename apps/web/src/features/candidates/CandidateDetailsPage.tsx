@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase/client';
 import { parseCandidateApiResponse } from './candidate-response-validation';
 import { CandidatePlatformDataPanel } from './CandidatePlatformDataPanel';
 import { CandidateEvaluationHistory } from '../evaluations/CandidateEvaluationHistory';
+import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import './candidate-workflow.css';
 
 type LoadState = { loading: true } | { loading: false; candidate: Candidate } | { loading: false; error: string; missing?: boolean };
@@ -52,8 +53,8 @@ export function CandidateDetailsPage() {
   const candidate = state.candidate;
   const notice = (location.state as { notice?: unknown } | null)?.notice;
   const profiles = [
-    { name: 'GitHub', handle: candidate.githubUsername, url: candidate.githubUsername ? `https://github.com/${encodeURIComponent(candidate.githubUsername)}` : '', mark: 'GH', className: 'github-mark' },
-    { name: 'LeetCode', handle: candidate.leetcodeUsername, url: candidate.leetcodeUsername ? `https://leetcode.com/u/${encodeURIComponent(candidate.leetcodeUsername)}/` : '', mark: 'LC', className: 'leetcode-mark' },
+    { platform: 'github' as const, name: 'GitHub', handle: candidate.githubUsername, url: candidate.githubUsername ? `https://github.com/${encodeURIComponent(candidate.githubUsername)}` : '', className: 'github-mark' },
+    { platform: 'leetcode' as const, name: 'LeetCode', handle: candidate.leetcodeUsername, url: candidate.leetcodeUsername ? `https://leetcode.com/u/${encodeURIComponent(candidate.leetcodeUsername)}/` : '', className: 'leetcode-mark' },
   ];
   const availableProfiles = profiles.filter((profile) => profile.handle && profile.url);
   return <div className="detail-page candidate-api-detail">
@@ -61,7 +62,7 @@ export function CandidateDetailsPage() {
     {typeof notice === 'string' && <p className="form-feedback candidate-success-message" role="status">{notice}</p>}
     <section className="detail-profile-card"><div className="avatar avatar-xl avatar-user">{candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</div><div className="profile-main"><div className="profile-title-row"><div><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE PROFILE</span><h1>{candidate.name}</h1></div><Link className="primary-button link-button" to={`/evaluations?candidateId=${encodeURIComponent(candidate.id)}`}>Evaluate candidate</Link></div><div className="profile-meta"><span>Added <time dateTime={candidate.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(candidate.createdAt))}</time></span>{candidate.email && <a href={`mailto:${candidate.email}`}>✉ {candidate.email}</a>}</div></div></section>
     <CandidateEvaluationHistory candidateId={candidate.id} />
-    <section className="detail-section profile-links-section"><div className="section-heading"><div><h2>Developer profiles</h2><p>Profiles associated with this candidate record</p></div><Link className="secondary-button link-button" to={`/candidates/${candidate.id}/evaluate`}>Use a saved role profile</Link></div><div className="profile-links">{availableProfiles.length ? availableProfiles.map((profile) => <a className="profile-link-card" href={profile.url} key={profile.name} target="_blank" rel="noreferrer"><span className={`platform-mark ${profile.className}`}>{profile.mark}</span><span><strong>{profile.name}</strong><small>@{profile.handle}</small></span><span className="external-arrow">↗</span></a>) : <p className="candidate-detail-empty">No developer profile usernames have been added.</p>}</div></section>
+    <section className="detail-section profile-links-section"><div className="section-heading"><div><h2>Developer profiles</h2><p>Profiles associated with this candidate record</p></div><Link className="secondary-button link-button" to={`/candidates/${candidate.id}/evaluate`}>Use a saved role profile</Link></div><div className="profile-links">{availableProfiles.length ? availableProfiles.map((profile) => <a className="profile-link-card" href={profile.url} key={profile.name} target="_blank" rel="noreferrer"><span className={`platform-mark ${profile.className}`}><PlatformLogo platform={profile.platform} size="regular"/></span><span><strong>{profile.name}</strong><small>@{profile.handle}</small></span><span className="external-arrow">↗</span></a>) : <p className="candidate-detail-empty">No developer profile usernames have been added.</p>}</div></section>
     <CandidatePlatformDataPanel candidate={candidate} />
   </div>;
 }

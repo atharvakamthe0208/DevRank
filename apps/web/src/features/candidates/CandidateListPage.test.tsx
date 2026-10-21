@@ -32,7 +32,24 @@ describe('candidate removal UI', () => {
     expect(html).toContain('aria-label="View Taylor Example"');
     expect(html).toContain('GitHub');
     expect(html).toContain('LeetCode');
+    expect(html).toContain('platform-logo-github');
+    expect(html).toContain('platform-logo-leetcode');
+    expect(html).not.toContain('https://leetcode.com');
     expect(html).not.toContain('HackerRank');
+  });
+
+  it('shows a recognizable mark beside each linked profile name without hiding the handle', () => {
+    useCandidatesMock.mockReturnValue({
+      items: [{ ...candidate, leetcodeUsername: 'taylor-codes' }], total: 1, loading: false, error: '', reload: vi.fn(), deleteCandidate: vi.fn(),
+    });
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('class="platform-profile-link" href="https://github.com/taylor-dev"');
+    expect(html).toContain('class="platform-logo platform-logo-github');
+    expect(html).toContain('class="platform-profile-link" href="https://leetcode.com/u/taylor-codes/"');
+    expect(html).toContain('class="platform-logo platform-logo-leetcode');
+    expect(html).toContain('@taylor-dev');
+    expect(html).toContain('@taylor-codes');
   });
 
   it('describes the permanent deletion scope before the explicit dialog action', () => {
