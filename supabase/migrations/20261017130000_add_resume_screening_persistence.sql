@@ -2,6 +2,7 @@
 -- The earlier screening migration is intentionally left untouched. These objects are
 -- isolated from candidates, evaluations, evidence, and recruiter profile schemas.
 begin;
+
 create table if not exists public.screening_sessions (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
@@ -14,6 +15,7 @@ create table if not exists public.screening_sessions (
   updated_at timestamptz not null default now(),
   unique (id, owner_id)
 );
+
 alter table public.screening_sessions
   add column if not exists id uuid default gen_random_uuid(),
   add column if not exists owner_id uuid,
@@ -24,10 +26,12 @@ alter table public.screening_sessions
   add column if not exists status text default 'created',
   add column if not exists created_at timestamptz default now(),
   add column if not exists updated_at timestamptz default now();
+
 create unique index if not exists screening_sessions_id_owner_id_key
   on public.screening_sessions(id, owner_id);
 create index if not exists screening_sessions_owner_created_idx
   on public.screening_sessions(owner_id, created_at desc);
+
 create table if not exists public.resume_screenings (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null,
@@ -50,6 +54,7 @@ create table if not exists public.resume_screenings (
   unique (session_id, sha256),
   foreign key (session_id, owner_id) references public.screening_sessions(id, owner_id) on delete cascade
 );
+
 alter table public.resume_screenings
   add column if not exists id uuid default gen_random_uuid(),
   add column if not exists session_id uuid,
@@ -68,6 +73,7 @@ alter table public.resume_screenings
   add column if not exists processed_at timestamptz,
   add column if not exists created_at timestamptz default now(),
   add column if not exists updated_at timestamptz default now();
+
 create unique index if not exists resume_screenings_id_owner_id_key
   on public.resume_screenings(id, owner_id);
 create unique index if not exists resume_screenings_storage_path_key
@@ -76,6 +82,7 @@ create unique index if not exists resume_screenings_session_id_sha256_key
   on public.resume_screenings(session_id, sha256);
 create index if not exists resume_screenings_session_status_idx
   on public.resume_screenings(session_id, status, created_at);
+
 do $$
 begin
   if not exists (select 1 from pg_constraint where conrelid = 'public.screening_sessions'::regclass and conname = 'screening_sessions_owner_id_fkey') then
@@ -128,10 +135,12 @@ begin
   end if;
 end;
 $$;
+
 alter table public.screening_sessions enable row level security;
 alter table public.resume_screenings enable row level security;
 revoke all on public.screening_sessions, public.resume_screenings from anon, public;
 grant select, insert, update on public.screening_sessions, public.resume_screenings to authenticated;
+
 do $$
 begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'screening_sessions' and policyname = 'screening_sessions_owner_scope') then
@@ -146,11 +155,13 @@ begin
   end if;
 end;
 $$;
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('private-resumes', 'private-resumes', false, 10485760,
   array['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
 on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
+
 do $$
 begin
   if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'private_resumes_owner_insert') then
@@ -176,4 +187,5 @@ begin
   end if;
 end;
 $$;
+
 commit;

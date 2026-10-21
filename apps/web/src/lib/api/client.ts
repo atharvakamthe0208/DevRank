@@ -29,9 +29,10 @@ export async function apiRequest<T>(path: string, init?: RequestInit, accessToke
   }
   let response: Response;
   try {
+    const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
     response = await fetch(`${baseUrl}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
+      headers: { ...(!isFormData ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
     });
   } catch (cause) {
     throw new ApiNetworkError(undefined, { cause });
@@ -39,11 +40,12 @@ export async function apiRequest<T>(path: string, init?: RequestInit, accessToke
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => undefined);
     const parsedError = apiErrorSchema.safeParse(body);
+    const error = parsedError.success ? parsedError.data.error : undefined;
     throw new ApiRequestError(
-      parsedError.success ? parsedError.data.error.message : `API request failed (${response.status})`,
+      error?.message ?? `API request failed (${response.status})`,
       response.status,
-      parsedError.success ? parsedError.data.error.code : undefined,
-      parsedError.success ? parsedError.data.error.details : undefined,
+      error?.code,
+      error?.details,
     );
   }
   if (response.status === 204) return undefined as T;

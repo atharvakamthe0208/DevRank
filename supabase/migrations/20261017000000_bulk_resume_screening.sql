@@ -1,5 +1,6 @@
 -- Bulk screening data is separate from developer evaluations and never changes their scores.
 begin;
+
 create table public.screening_sessions (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
@@ -13,6 +14,7 @@ create table public.screening_sessions (
   unique (id, owner_id)
 );
 create index screening_sessions_owner_created_idx on public.screening_sessions(owner_id, created_at desc);
+
 create table public.resume_screenings (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null,
@@ -36,6 +38,7 @@ create table public.resume_screenings (
   foreign key (session_id, owner_id) references public.screening_sessions(id, owner_id) on delete cascade
 );
 create index resume_screenings_session_status_idx on public.resume_screenings(session_id, status, created_at);
+
 create table public.screening_jobs (
   id uuid primary key default gen_random_uuid(),
   resume_id uuid not null references public.resume_screenings(id) on delete cascade,
@@ -50,6 +53,7 @@ create table public.screening_jobs (
   unique (resume_id, attempt)
 );
 create index screening_jobs_claim_idx on public.screening_jobs(status, available_at) where status = 'queued';
+
 alter table public.screening_sessions enable row level security;
 alter table public.resume_screenings enable row level security;
 alter table public.screening_jobs enable row level security;
@@ -57,6 +61,7 @@ revoke all on public.screening_sessions, public.resume_screenings, public.screen
 grant select, insert, update, delete on public.screening_sessions, public.resume_screenings to authenticated;
 -- Recruiter clients may observe queue state but cannot enqueue or claim work.
 grant select on public.screening_jobs to authenticated;
+
 create policy screening_sessions_owner_scope on public.screening_sessions for all to authenticated
   using (owner_id = (select auth.uid()) and (select public.is_approved_recruiter()))
   with check (owner_id = (select auth.uid()) and (select public.is_approved_recruiter()));
@@ -65,6 +70,7 @@ create policy resume_screenings_owner_scope on public.resume_screenings for all 
   with check (owner_id = (select auth.uid()) and (select public.is_approved_recruiter()));
 create policy screening_jobs_owner_read on public.screening_jobs for select to authenticated
   using (owner_id = (select auth.uid()) and (select public.is_approved_recruiter()));
+
 -- PostgreSQL-backed queue claim. Worker calls this via a server-only service-role client;
 -- row locking and leases recover jobs after worker crashes.
 create or replace function public.claim_screening_jobs(p_limit integer default 2, p_lease_seconds integer default 300)
@@ -95,6 +101,7 @@ end;
 $$;
 revoke all on function public.claim_screening_jobs(integer, integer) from public, anon, authenticated;
 grant execute on function public.claim_screening_jobs(integer, integer) to service_role;
+
 -- Compare-and-set retry: concurrent requests cannot enqueue a second retry.
 create or replace function public.retry_screening_job(p_resume_id uuid)
 returns boolean
@@ -123,11 +130,13 @@ end;
 $$;
 revoke all on function public.retry_screening_job(uuid) from public, anon, authenticated;
 grant execute on function public.retry_screening_job(uuid) to service_role;
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('private-resumes', 'private-resumes', false, 10485760,
   array['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
 on conflict (id) do update set public = false, file_size_limit = 10485760,
   allowed_mime_types = excluded.allowed_mime_types;
+
 create policy private_resumes_owner_insert on storage.objects for insert to authenticated
   with check (bucket_id = 'private-resumes'
     and (storage.foldername(name))[1] = (select auth.uid())::text
@@ -143,6 +152,7 @@ create policy private_resumes_owner_delete on storage.objects for delete to auth
     and (storage.foldername(name))[1] = (select auth.uid())::text
     and exists (select 1 from public.screening_sessions s
       where s.id::text = (storage.foldername(name))[2] and s.owner_id = (select auth.uid())));
+
 comment on table public.screening_sessions is 'Private recruiter-owned resume screening sessions. Job-match scores are distinct from developer evaluations.';
 comment on table public.resume_screenings is 'Per-file screening state and derived evaluation. Original file is stored in private-resumes.';
 comment on table public.screening_jobs is 'Durable worker queue with bounded attempts and expiring leases.';

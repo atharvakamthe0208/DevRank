@@ -3,6 +3,14 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app } from './app.js';
 import { env } from './config/env.js';
+import { getSupabaseServiceClient, isSupabaseServiceConfigured } from './config/supabase.js';
+import { startScreeningWorker } from './modules/screening/worker.js';
+
+if (isSupabaseServiceConfigured()) {
+  startScreeningWorker(getSupabaseServiceClient());
+} else {
+  console.warn('Resume screening worker is not running because the server-only service credential is not configured.');
+}
 
 type ListenerConfiguration = Pick<typeof env, 'API_PORT' | 'API_HOST' | 'NODE_ENV'>;
 type ListenerProcess = { reportError: (message: string) => void; exit: (code: number) => void };

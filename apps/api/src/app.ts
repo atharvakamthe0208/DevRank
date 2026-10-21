@@ -10,6 +10,7 @@ import { candidatesRouter } from './routes/candidates.js';
 import { githubRouter } from './routes/github.js';
 import { evaluationsRouter } from './routes/evaluations.js';
 import { insightsRouter } from './routes/insights.js';
+import { screeningsRouter } from './routes/screenings.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -21,7 +22,7 @@ app.use(cors({
     (env.WEB_ORIGINS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
   ) ? origin : false),
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
   optionsSuccessStatus: 204,
 }));
 app.use(express.json({ limit: '1mb' }));
@@ -29,6 +30,7 @@ app.use('/api', apiRouter);
 app.use('/api/candidates', candidatesRouter);
 app.use('/api/evaluations', evaluationsRouter);
 app.use('/api', insightsRouter);
+app.use('/api/screenings', screeningsRouter);
 app.use('/api/github', githubRouter);
 // Keep the original scaffold health path available while clients move to /api/health.
 app.get('/health', healthController);

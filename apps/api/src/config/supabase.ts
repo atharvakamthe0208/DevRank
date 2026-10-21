@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { env } from './env.js';
+import { HttpError } from '../middleware/http-error.js';
 
 type SupabaseConfiguration = {
   url?: string;
@@ -40,6 +41,20 @@ export function getSupabaseClient(accessToken?: string): SupabaseClient {
   if (accessToken) return makeClient(config.url, config.anonKey, accessToken);
   anonymousClient ??= makeClient(config.url, config.anonKey);
   return anonymousClient;
+}
+
+/** Server-only client for the screening worker. Never import this into the web workspace. */
+export function getSupabaseServiceClient(): SupabaseClient {
+  if (!env.SUPABASE_URL || env.SUPABASE_URL.includes('your-project') || !env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY.startsWith('your-')) {
+    throw new HttpError(503, 'SCREENING_WORKER_NOT_CONFIGURED', 'Background resume processing requires SUPABASE_SERVICE_ROLE_KEY in apps/api/.env.');
+  }
+  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+export function isSupabaseServiceConfigured(): boolean {
+  return Boolean(env.SUPABASE_URL && !env.SUPABASE_URL.includes('your-project') && env.SUPABASE_SERVICE_ROLE_KEY && !env.SUPABASE_SERVICE_ROLE_KEY.startsWith('your-'));
 }
 
 /** Exposed for configuration tests without creating a client or making a network request. */
