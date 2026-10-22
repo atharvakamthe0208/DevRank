@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { aiAnalysisResponseSchema, persistedEvaluationReadSchema, persistedEvaluationSchema, type AiAnalysisResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { parseCandidateApiResponse } from '../candidates/candidate-response-validation';
 import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
+import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 import './ai-analysis-report.css';
 
 type CandidateSummary = { id: string; name: string };
 type PageState = { status: 'loading' } | { status: 'error'; message: string } | {
   status: 'saved'; evaluation: PersistedEvaluationRead; candidate: CandidateSummary;
-  response?: AiAnalysisResponse; analysisStatus: 'loading' | 'ready' | 'error' | 'unavailable'; analysisMessage?: string;
+  response?: AiAnalysisResponse; analysisStatus: 'loading' | 'ready' | 'error' | 'unavailable'; analysisMessage?: string; analysisRetryAt?: number;
 };
 
 function messageFor(error: unknown) {
@@ -25,6 +26,7 @@ export function AiAnalysisReportPage() {
   const { session } = useAuth();
   const [state, setState] = useState<PageState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const retryRequestRef = useRef(false);
   const initialResponse = useMemo(() => {
     const navigationResponse = aiAnalysisResponseSchema.safeParse((location.state as { analysis?: unknown } | null)?.analysis);
     return navigationResponse.success && navigationResponse.data.evaluation.id === evaluationId ? navigationResponse.data : undefined;
@@ -58,7 +60,7 @@ export function AiAnalysisReportPage() {
         setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name }, response, analysisStatus: 'ready' });
       } catch (error) {
         if (signal?.aborted) return;
-        setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name }, analysisStatus: 'error', analysisMessage: messageFor(error) });
+        setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name }, analysisStatus: 'error', analysisMessage: messageFor(error), analysisRetryAt: error instanceof ApiRequestError && error.retryAfterSeconds ? Date.now() + error.retryAfterSeconds * 1000 : undefined });
       }
     } catch (error) {
       if (signal?.aborted) return;
@@ -67,17 +69,20 @@ export function AiAnalysisReportPage() {
   }, [session?.access_token, evaluationId, initialResponse]);
 
   const retryAnalysis = useCallback(async () => {
-    if (state.status !== 'saved' || !session?.access_token) return;
+    if (state.status !== 'saved' || !session?.access_token || retryRequestRef.current || (state.analysisRetryAt && state.analysisRetryAt > Date.now())) return;
     const current = persistedEvaluationSchema.safeParse(state.evaluation);
     if (!current.success) return;
     const savedState = state;
+    retryRequestRef.current = true;
     setState({ ...savedState, response: undefined, analysisStatus: 'loading', analysisMessage: undefined });
     try {
       const response = aiAnalysisResponseSchema.parse(await apiRequest<unknown>(`/evaluations/${evaluationId}/ai-analysis`, { method: 'POST', body: JSON.stringify({}) }, session.access_token));
       if (response.evaluation.id !== evaluationId) throw new Error('The analysis response did not match this evaluation.');
       setState({ ...savedState, response, analysisStatus: 'ready', analysisMessage: undefined });
     } catch (error) {
-      setState({ ...savedState, response: undefined, analysisStatus: 'error', analysisMessage: messageFor(error) });
+      setState({ ...savedState, response: undefined, analysisStatus: 'error', analysisMessage: messageFor(error), analysisRetryAt: error instanceof ApiRequestError && error.retryAfterSeconds ? Date.now() + error.retryAfterSeconds * 1000 : undefined });
+    } finally {
+      retryRequestRef.current = false;
     }
   }, [state, session?.access_token, evaluationId]);
 
@@ -90,11 +95,11 @@ export function AiAnalysisReportPage() {
   if (!currentEvaluation.success && state.evaluation.result.schemaVersion === '4.0.0') return <main className="ai-report-page"><Link className="ai-report-back" to={`/evaluations/${evaluationId}`}>← Back to saved evaluation</Link><header className="ai-report-header"><div><span className="dashboard-kicker">EVALUATION STATUS</span><h1>{state.candidate.name}</h1><p>{state.evaluation.targetRole.replaceAll('_', ' ')} · Saved {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(state.evaluation.createdAt))}</p></div><span className="ai-report-status report-incomplete">{state.evaluation.status.replaceAll('_', ' ')}</span></header><section className="ai-report-empty" role="status"><h2>Evaluation result unavailable</h2><p>This saved evaluation is {state.evaluation.status.replaceAll('_', ' ')} and has no completed score report.</p><Link className="dashboard-text-link" to={`/evaluations/${evaluationId}`}>Open evaluation status</Link></section></main>;
   if (!currentEvaluation.success) return <main className="ai-report-page"><Link className="ai-report-back" to={`/evaluations/${evaluationId}`}>← Back to saved evaluation</Link><header className="ai-report-header"><div><span className="dashboard-kicker">HISTORICAL EVALUATION</span><h1>{state.candidate.name}</h1><p>{state.evaluation.targetRole.replaceAll('_', ' ')} · Saved {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(state.evaluation.createdAt))}</p></div><span className={`ai-report-status${state.evaluation.status === 'completed' ? ' report-complete' : ' report-incomplete'}`}>{state.evaluation.status.replaceAll('_', ' ')}</span></header><section className="ai-report-score-panel" aria-label="Historical saved evaluation"><div><span className="dashboard-kicker">ORIGINAL SAVED RESULT · {state.evaluation.result.scoringVersion ?? state.evaluation.result.schemaVersion}</span><strong>{state.evaluation.result.overallScore === undefined ? 'Score not calculated' : `${state.evaluation.result.overallScore} / 100`}</strong><small>Historical values are shown in their original scoring format.</small></div></section><section className="ai-report-empty" role="status"><h2>AI explanation unavailable</h2><p>{state.analysisMessage}</p><Link className="dashboard-text-link" to={`/evaluations/${evaluationId}`}>Open original evaluation and category results</Link></section></main>;
 
-  return <AiAnalysisReportView response={state.response} evaluation={currentEvaluation.data} candidateName={state.candidate.name} analysisLoading={state.analysisStatus === 'loading'} analysisError={state.analysisStatus === 'error' ? state.analysisMessage : undefined} onRetry={() => void retryAnalysis()}/>;
+  return <AiAnalysisReportView response={state.response} evaluation={currentEvaluation.data} candidateName={state.candidate.name} analysisLoading={state.analysisStatus === 'loading'} analysisError={state.analysisStatus === 'error' ? state.analysisMessage : undefined} analysisRetryAt={state.analysisRetryAt} onRetry={() => void retryAnalysis()}/>;
 }
 
-export function AiAnalysisReportView({ response, evaluation: evaluationProp, candidateName, analysisLoading = false, analysisError, onRetry }: {
-  response?: AiAnalysisResponse; evaluation?: PersistedEvaluation; candidateName: string; analysisLoading?: boolean; analysisError?: string; onRetry?: () => void;
+export function AiAnalysisReportView({ response, evaluation: evaluationProp, candidateName, analysisLoading = false, analysisError, analysisRetryAt, onRetry }: {
+  response?: AiAnalysisResponse; evaluation?: PersistedEvaluation; candidateName: string; analysisLoading?: boolean; analysisError?: string; analysisRetryAt?: number; onRetry?: () => void;
 }) {
   const evaluation = response?.evaluation ?? evaluationProp;
   if (!evaluation) return null;
@@ -114,7 +119,7 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
     <header className="ai-report-header"><div><span className="dashboard-kicker">DETAILED EVALUATION REPORT</span><h1>{candidateName}</h1><p>{evaluation.targetRole.replaceAll('_', ' ')} · Saved {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(evaluation.createdAt))}</p></div><span className={`ai-report-status${evaluation.status === 'completed' ? ' report-complete' : ' report-incomplete'}`}>{evaluation.status === 'completed' ? 'Completed' : 'Insufficient evidence'}</span></header>
     <section className="ai-report-score-panel" aria-label="Saved deterministic evaluation score"><div><span className="dashboard-kicker">SAVED EVALUATION · {result.scoringVersion ?? result.schemaVersion}</span><strong>{result.overallScore === undefined ? 'Score not calculated' : `${result.overallScore} / 100`}</strong><small>{result.overallScore === undefined ? 'Insufficient evidence; no overall score was calculated.' : 'Deterministic score from the saved evaluation.'}</small></div><p>AI text below is explanatory only. It does not calculate or change scores.</p><Link className="dashboard-text-link" to={`/evaluations/${evaluation.id}`}>View six category results</Link></section>
     {analysisLoading && <section className="ai-report-state" role="status"><p>Requesting an AI explanation for this saved evaluation. The saved score above is already available.</p></section>}
-    {analysisError && <section className="ai-report-ai-state" role="alert"><p>{analysisError} The saved evaluation above is unchanged.</p><button type="button" className="dashboard-secondary-button" onClick={onRetry}>Try again</button></section>}
+    {analysisError && <section className="ai-report-ai-state" role="alert"><p>{analysisError} The saved evaluation above is unchanged.</p><AiAnalysisRetryButton className="dashboard-secondary-button" onRetry={onRetry} pending={analysisLoading} retryAt={analysisRetryAt}/></section>}
     {emptyMessage || !analysis ? <section className="ai-report-empty" role="status"><h2>AI explanation unavailable</h2><p>{emptyMessage ?? (analysisLoading ? 'The explanation is being prepared.' : analysisError ? 'The explanation could not be loaded.' : 'No explanation is available for this evaluation.')}</p>{!analysisLoading && !analysisError && <p>The saved deterministic evaluation remains available. Missing evidence is not treated as a negative score.</p>}</section> : <>
       <section className="ai-report-section"><div className="ai-report-section-heading"><span className="dashboard-kicker">AI SUMMARY</span><h2>Summary</h2></div><p className="ai-report-lead">{analysis.summary}</p><ReferenceList references={summaryReferences}/></section>
       <section className="ai-report-section"><div className="ai-report-section-heading"><span className="dashboard-kicker">ROLE CONTEXT</span><h2>Role relevance · {evaluation.targetRole.replaceAll('_', ' ')}</h2></div><p>{analysis.roleRelevance}</p><ReferenceList references={roleReferences}/></section>

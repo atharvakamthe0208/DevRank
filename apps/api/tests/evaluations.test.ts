@@ -179,5 +179,13 @@ describe('evaluation API routes', () => {
     const providerFailure = await fetch(`${origin}/api/evaluations/${evaluationId}/ai-analysis`, { method: 'POST' });
     expect(providerFailure.status).toBe(503);
     expect(await providerFailure.json()).toMatchObject({ error: { code: 'AI_UNAVAILABLE' } });
+    vi.mocked(repository.get).mockResolvedValueOnce(completeEvaluation);
+    aiService.analyze.mockRejectedValueOnce(new HttpError(503, 'AI_RATE_LIMITED', 'The AI provider is rate limiting requests. Wait before trying again.', { retryAfterSeconds: 20 }));
+    const rateLimited = await fetch(`${origin}/api/evaluations/${evaluationId}/ai-analysis`, { method: 'POST' });
+    expect(rateLimited.status).toBe(503);
+    expect(rateLimited.headers.get('retry-after')).toBe('20');
+    expect(await rateLimited.json()).toMatchObject({ error: { code: 'AI_RATE_LIMITED', details: { retryAfterSeconds: 20 } } });
+    expect(completeEvaluation.result.overallScore).toBe(80);
+    expect(repository.get).toHaveBeenLastCalledWith(auth, evaluationId);
   });
 });

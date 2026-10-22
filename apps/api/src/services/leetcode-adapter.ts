@@ -28,6 +28,10 @@ const profileResponseSchema = z.object({
   reputation: z.number().finite().optional(),
   avatar: z.string().optional(),
 }).passthrough();
+const providerGraphqlErrorSchema = z.object({
+  errors: z.array(z.object({ message: z.string().optional() }).passthrough()).min(1),
+  data: z.object({ matchedUser: z.unknown().nullable().optional() }).passthrough().optional(),
+}).passthrough();
 
 export type NormalizedLeetCodeProfile = Omit<LeetCodeSyncResponse, 'id' | 'candidateId' | 'availability' | 'syncedAt'>;
 
@@ -72,6 +76,20 @@ function providerError(error: unknown): HttpError {
     return new HttpError(504, 'LEETCODE_TIMEOUT', 'LeetCode statistics provider did not respond in time');
   }
   return new HttpError(503, 'LEETCODE_PROVIDER_UNAVAILABLE', 'LeetCode statistics provider could not be reached. Check that the configured alfa-leetcode-api service is running and reachable, then retry.');
+}
+
+function profileProviderError(input: unknown): HttpError | undefined {
+  const response = providerGraphqlErrorSchema.safeParse(input);
+  if (!response.success) return undefined;
+
+  const messages = response.data.errors.flatMap((error) => error.message ? [error.message] : []);
+  const clearlyNotFound = response.data.data?.matchedUser === null
+    && messages.some((message) => /(?:user|profile).*(?:not found|does not exist|doesn't exist)|(?:not found|does not exist|doesn't exist).*(?:user|profile)/i.test(message));
+  if (clearlyNotFound) {
+    return new HttpError(404, 'LEETCODE_USER_NOT_FOUND', 'LeetCode user was not found');
+  }
+
+  return new HttpError(502, 'LEETCODE_PROVIDER_ERROR', 'LeetCode statistics provider could not complete the request');
 }
 
 export function createLeetCodeAdapter(
@@ -119,6 +137,8 @@ export function createLeetCodeAdapter(
       ]);
 
       const profile = profileResponseSchema.safeParse(profileBody);
+      const profileError = profileProviderError(profileBody);
+      if (profileError) throw profileError;
       if (!profile.success || (profile.data.username && profile.data.username.toLowerCase() !== username.toLowerCase())) {
         throw new HttpError(502, 'LEETCODE_INVALID_RESPONSE', 'LeetCode statistics provider returned an unsupported profile response');
       }

@@ -23,6 +23,7 @@ app.use(cors({
   ) ? origin : false),
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
+  exposedHeaders: ['Retry-After'],
   optionsSuccessStatus: 204,
 }));
 app.use(express.json({ limit: '1mb' }));

@@ -10,6 +10,12 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, _request, resp
   }
 
   if (error instanceof HttpError) {
+    const retryAfterSeconds = error.details && typeof error.details === 'object'
+      ? (error.details as { retryAfterSeconds?: unknown }).retryAfterSeconds
+      : undefined;
+    if (error.code === 'AI_RATE_LIMITED' && typeof retryAfterSeconds === 'number' && Number.isInteger(retryAfterSeconds) && retryAfterSeconds > 0) {
+      response.setHeader('Retry-After', String(retryAfterSeconds));
+    }
     response.status(error.statusCode).json(apiErrorSchema.parse({
       error: { code: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) },
     }));

@@ -83,4 +83,11 @@ describe('AI analysis presentation helpers', () => {
     expect(aiAnalysisErrorMessage(new ApiRequestError('authorization', 403))).toContain('not approved');
     expect(aiAnalysisErrorMessage(new Error('raw provider secret'))).not.toContain('raw provider secret');
   });
+
+  it('explains rate limiting and honors the API retry delay without showing raw provider text', () => {
+    expect(aiAnalysisErrorMessage(new ApiRequestError('raw provider error', 503, 'AI_RATE_LIMITED', undefined, 17)))
+      .toBe('The AI provider is rate limiting requests. Please wait 17 seconds before trying again.');
+    expect(aiAnalysisErrorMessage(new ApiRequestError('raw provider error', 503, 'AI_RATE_LIMITED')))
+      .toContain('Please wait a little');
+  });
 });

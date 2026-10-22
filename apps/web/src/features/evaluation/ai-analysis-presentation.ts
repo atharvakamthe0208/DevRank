@@ -5,6 +5,10 @@ import { formatEvidenceDate, readableEvidenceLabel, readableProvenance } from '.
 export function aiAnalysisErrorMessage(error: unknown): string {
   if (error instanceof ApiRequestError) {
     if (error.code === 'AI_NOT_CONFIGURED') return 'AI analysis is not configured on the API yet. Ask the project administrator to configure its provider key.';
+    if (error.code === 'AI_RATE_LIMITED') return error.retryAfterSeconds
+      ? `The AI provider is rate limiting requests. Please wait ${error.retryAfterSeconds} second${error.retryAfterSeconds === 1 ? '' : 's'} before trying again.`
+      : 'The AI provider is rate limiting requests. Please wait a little before trying again.';
+    if (error.code === 'AI_UNAVAILABLE') return 'AI analysis is temporarily unavailable. Your saved evaluation score is unchanged. Please try again later.';
     if (error.code === 'AI_INVALID_RESPONSE') return 'The AI service returned an analysis that could not be verified. Try again.';
     if (error.status === 401) return 'Your session expired. Sign in again to continue.';
     if (error.status === 403) return 'Recruiter access is not approved for this workspace.';
