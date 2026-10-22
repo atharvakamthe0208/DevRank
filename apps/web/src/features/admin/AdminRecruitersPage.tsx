@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import devrankMark from '../../assets/devrank-mark.svg';
+import { AnimatedMetric } from '../../components/metrics/KpiCards';
 import { useAuth } from '../auth/AuthProvider';
 import { apiRequest } from '../../lib/api/client';
 import {
   filterRecruiterApplications,
+  searchRecruiterApplications,
   summarizeRecruiterApplications,
   type RecruiterApplication,
   type RecruiterFilter,
 } from './recruiter-application-presentation';
 import { RecruiterApplicationsList } from './RecruiterApplicationsList';
+import './admin-recruiters-page.css';
 
 type RecruiterDecision = { row: RecruiterApplication; decision: 'approved' | 'rejected' };
 
@@ -16,6 +20,7 @@ export function AdminRecruitersPage() {
   const { session, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<RecruiterFilter>('pending');
+  const [search, setSearch] = useState('');
   const [rows, setRows] = useState<RecruiterApplication[]>([]);
   const [busy, setBusy] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -92,13 +97,13 @@ export function AdminRecruitersPage() {
   }
 
   const counts = summarizeRecruiterApplications(rows);
-  const visibleRows = filterRecruiterApplications(rows, filter);
+  const visibleRows = searchRecruiterApplications(filterRecruiterApplications(rows, filter), search);
   const pendingName = pendingDecision?.row.display_name || pendingDecision?.row.email || 'this recruiter';
 
   return <div className="admin-page">
     <header className="admin-topbar">
-      <Link to="/admin/recruiters" className="brand"><span className="brand-mark">d.</span><span>devrank<span className="brand-period">.</span></span></Link>
-      <div className="admin-account"><span>{profile?.display_name || 'Administrator'}</span><button className="logout-button" type="button" onClick={() => void logout()}>Log out</button></div>
+      <Link to="/admin/recruiters" className="brand admin-brand"><img src={devrankMark} alt=""/><span>devrank<span className="brand-period">.</span></span></Link>
+      <div className="admin-account"><span>{profile?.display_name || 'Administrator'}</span><span className="admin-header-badge">Administrator</span><button className="logout-button" type="button" onClick={() => void logout()}>Log out</button></div>
     </header>
     <main className="admin-content">
       <div className="admin-heading">
@@ -107,9 +112,10 @@ export function AdminRecruitersPage() {
       </div>
 
       <section className="admin-summary" aria-label="Recruiter application counts" aria-busy={busy}>
-        {(['pending', 'approved', 'rejected'] as const).map((status) => <article className={`admin-summary-card status-${status}`} key={status}>
-          <span>{status === 'pending' ? 'Pending recruiters' : status === 'approved' ? 'Approved recruiters' : 'Rejected recruiters'}</span>
-          <strong>{hasLoaded ? counts[status] : '—'}</strong>
+        {(['pending', 'approved', 'rejected'] as const).map((status, index) => <article className={'admin-summary-card status-' + status} key={status} style={{ '--admin-card-index': index } as CSSProperties}>
+          <span className="admin-summary-icon" aria-hidden="true">{status === 'pending' ? '◷' : status === 'approved' ? '✓' : '×'}</span>
+          <span className="admin-summary-label">{status === 'pending' ? 'Pending recruiters' : status === 'approved' ? 'Approved recruiters' : 'Rejected recruiters'}</span>
+          <strong>{hasLoaded ? <AnimatedMetric value={counts[status]}/> : '—'}</strong>
         </article>)}
       </section>
 
@@ -117,6 +123,7 @@ export function AdminRecruitersPage() {
         <div className="admin-panel-head">
           <div><h2 id="recruiter-accounts-heading">Recruiter accounts</h2><p>Approval decisions are recorded in the audit log.</p></div>
           <div className="admin-panel-controls">
+            <label className="admin-search"><span aria-hidden="true">⌕</span><span className="sr-only">Search recruiter name or email</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search recruiters…"/></label>
             <label className="admin-filter">Status <select value={filter} onChange={(event) => setFilter(event.target.value as RecruiterFilter)}>
               <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="all">All statuses</option>
             </select></label>
@@ -125,7 +132,7 @@ export function AdminRecruitersPage() {
         </div>
         {notice && <p className="form-feedback" role="status">{notice}</p>}
         {logoutError && <p className="form-feedback form-feedback-error" role="alert">{logoutError}</p>}
-        <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
+        <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} searchQuery={search} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
       </section>
 
       <p className="admin-security-note"><span aria-hidden="true">ⓘ</span> Only project-owner-provisioned administrators can review these applications. Recruiter accounts cannot grant themselves administrator access.</p>

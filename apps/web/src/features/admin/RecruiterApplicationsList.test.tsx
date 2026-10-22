@@ -20,6 +20,8 @@ describe('admin recruiter application list states', () => {
   it('shows an empty state for the selected filter', () => {
     const html = renderToStaticMarkup(createElement(RecruiterApplicationsList, { ...baseProps, rows: [] }));
     expect(html).toContain('No pending applications to show');
+    const searchHtml = renderToStaticMarkup(createElement(RecruiterApplicationsList, { ...baseProps, rows: [], searchQuery: 'taylor' }));
+    expect(searchHtml).toContain('No recruiters match your search.');
   });
 
   it('shows a retry action for failures', () => {
@@ -32,6 +34,7 @@ describe('admin recruiter application list states', () => {
   it('renders successful status data with explicit decision labels and registered date', () => {
     const html = renderToStaticMarkup(createElement(RecruiterApplicationsList, baseProps));
     expect(html).toContain('Taylor Recruiter');
+    expect(html).toContain('TR');
     expect(html).toContain('recruiter@example.com');
     expect(html).toContain('pending');
     expect(html).toContain('Approve');
