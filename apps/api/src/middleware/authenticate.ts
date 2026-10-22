@@ -22,6 +22,15 @@ function providerStatus(error: unknown): number | undefined {
   return typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599 ? status : undefined;
 }
 
+const profileDetailsColumns = ['phone_number', 'company_name', 'job_title', 'company_website', 'location_city', 'location_country'] as const;
+
+/** These PostgREST/Postgres codes mean the additive recruiter-details migration is absent or stale. */
+export function isMissingRecruiterProfileDetailsSchema(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('code' in error)) return false;
+  const code = error.code;
+  return code === '42703' || code === 'PGRST204';
+}
+
 export function createSupabaseTokenVerifier(clientFactory: SupabaseClientFactory = getSupabaseClient): TokenVerifier {
   return async (token) => {
     let client: ReturnType<SupabaseClientFactory>;
@@ -53,11 +62,26 @@ export function createSupabaseTokenVerifier(clientFactory: SupabaseClientFactory
     try {
       const result = await client
         .from('profiles')
-        .select('id, display_name, role, approval_status')
+        .select('id, display_name, phone_number, company_name, job_title, company_website, location_city, location_country, role, approval_status')
         .eq('id', user.id)
         .maybeSingle();
-      if (result.error) throw new VerificationUnavailableError('profile_lookup', providerStatus(result.error));
-      profile = result.data as VerifiedIdentity['profile'];
+      if (result.error && isMissingRecruiterProfileDetailsSchema(result.error)) {
+        // Keep login/access verification independent from the optional profile-details migration.
+        // Do not mask unrelated permission, connectivity, or database failures.
+        const base = await client.from('profiles')
+          .select('id, display_name, role, approval_status')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (base.error) throw new VerificationUnavailableError('profile_lookup', providerStatus(base.error));
+        profile = base.data ? {
+          ...base.data,
+          ...Object.fromEntries(profileDetailsColumns.map((column) => [column, null])),
+        } as VerifiedIdentity['profile'] : null;
+      } else if (result.error) {
+        throw new VerificationUnavailableError('profile_lookup', providerStatus(result.error));
+      } else {
+        profile = result.data as VerifiedIdentity['profile'];
+      }
     } catch (cause) {
       if (cause instanceof VerificationUnavailableError) throw cause;
       throw new VerificationUnavailableError('profile_lookup');

@@ -50,11 +50,11 @@ describe('apiRequest', () => {
   it('parses the confirmed admin profile from /auth/me so the admin route guard receives admin state', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       user: { id: 'admin-1', email: 'admin@example.com' },
-      profile: { id: 'admin-1', display_name: 'Admin', role: 'admin', approval_status: 'approved' },
+      profile: { id: 'admin-1', display_name: 'Admin', phone_number: null, company_name: null, job_title: null, company_website: null, location_city: null, location_country: null, role: 'admin', approval_status: 'approved' },
       emailConfirmed: true,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
 
-    const identity = await apiRequest<{ user: { id: string }; profile: { id: string; display_name: string | null; role: 'recruiter' | 'admin'; approval_status: 'pending' | 'approved' | 'rejected' | 'suspended' } | null; emailConfirmed: boolean }>(
+    const identity = await apiRequest<{ user: { id: string }; profile: { id: string; display_name: string | null; phone_number: string | null; company_name: string | null; job_title: string | null; company_website: string | null; location_city: string | null; location_country: string | null; role: 'recruiter' | 'admin'; approval_status: 'pending' | 'approved' | 'rejected' | 'suspended' } | null; emailConfirmed: boolean }>(
       '/auth/me', undefined, 'test-access-token',
     );
 

@@ -45,25 +45,21 @@ export function screeningDatabaseError(operation: string, error: unknown): HttpE
   return new HttpError(503, 'SCREENING_DATABASE_ERROR', 'The screening record could not be saved. Check the database migration and try again.');
 }
 
-const rankingCriteria = 'Descending deterministic resume job-match score from the saved screening evaluation. Equal scores share a rank. Unscored and failed resumes are not ranked. Ranking supports recruiter review and is not a hiring decision.';
+const rankingCriteria = 'Candidates with saved validated or preliminary numeric scores are ordered from highest to lowest. Equal scores use candidate name, filename, and resume ID as deterministic tie-breakers. Display ranks show position and do not imply a preliminary score is validated. Candidates without a score follow the ranked list.';
 
 function buildScreeningRanking(details: ReturnType<typeof screeningDetailsResponseSchema.parse>) {
-  const rankedCandidates = details.resumes.filter((resume) => resume.status === 'completed' && resume.evaluation?.score !== undefined)
-    .sort((a, b) => b.evaluation!.score! - a.evaluation!.score! || a.filename.localeCompare(b.filename));
-  let rank = 0;
-  let previousScore: number | undefined;
-  const ranked = rankedCandidates.map((resume, index) => {
-    const score = resume.evaluation!.score!;
-    if (score !== previousScore) rank = index + 1;
-    previousScore = score;
-    return { resumeId: resume.id, rank, score };
-  });
+  const scoreFor = (resume: typeof details.resumes[number]) => resume.evaluation?.score ?? resume.preliminaryEvaluation?.score;
+  const rankedCandidates = details.resumes.filter((resume) => scoreFor(resume) !== undefined)
+    .sort((a, b) => scoreFor(b)! - scoreFor(a)!
+      || (a.candidate?.name ?? '').localeCompare(b.candidate?.name ?? '', undefined, { sensitivity: 'base' })
+      || a.filename.localeCompare(b.filename, undefined, { sensitivity: 'base' })
+      || a.id.localeCompare(b.id));
+  const ranked = rankedCandidates.map((resume, index) => ({ resumeId: resume.id, rank: index + 1, score: scoreFor(resume)! }));
   const rankedIds = new Set(ranked.map((item) => item.resumeId));
   const unranked = details.resumes.filter((resume) => !rankedIds.has(resume.id)).map((resume) => ({
     resumeId: resume.id, filename: resume.filename, status: resume.status,
     reason: resume.status !== 'completed' ? (resume.error ?? 'Processing did not complete.')
-      : resume.preliminaryEvaluation ? 'A preliminary document match is available but is not included in validated ranking.'
-        : 'No deterministic overall score is available.',
+      : 'No validated or preliminary numeric score is available.',
   }));
   return { ranked, unranked, rankingCriteria };
 }

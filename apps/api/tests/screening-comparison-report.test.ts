@@ -8,6 +8,7 @@ const ownerId = '1d4b1d45-e136-4f50-a46e-8ef29735ec26';
 const ids = ['a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d', 'b8e8c2c8-72ea-49ca-ae8e-42c9c63ce94e', 'c9f9d3d9-83fb-4adb-bf9f-53dad74dfa5f'];
 const unscoredId = 'd0d0d0d0-0000-4000-8000-000000000000';
 const higherScoreId = 'e1e1e1e1-1111-4111-8111-111111111111';
+const noScoreId = 'f2f2f2f2-2222-4222-8222-222222222222';
 const preliminary = { rubricVersion: 'resume-document-match-1.0.0' as const, score: 62, evidenceCoverage: 40, criteria: [{
   id: 'req-tech', categoryId: 'required_technical_skills' as const, description: 'TypeScript and API design', importance: 'required' as const,
   status: 'supported' as const, matchedTerms: ['typescript'], matchPercentage: 50, evidenceExcerpt: 'Built TypeScript services',
@@ -29,6 +30,7 @@ const dbRows = [
   { id: ids[2], original_filename: 'failed.pdf', status: 'failed', extracted_data: null, evaluation: null, safe_error_message: 'Could not extract text.' },
   { id: unscoredId, original_filename: 'partial.pdf', status: 'completed', extracted_data: { candidate: { name: 'Partial' } }, evaluation: null, preliminary_evaluation: preliminary, safe_error_message: null },
   { id: higherScoreId, original_filename: 'higher.pdf', status: 'completed', extracted_data: { candidate: { name: 'Higher' } }, evaluation: score(91), safe_error_message: null },
+  { id: noScoreId, original_filename: 'no-score.pdf', status: 'completed', extracted_data: { candidate: { name: 'No Score' } }, evaluation: null, preliminary_evaluation: null, safe_error_message: null },
 ];
 const clientFactory = vi.fn(() => ({
   from: (table: string) => ({
@@ -59,7 +61,7 @@ describe('screening comparison and report endpoints', () => {
   });
 
   it('returns all 20 persisted resumes without truncating the results query', async () => {
-    const added = Array.from({ length: 15 }, (_, index) => ({
+    const added = Array.from({ length: 14 }, (_, index) => ({
       id: `f0000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, '0')}`,
       original_filename: `resume-${index}.pdf`, status: 'failed', extracted_data: null, evaluation: null, safe_error_message: 'Could not process this resume.',
     }));
@@ -73,30 +75,36 @@ describe('screening comparison and report endpoints', () => {
     }
   });
 
-  it('compares only selected completed candidates and assigns tied ranks from saved scores', async () => {
+  it('compares selected completed candidates and ranks validated and preliminary saved scores in sequence', async () => {
     const result = await invoke('compare', ids.slice(0, 2)) as { ranking: { ranked: Array<{ resumeId: string; rank: number; score: number }>; unranked: Array<{ resumeId: string; status: string; reason: string }> } };
-    expect(result.ranking.ranked).toEqual([{ resumeId: higherScoreId, rank: 1, score: 91 }, { resumeId: ids[0], rank: 2, score: 80 }, { resumeId: ids[1], rank: 2, score: 80 }]);
+    expect(result.ranking.ranked).toEqual([
+      { resumeId: higherScoreId, rank: 1, score: 91 },
+      { resumeId: ids[0], rank: 2, score: 80 },
+      { resumeId: ids[1], rank: 3, score: 80 },
+      { resumeId: unscoredId, rank: 4, score: 62 },
+    ]);
     expect(result.ranking.unranked).toContainEqual(expect.objectContaining({ resumeId: ids[2], status: 'failed' }));
-    expect(result.ranking.unranked).toContainEqual(expect.objectContaining({ resumeId: unscoredId, status: 'completed', reason: 'A preliminary document match is available but is not included in validated ranking.' }));
+    expect(result.ranking.unranked).toContainEqual(expect.objectContaining({ resumeId: noScoreId, status: 'completed' }));
   });
 
   it('rejects fewer than two selected resumes and IDs outside this screening', async () => {
     await expect(invoke('compare', [ids[0]])).rejects.toMatchObject({ code: 'INVALID_COMPARISON_SELECTION', statusCode: 400 });
-    await expect(invoke('compare', [ids[0], 'f2f2f2f2-2222-4222-8222-222222222222'])).rejects.toMatchObject({ code: 'SCREENING_RESUME_NOT_FOUND', statusCode: 404 });
+    await expect(invoke('compare', [ids[0], 'a2f2f2f2-2222-4222-8222-222222222222'])).rejects.toMatchObject({ code: 'SCREENING_RESUME_NOT_FOUND', statusCode: 404 });
     await expect(invoke('compare', [ids[0], ids[2]])).rejects.toMatchObject({ code: 'SCREENING_RESUME_NOT_COMPLETED', statusCode: 400 });
   });
 
   it('returns a report snapshot from persisted screening data and selected IDs', async () => {
     const result = await invoke('report', ids.slice(0, 2)) as { details: { resumes: unknown[] }; selectedResumeIds: string[]; generatedAt: string; ranking: { ranked: unknown[] } };
     expect(result.selectedResumeIds).toEqual(ids.slice(0, 2));
-    expect(result.details.resumes).toHaveLength(5);
-    expect(result.ranking.ranked).toHaveLength(3);
+    expect(result.details.resumes).toHaveLength(6);
+    expect(result.ranking.ranked).toHaveLength(4);
     expect(Number.isNaN(Date.parse(result.generatedAt))).toBe(false);
   });
 
   it('retrieves ranking for the full saved screening before candidates are selected', async () => {
-    const result = await invoke('ranking') as { ranking: { ranked: Array<{ resumeId: string; rank: number }> ; unranked: Array<{ resumeId: string }> } };
+    const result = await invoke('ranking') as { ranking: { ranked: Array<{ resumeId: string; rank: number; score: number }> ; unranked: Array<{ resumeId: string }> } };
     expect(result.ranking.ranked[0]).toEqual({ resumeId: higherScoreId, rank: 1, score: 91 });
-    expect(result.ranking.unranked.map(({ resumeId }) => resumeId)).toEqual([ids[2], unscoredId]);
+    expect(result.ranking.ranked).toContainEqual({ resumeId: unscoredId, rank: 4, score: 62 });
+    expect(result.ranking.unranked.map(({ resumeId }) => resumeId)).toEqual([ids[2], noScoreId]);
   });
 });

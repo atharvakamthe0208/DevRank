@@ -3,9 +3,10 @@ import { screeningComparisonResponseSchema, screeningDetailsResponseSchema, scre
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { screeningReportCsv } from './report-export';
-import { filterAndSortScreeningResumes, scoreBand, scorePresentation } from './ranking-table';
+import { filterAndSortScreeningResumes, scoreBand, scorePresentation, screeningStatusLabel } from './ranking-table';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
-import { screeningProgress, screeningProgressLabel } from './screening-progress';
+import { ScreeningResultList } from './ScreeningResultList';
+import { screeningProgressLabel } from './screening-progress';
 import './resume-screening-page.css';
 
 const MAX_FILES = 20;
@@ -366,23 +367,8 @@ export function ResumeScreeningPage() {
         </div>
         {submitted ? <>
           <p className="screening-session-status" role="status">Session {submitted.sessionId} · {details?.status ?? submitted.status}</p>
-          {details?.status === 'processing' && <div className="screening-processing" role="status"><span>{screeningProgressLabel(details.resumes)}</span>{currentProgress && currentProgress.total > 0 && <div className="screening-processing-track" role="progressbar" aria-label="Resumes evaluated or failed" aria-valuemin={0} aria-valuemax={currentProgress.total} aria-valuenow={currentProgress.resolved}><span style={{ width: `${currentProgress.percent}%` }}/></div>}</div>}
-          <ul className="screening-file-list screening-status-list">
-            {(details?.resumes ?? submitted.resumes.map((resume) => ({ ...resume, candidate: null, evaluation: null, error: undefined }))).map((resume) => <li key={resume.id}>
-              <span className="screening-file-icon" aria-hidden="true">CV</span>
-              <span className="screening-file-copy"><strong>{resume.filename}</strong>
-                <small>Server status: {resume.status}{resume.error ? ` · ${resume.error}` : ''}</small>
-                {resume.status === 'queued' || resume.status === 'uploaded' ? <small>Pending evaluation</small> : resume.status === 'processing' ? <small>Evaluation in progress</small> : null}
-                {resume.candidate?.name && <small>Candidate: {resume.candidate.name}</small>}
-                {resume.evaluation && <small>{resume.evaluation.score === undefined ? 'No score · insufficient evidence' : `Resume job-match score: ${resume.evaluation.score}/100 · ${resume.evaluation.status}`}</small>}
-                {resume.evaluation?.categories.map((category) => {
-                  const label = category.categoryId.replaceAll('_', ' ');
-                  return <small key={category.categoryId}>{label}: {category.score === undefined ? category.status.replaceAll('_', ' ') : `${category.score}/100`}</small>;
-                })}
-                {resume.evaluation?.requirements.filter(({ status }) => status === 'insufficient_evidence').map((requirement) => <small key={requirement.id}>Missing evidence: {requirement.description}</small>)}
-              </span>
-            </li>)}
-          </ul>
+          {details?.status === 'processing' && <p className="screening-progress" role="status">{screeningProgressLabel(details.resumes)}</p>}
+          <ScreeningResultList resumes={details?.resumes ?? submitted.resumes.map((resume) => ({ ...resume, candidate: null, evaluation: null, error: undefined }))} />
           {!details && <button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Loading results…' : 'Retry loading results'}</button>}
           {details && details.resumes.every((resume) => resume.status === 'failed') && <p className="screening-empty-results">No resumes produced a usable evaluation. Review each processing error and retry with supported text-based files.</p>}
           {details && <div className="screening-review-tools">
@@ -398,12 +384,11 @@ export function ResumeScreeningPage() {
           </div>}
           {rankingData && <section className="screening-comparison" aria-label="Candidate comparison">
             <h3>Candidate ranking · {rankingData.jobTitle}</h3>
-            <p>{rankingData.ranking.rankingCriteria} Preliminary document matches appear in unranked rows and do not affect validated ranks. They measure text overlap; unverified criteria mean no supporting wording was found, not that the candidate lacks the qualification.</p>
+            <p>{rankingData.ranking.rankingCriteria} Preliminary document matches measure text overlap; unverified criteria mean no supporting wording was found, not that the candidate lacks the qualification.</p>
             {details && (() => {
               const { scored, unscored, rankById } = filterAndSortScreeningResumes(details, rankingData.ranking, candidateSearch);
               const visibleEligibleIds = [...scored, ...unscored].filter((resume) => resume.status === 'completed').map((resume) => resume.id);
-              const successfullyScored = rankingData.ranking.ranked.length;
-              const statusLabel = (resume: ScreeningDetailsResponse['resumes'][number]) => resume.status === 'failed' ? 'Failed' : resume.status === 'queued' || resume.status === 'uploaded' ? 'Pending' : resume.status === 'processing' ? 'Processing' : resume.evaluation?.score !== undefined ? 'Scored' : 'Insufficient evidence';
+              const successfullyScored = details.resumes.filter((resume) => resume.evaluation?.score !== undefined).length;
               const scoreCell = (resume: ScreeningDetailsResponse['resumes'][number]) => {
                 const presentation = scorePresentation(resume);
                 return presentation ? <div className="screening-score-cell"><div className="screening-score-copy"><span className={`screening-score-badge score-${scoreBand(presentation.score)}${presentation.preliminary ? ' score-preliminary' : ''}`}>{presentation.score}%</span><small>{presentation.label}</small></div><span className="screening-score-track" role="progressbar" aria-label={`${presentation.label} for ${resume.candidate?.name ?? 'candidate'}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={presentation.score}><span className={`score-fill score-${scoreBand(presentation.score)}${presentation.preliminary ? ' score-fill-preliminary' : ''}`} style={{ width: `${presentation.score}%` }} /></span></div> : <span className="score-unavailable">Unavailable</span>;
@@ -416,7 +401,7 @@ export function ResumeScreeningPage() {
                   <td><span className="screening-candidate-name">{resume.candidate?.name ?? 'Name not identified'}</span></td>
                   <td><span className="screening-resume-name" title={resume.filename}>{resume.filename}</span></td>
                   <td>{scoreCell(resume)}</td>
-                  <td><span className={`screening-status-pill status-${statusLabel(resume).toLowerCase().replaceAll(' ', '-')}`}>{statusLabel(resume)}</span></td>
+                  <td><span className={`screening-status-pill status-${screeningStatusLabel(resume).toLowerCase().replaceAll(' ', '-')}`}>{screeningStatusLabel(resume)}</span></td>
                   <td><div className="screening-row-actions"><button type="button" className="screening-details-button" aria-expanded={expandedDetailsId === resume.id} onClick={() => setExpandedDetailsId((current) => current === resume.id ? null : resume.id)}>View details</button>{resume.status === 'failed' && resume.retryCount !== undefined && resume.retryCount < 3 && screeningRetryableErrorCodes.includes(resume.errorCode as typeof screeningRetryableErrorCodes[number]) && <button type="button" className="screening-details-button" onClick={() => void retryResume(resume.id)} disabled={retryingResumeId !== null}>{retryingResumeId === resume.id ? 'Retrying…' : 'Retry'}</button>}</div></td>
                 </tr>;
               };
@@ -428,8 +413,7 @@ export function ResumeScreeningPage() {
                 </div>
                 {(scored.length + unscored.length) === 0 ? <p className="screening-table-empty">No resumes match your search.</p> : <div className="screening-table-scroll" role="region" aria-label="Candidate ranking table" tabIndex={0}>
                   <table className="screening-ranking-table"><thead><tr><th scope="col" aria-label="Select" /><th scope="col">Rank</th><th scope="col">Candidate Name</th><th scope="col">Resume</th><th scope="col">Job Match Score</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
-                    <tbody>{scored.map(tableRow)}</tbody>
-                    {unscored.length > 0 && <tbody className="screening-unscored-group"><tr><th colSpan={7} scope="rowgroup">Unranked · preliminary matches are not part of validated ranking</th></tr>{unscored.map(tableRow)}</tbody>}
+                    <tbody>{[...scored, ...unscored].map(tableRow)}</tbody>
                   </table>
                 </div>}
                 {expandedDetailsId && details.resumes.find((resume) => resume.id === expandedDetailsId) && (() => {
@@ -441,7 +425,7 @@ export function ResumeScreeningPage() {
                     {selectedResume.evaluation ? <ul>{selectedResume.evaluation.requirements.map((item) => <li key={item.id}><strong>{item.description}:</strong> {item.status.replaceAll('_', ' ')}{item.evidence[0] ? ` — “${item.evidence[0].excerpt}”` : ' — Evidence not available'}</li>)}</ul> : <p>Detailed validated evaluation evidence is not available for this resume.</p>}
                   </article>;
                 })()}
-                {scored.length === 0 && unscored.length > 0 && <p className="screening-table-empty">No validated scores are available yet. Preliminary matches remain separately labeled and are not assigned a rank.</p>}
+                {scored.length === 0 && unscored.length > 0 && <p className="screening-table-empty">No candidate scores are available yet. These resumes remain listed without a rank.</p>}
               </>;
             })()}
           </section>}
@@ -456,7 +440,7 @@ export function ResumeScreeningPage() {
                 const score = scorePresentation(resume);
                 return <tr key={resume.id}><td>{report.selectedResumeIds.includes(resume.id) ? 'Yes' : 'No'}</td><td>{resume.candidate?.name ?? 'Name not identified'}</td><td title={resume.filename}>{resume.filename}</td><td>{resume.status}</td><td>{rank ?? 'Not ranked'}</td><td>{score ? `${score.score}% · ${score.label}` : 'Unavailable'}</td></tr>;
               })}</tbody></table>
-              <h2>Ranking criteria and limitations</h2><p>Ranking is based on saved deterministic resume job-match scores in descending order; equal scores are ties. Failed or unscored resumes are excluded from scored ranking. Missing evidence is not treated as zero.</p>
+              <h2>Ranking criteria and limitations</h2><p>Ranking orders saved validated and preliminary resume job-match scores from highest to lowest, with candidate name and filename used to break ties. Sequential rank shows display position and does not make a preliminary score validated. Candidates without a score follow scored candidates. Missing evidence is not treated as zero.</p>
               <p>Scores assist recruiter review and are not hiring decisions. Resume content may be incomplete or unverified. Review the source resume and independently validate qualifications.</p>
               <h2>Requirement evidence details</h2>
               {report.details.resumes.map((resume) => <article key={resume.id}><h3>{resume.candidate?.name ?? 'Name not identified'} · {resume.filename}</h3>
