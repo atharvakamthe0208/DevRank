@@ -136,3 +136,112 @@
   .screening-table-controls input[type="search"] { width: 100%; }
   .screening-select-visible { margin-left: 0; }
 }
+
+/* Resume screening workspace refinement: scoped to this page so the shared shell and other screens stay unchanged. */
+.app-shell .resume-screening-page { max-width: 1180px; gap: 18px; color: #15213d; }
+.app-shell .resume-screening-heading { align-items: flex-end; }
+.app-shell .resume-screening-heading h1 { color: #15213d; font-size: clamp(27px, 3vw, 34px); letter-spacing: -.8px; }
+.app-shell .resume-screening-heading p { color: #64748b; font-size: 13px; }
+.app-shell .screening-rubric-label { border-color: #dce4f1; background: #f7f8ff; color: #4659b8; font-weight: 650; }
+.app-shell .screening-form { gap: 15px; }
+.app-shell .screening-panel { padding: 22px 24px; border-color: #e3e9f3; border-radius: 14px; box-shadow: 0 5px 18px #192d5208; }
+.app-shell .screening-panel-heading { align-items: flex-start; margin-bottom: 18px; }
+.app-shell .screening-panel-heading h2 { color: #15213d; font-size: 17px; }
+.app-shell .screening-panel-heading p { color: #71809b; font-size: 11px; }
+.app-shell .screening-step { width: 32px; height: 32px; border: 1px solid #dfe4ff; border-radius: 9px; background: #f0f2ff; color: #4058e8; }
+.app-shell .screening-job-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(220px, .75fr); align-items: stretch; gap: 20px; }
+.app-shell .screening-job-fields { display: grid; gap: 15px; min-width: 0; }
+.app-shell .screening-field { gap: 7px; margin: 0; color: #34425c; font-size: 11px; }
+.app-shell .screening-field input, .app-shell .screening-field textarea { border-color: #dce4f0; border-radius: 8px; color: #243450; font-size: 12px; }
+.app-shell .screening-field input { min-height: 42px; }
+.app-shell .screening-field textarea { min-height: 164px; resize: vertical; }
+.app-shell .screening-field input::placeholder, .app-shell .screening-field textarea::placeholder { color: #99a4b7; }
+.app-shell .screening-field input:focus, .app-shell .screening-field textarea:focus { border-color: #5369e8; outline: 3px solid #4058e81c; box-shadow: none; }
+.app-shell .screening-field-hint { color: #78869e; font-size: 10px; }
+.app-shell .screening-guidance-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 10px; min-width: 0; overflow: hidden; padding: 20px; border: 1px solid #e4e9f7; border-radius: 12px; background: linear-gradient(145deg, #f7f8ff, #fff 72%); }
+.app-shell .screening-guidance-card::after { position: absolute; right: -38px; bottom: -56px; width: 150px; height: 150px; border: 1px solid #dfe5ff; border-radius: 50%; content: ''; pointer-events: none; }
+.app-shell .screening-guidance-icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #e9edff; color: #4058e8; font-size: 16px; }
+.app-shell .screening-guidance-card strong { color: #1e2d4c; font: 650 13px Manrope, sans-serif; }
+.app-shell .screening-guidance-card p, .app-shell .screening-guidance-card > span:last-child { margin: 0; color: #71809b; font-size: 10px; line-height: 1.65; }
+.app-shell .screening-guidance-card > span:last-child { padding-top: 9px; border-top: 1px solid #e5e9f2; }
+.app-shell .screening-upload-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(210px, .7fr); gap: 14px; }
+.app-shell .screening-upload-area { min-height: 204px; border-color: #aebcf0; border-radius: 11px; background: #fafbff; transition: border-color 160ms ease, background-color 160ms ease; }
+.app-shell .screening-upload-area.is-dragging { border-color: #4058e8; background: #f0f3ff; }
+.app-shell .screening-upload-icon { background: #edf0ff; color: #4058e8; }
+.app-shell .screening-upload-area strong { color: #243450; font-size: 13px; }
+.app-shell .screening-upload-area > span:not(.screening-upload-icon) { color: #71809b; font-size: 10px; }
+.app-shell .screening-upload-area > small { color: #8793a8; font-size: 9px; line-height: 1.5; }
+.app-shell .screening-upload-tips { align-self: stretch; padding: 17px; border: 1px solid #e3e9f3; border-radius: 11px; background: #f8faff; }
+.app-shell .screening-upload-tips strong { color: #243450; font: 650 12px Manrope, sans-serif; }
+.app-shell .screening-upload-tips ul { display: grid; gap: 9px; margin: 12px 0 0; padding-left: 16px; color: #71809b; font-size: 10px; line-height: 1.55; }
+.app-shell .screening-file-list li { border-color: #e3e9f3; border-radius: 9px; background: #fff; }
+.app-shell .screening-file-icon { border: 1px solid #e3e8f5; background: #f4f6ff; color: #4a5fc9; }
+.app-shell .screening-file-copy strong { color: #263650; }
+.app-shell .screening-file-copy small { color: #71809b; }
+.app-shell .screening-remove-button { color: #8b4850; }
+.app-shell .screening-empty-files { color: #71809b; }
+.app-shell .screening-form-footer { align-items: center; padding: 14px 2px 2px; border-color: #e3e9f3; }
+.app-shell .screening-form-footer p { color: #71809b; font-size: 10px; }
+.app-shell .screening-form-footer .primary-button, .app-shell .screening-review-actions .primary-button, .app-shell .screening-report-actions .primary-button { min-height: 40px; padding: 0 16px; border: 1px solid #4058e8; border-radius: 8px; background: #4058e8; box-shadow: 0 4px 11px #4058e820; color: #fff; font-size: 11px; font-weight: 650; transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.app-shell .screening-form-footer .primary-button:hover:not(:disabled), .app-shell .screening-review-actions .primary-button:hover:not(:disabled), .app-shell .screening-report-actions .primary-button:hover { transform: translateY(-1px); border-color: #334bd1; background: #334bd1; box-shadow: 0 6px 14px #4058e82b; }
+.app-shell .screening-form-footer .primary-button:disabled { box-shadow: none; }
+.app-shell .screening-results-panel { padding-top: 21px; }
+.app-shell .screening-session-status { color: #4058a4; }
+.app-shell .screening-processing { display: grid; gap: 8px; margin: 9px 0 12px; color: #53627c; font-size: 11px; font-weight: 600; }
+.app-shell .screening-processing-track { height: 6px; overflow: hidden; border-radius: 99px; background: #edf0f7; }
+.app-shell .screening-processing-track > span { display: block; height: 100%; border-radius: inherit; background: #5267e7; transition: width 250ms ease; }
+.app-shell .screening-summary-cards article { border-color: #e3e9f3; border-radius: 10px; background: #f9faff; }
+.app-shell .screening-summary-cards span { color: #71809b; }
+.app-shell .screening-summary-cards strong { color: #253654; }
+.app-shell .screening-table-controls input[type="search"] { border-color: #dce4f0; border-radius: 8px; color: #243450; }
+.app-shell .screening-table-controls input[type="search"]:focus-visible { outline-color: #8190f2; border-color: #5369e8; }
+.app-shell .screening-select-visible, .app-shell .screening-ranking-table td { color: #53627c; }
+.app-shell .screening-select-visible input, .app-shell .screening-ranking-table input[type="checkbox"] { accent-color: #4058e8; }
+.app-shell .screening-table-scroll { border-color: #e3e9f3; border-radius: 10px; }
+.app-shell .screening-ranking-table { color: #263650; }
+.app-shell .screening-ranking-table thead { background: #f6f8fc; }
+.app-shell .screening-ranking-table th { border-color: #e3e9f3; color: #64748b; }
+.app-shell .screening-ranking-table td { border-color: #edf0f6; }
+.app-shell .screening-ranking-table tbody tr:hover td { background: #f8f9ff; }
+.app-shell .screening-candidate-name { color: #243450; }
+.app-shell .screening-resume-name { color: #64748b; }
+.app-shell .screening-rank-indicator { border-color: #dfe4ff; background: #f0f2ff; color: #4058b8; }
+.app-shell .screening-score-track { background: #edf0f7; }
+.app-shell .screening-score-track > span { background: #5267e7; }
+.app-shell .screening-details-button { color: #4058c8; }
+.app-shell .screening-details-button:hover { color: #293fae; }
+.app-shell .screening-details-button:focus-visible, .app-shell .screening-ranking-table input[type="checkbox"]:focus-visible, .app-shell .screening-select-visible input:focus-visible { outline-color: #8190f2; }
+.app-shell .screening-unscored-group th { background: #fafbfe; color: #64748b; }
+.app-shell .screening-candidate-details { border-color: #e3e9f3; border-radius: 10px; background: #f8faff; }
+.app-shell .screening-candidate-details li, .app-shell .screening-candidate-details p { color: #53627c; }
+.app-shell .screening-review-tools h3, .app-shell .screening-comparison h3, .app-shell .screening-report h3 { color: #1e2d4c; }
+.app-shell .screening-review-tools > p, .app-shell .screening-comparison > p { color: #71809b; }
+.app-shell .screening-review-actions > small { color: #71809b; }
+.app-shell .screening-report-paper { color: #263650; }
+.app-shell .screening-report-paper th { background: #f3f6fc; }
+.app-shell .screening-results-empty { border: 1px dashed #dce4f0; background: #f9faff; color: #71809b; }
+.app-shell .screening-results-empty strong { color: #253654; }
+.app-shell .resume-screening-page :is(button, input, textarea, label, summary):focus-visible { outline-color: #8190f2; }
+
+@media (max-width: 920px) {
+  .app-shell .screening-job-layout { grid-template-columns: minmax(0, 1.4fr) minmax(190px, .8fr); gap: 14px; }
+  .app-shell .screening-guidance-card { padding: 16px; }
+  .app-shell .screening-upload-layout { grid-template-columns: minmax(0, 1.2fr) minmax(190px, .8fr); }
+}
+@media (max-width: 680px) {
+  .app-shell .resume-screening-page { gap: 15px; }
+  .app-shell .resume-screening-heading { align-items: flex-start; }
+  .app-shell .resume-screening-heading h1 { font-size: 26px; }
+  .app-shell .resume-screening-heading p { max-width: 530px; font-size: 11px; }
+  .app-shell .screening-panel { padding: 17px 16px; border-radius: 12px; }
+  .app-shell .screening-panel-heading { margin-bottom: 15px; }
+  .app-shell .screening-job-layout, .app-shell .screening-upload-layout { grid-template-columns: 1fr; }
+  .app-shell .screening-upload-area { min-height: 190px; }
+  .app-shell .screening-upload-tips { padding: 14px; }
+  .app-shell .screening-form-footer { gap: 12px; }
+  .app-shell .screening-form-footer p { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .screening-upload-area, .app-shell .screening-form-footer .primary-button, .app-shell .screening-processing-track > span { transition: none; }
+  .app-shell .screening-form-footer .primary-button:hover:not(:disabled), .app-shell .screening-review-actions .primary-button:hover:not(:disabled) { transform: none; }
+}
