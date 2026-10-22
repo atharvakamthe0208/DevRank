@@ -85,6 +85,22 @@ describe('API HTTP conventions', () => {
     expect(response.headers.get('access-control-allow-headers')).toContain('Idempotency-Key');
   });
 
+  it('answers production auth preflight for the configured frontend origin and request headers', async () => {
+    const response = await fetch(`${apiOrigin}/api/auth/me`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://dev-rank-ruddy.vercel.app',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://dev-rank-ruddy.vercel.app');
+    expect(response.headers.get('access-control-allow-methods')).toContain('GET');
+    expect(response.headers.get('access-control-allow-headers')).toContain('Authorization');
+    expect(response.headers.get('access-control-allow-headers')).toContain('Content-Type');
+  });
+
   it('does not grant CORS access to arbitrary origins', async () => {
     const response = await fetch(`${apiOrigin}/api/health`, { headers: { Origin: 'https://attacker.example' } });
     expect(response.status).toBe(200);

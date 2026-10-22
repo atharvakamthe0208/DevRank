@@ -6,6 +6,12 @@ describe('API base URL configuration', () => {
     expect(resolveApiBaseUrl('https://api.example.test/api/', true)).toBe('https://api.example.test/api');
   });
 
+  it('adds the API route prefix to the production Render host exactly once', () => {
+    expect(resolveApiBaseUrl('https://devrank-api.onrender.com', true)).toBe('https://devrank-api.onrender.com/api');
+    expect(resolveApiBaseUrl('https://devrank-api.onrender.com/api/', true)).toBe('https://devrank-api.onrender.com/api');
+    expect(`${resolveApiBaseUrl('https://devrank-api.onrender.com', true)}/auth/me`).toBe('https://devrank-api.onrender.com/api/auth/me');
+  });
+
   it('keeps localhost as the development default', () => {
     expect(resolveApiBaseUrl(undefined, false)).toBe('http://localhost:3000/api');
   });
