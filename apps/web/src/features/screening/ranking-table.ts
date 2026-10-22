@@ -33,3 +33,10 @@ export function scorePresentation(resume: ScreeningDetailsResponse['resumes'][nu
   if (resume.preliminaryEvaluation) return { score: resume.preliminaryEvaluation.score, label: 'Preliminary match' as const, preliminary: true };
   return null;
 }
+
+export function screeningStatusLabel(resume: ScreeningDetailsResponse['resumes'][number]): string {
+  if (resume.status === 'failed') return 'Failed';
+  if (resume.status === 'queued' || resume.status === 'uploaded') return 'Pending';
+  if (resume.status === 'processing') return 'Processing';
+  return resume.evaluation?.status === 'complete' && resume.evaluation.score !== undefined ? 'Scored' : 'Insufficient evidence';
+}

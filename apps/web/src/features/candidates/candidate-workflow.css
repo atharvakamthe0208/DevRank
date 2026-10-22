@@ -159,3 +159,4 @@
   .candidate-import-confirm > div { flex-direction: column-reverse; }
   .candidate-import-confirm > div button { width: 100%; }
 }
+.candidate-profile-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
