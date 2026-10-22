@@ -119,6 +119,40 @@ describe('LeetCode provider adapter', () => {
     }
   });
 
+  it('maps alfa GraphQL not-found envelopes to the existing missing-user error', async () => {
+    const upstreamMessage = 'User does not exist';
+    const adapter = createLeetCodeAdapter(routedFetcher({
+      example: jsonResponse({ errors: [{ message: upstreamMessage }], data: { matchedUser: null, allQuestionsCount: [] } }),
+      'example/solved': jsonResponse(solved),
+      'example/contest': jsonResponse(contest),
+    }), 'http://localhost:3001');
+
+    try {
+      await adapter.getProfile('example');
+      throw new Error('expected missing-user error');
+    } catch (error) {
+      expect(error).toMatchObject({ statusCode: 404, code: 'LEETCODE_USER_NOT_FOUND', message: 'LeetCode user was not found' });
+      expect((error as Error).message).not.toContain(upstreamMessage);
+    }
+  });
+
+  it('maps other alfa GraphQL error envelopes to a sanitized provider error', async () => {
+    const upstreamMessage = 'private upstream execution details';
+    const adapter = createLeetCodeAdapter(routedFetcher({
+      example: jsonResponse({ errors: [{ message: upstreamMessage }], data: { matchedUser: null } }),
+      'example/solved': jsonResponse(solved),
+      'example/contest': jsonResponse(contest),
+    }), 'http://localhost:3001');
+
+    try {
+      await adapter.getProfile('example');
+      throw new Error('expected provider error');
+    } catch (error) {
+      expect(error).toMatchObject({ statusCode: 502, code: 'LEETCODE_PROVIDER_ERROR' });
+      expect((error as Error).message).not.toContain(upstreamMessage);
+    }
+  });
+
   it('maps required endpoint timeouts and network failures to sanitized errors', async () => {
     const timeout = new Error('sensitive timeout detail'); timeout.name = 'TimeoutError';
     const timeoutAdapter = createLeetCodeAdapter(routedFetcher({

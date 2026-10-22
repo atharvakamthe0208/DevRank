@@ -17,6 +17,7 @@ import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import { AnimatedMetric } from '../../components/metrics/KpiCards';
 import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
+import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 import { categoryEvidenceStatus, EvidenceValue, formatEvidenceDate, readableEvidenceLabel, readableProvenance } from './evidence-presentation';
 import './evaluation-page.css';
 import '../evaluations/evaluation.css';
@@ -54,6 +55,8 @@ export function EvaluationPage() {
   const [analysis, setAnalysis] = useState<AiAnalysisResponse | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
+  const [analysisRetryAt, setAnalysisRetryAt] = useState<number>();
+  const analysisRequestRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -141,9 +144,11 @@ export function EvaluationPage() {
   }
 
   async function loadAiAnalysis() {
-    if (!result || !session?.access_token || analysisLoading) return;
+    if (!result || !session?.access_token || analysisLoading || analysisRequestRef.current || (analysisRetryAt && analysisRetryAt > Date.now())) return;
+    analysisRequestRef.current = true;
     setAnalysis(null);
     setAnalysisError('');
+    setAnalysisRetryAt(undefined);
     setAnalysisLoading(true);
     try {
       const response = await apiRequest<unknown>(`/evaluations/${result.id}/ai-analysis`, {
@@ -155,7 +160,9 @@ export function EvaluationPage() {
       setAnalysis(parsed);
     } catch (error) {
       setAnalysisError(aiAnalysisErrorMessage(error));
+      if (error instanceof ApiRequestError && error.retryAfterSeconds) setAnalysisRetryAt(Date.now() + error.retryAfterSeconds * 1000);
     } finally {
+      analysisRequestRef.current = false;
       setAnalysisLoading(false);
     }
   }
@@ -174,16 +181,17 @@ export function EvaluationPage() {
         {running && <p className="evaluation-progress" role="status">Verifying candidate access and calculating available evidence…</p>}
         {runError && <p className="form-feedback form-feedback-error" role="alert">{runError}</p>}
       </form>
-      {result && <EvaluationRunResult result={result} analysis={analysis} analysisLoading={analysisLoading} analysisError={analysisError} onAnalyze={() => void loadAiAnalysis()}/>}
+      {result && <EvaluationRunResult result={result} analysis={analysis} analysisLoading={analysisLoading} analysisError={analysisError} analysisRetryAt={analysisRetryAt} onAnalyze={() => void loadAiAnalysis()}/>}
     </>}
   </div>;
 }
 
-export function EvaluationRunResult({ result, analysis, analysisLoading, analysisError, onAnalyze }: {
+export function EvaluationRunResult({ result, analysis, analysisLoading, analysisError, analysisRetryAt, onAnalyze }: {
   result: EvaluationRunResponse;
   analysis: AiAnalysisResponse | null;
   analysisLoading: boolean;
   analysisError: string;
+  analysisRetryAt?: number;
   onAnalyze: () => void;
 }) {
   const evaluation = result.evaluation;
@@ -196,9 +204,9 @@ export function EvaluationRunResult({ result, analysis, analysisLoading, analysi
     <details className="evaluation-limitations"><summary>Scoring notes and evidence limitations</summary><ul>{result.evidenceLimitations.map((item) => <li key={item}>{item}</li>)}</ul><p>{evaluation.calculationExplanation}</p><p>{evaluation.decisionSupportNotice} These indexes measure source volume and breadth, not engineering quality or candidate identity.</p></details>
     {evaluation.platformEvidence && evaluation.platformEvidence.length > 0 && <details className="evaluation-snapshot-disclosure"><summary>Technical source details ({evaluation.platformEvidence.length} saved snapshot{evaluation.platformEvidence.length === 1 ? '' : 's'})</summary><div className="evaluation-snapshot-grid">{evaluation.platformEvidence.map((item) => <article key={item.evidenceId}><h3><span className="platform-heading"><PlatformLogo platform={item.source}/>{item.source === 'github' ? 'GitHub' : 'LeetCode'}</span> · {readableEvidenceLabel(item.evidenceType)}</h3><p>{readableProvenance(item.provenance)} · {item.availability.replaceAll('_', ' ')} · saved {formatEvidenceDate(item.observedAt)} · freshness not assessed</p><dl>{Object.entries(item.normalizedValue).map(([key, value]) => <div key={key}><dt>{readableEvidenceLabel(key)}</dt><dd><EvidenceValue value={value}/></dd></div>)}</dl>{item.limitations.length > 0 && <ul>{item.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul>}</article>)}</div></details>}
     <section className="ai-analysis" aria-labelledby="ai-analysis-title">
-      <div className="ai-analysis-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> EVIDENCE-GROUNDED EXPLANATION</span><h3 id="ai-analysis-title">AI analysis</h3><p>Explanatory support only. The persisted evaluation scores remain authoritative.</p></div><button className="secondary-button" type="button" onClick={onAnalyze} disabled={analysisLoading}>{analysisLoading ? 'Analyzing…' : analysis ? 'Regenerate analysis' : 'Generate AI analysis'}</button></div>
+      <div className="ai-analysis-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> EVIDENCE-GROUNDED EXPLANATION</span><h3 id="ai-analysis-title">AI analysis</h3><p>Explanatory support only. The persisted evaluation scores remain authoritative.</p></div><AiAnalysisRetryButton className="secondary-button" onRetry={onAnalyze} pending={analysisLoading} retryAt={analysisRetryAt} idleLabel={analysis ? 'Regenerate analysis' : 'Generate AI analysis'}/></div>
       {analysisLoading && <p className="ai-analysis-status" role="status">Reviewing the saved evaluation and its supporting evidence…</p>}
-      {analysisError && <div className="ai-analysis-error" role="alert"><p>{analysisError}</p><button className="text-button" type="button" onClick={onAnalyze} disabled={analysisLoading}>Try again</button></div>}
+      {analysisError && <div className="ai-analysis-error" role="alert"><p>{analysisError}</p><AiAnalysisRetryButton className="text-button" onRetry={onAnalyze} pending={analysisLoading} retryAt={analysisRetryAt}/></div>}
       {analysis && <AiAnalysisSummary response={analysis}/>}
     </section>
   </section>;

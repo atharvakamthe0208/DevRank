@@ -9,6 +9,7 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly details?: unknown,
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -41,11 +42,14 @@ export async function apiRequest<T>(path: string, init?: RequestInit, accessToke
     const body: unknown = await response.json().catch(() => undefined);
     const parsedError = apiErrorSchema.safeParse(body);
     const error = parsedError.success ? parsedError.data.error : undefined;
+    const retryAfterHeader = response.headers.get('retry-after');
+    const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? Number(retryAfterHeader) : undefined;
     throw new ApiRequestError(
       error?.message ?? `API request failed (${response.status})`,
       response.status,
       error?.code,
       error?.details,
+      retryAfterSeconds,
     );
   }
   if (response.status === 204) return undefined as T;

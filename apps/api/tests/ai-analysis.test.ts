@@ -82,10 +82,25 @@ describe('AI analysis service', () => {
     await expect(service.analyze(evaluation)).rejects.toMatchObject({ statusCode: 503, code: 'AI_NOT_CONFIGURED' });
   });
 
-  it('retries transient provider failures once but does not retry permanent failures', async () => {
-    const transientProvider = vi.fn().mockRejectedValueOnce(Object.assign(new Error('private provider detail'), { status: 429 })).mockResolvedValueOnce(validOutput);
-    await expect(createAiAnalysisService(configured, transientProvider).analyze(evaluation)).resolves.toEqual(validOutput);
-    expect(transientProvider).toHaveBeenCalledTimes(2);
+  it('maps provider HTTP 429 to a sanitized rate-limit response and preserves Retry-After', async () => {
+    const provider = vi.fn().mockRejectedValue(Object.assign(new Error('private provider detail'), {
+      status: 429,
+      headers: new Headers({ 'retry-after': '30' }),
+    }));
+    await expect(createAiAnalysisService(configured, provider).analyze(evaluation)).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'AI_RATE_LIMITED',
+      message: 'The AI provider is rate limiting requests. Wait before trying again.',
+      details: { retryAfterSeconds: 30 },
+    });
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(provider.mock.calls[0]?.[0]).not.toContain('private provider detail');
+  });
+
+  it('does not retry timeouts, transient failures, or permanent failures within one user request', async () => {
+    const transientProvider = vi.fn().mockRejectedValue(Object.assign(new Error('private provider detail'), { status: 503 }));
+    await expect(createAiAnalysisService(configured, transientProvider).analyze(evaluation)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+    expect(transientProvider).toHaveBeenCalledTimes(1);
     const permanentProvider = vi.fn().mockRejectedValue(Object.assign(new Error('private provider detail'), { status: 401 }));
     await expect(createAiAnalysisService(configured, permanentProvider).analyze(evaluation)).rejects.toBeInstanceOf(HttpError);
     expect(permanentProvider).toHaveBeenCalledTimes(1);

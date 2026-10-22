@@ -29,13 +29,24 @@ export interface AiAnalysisService {
 
 export type StructuredProvider = (input: string, signal: AbortSignal) => Promise<unknown>;
 
-function transient(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const value = error as { name?: unknown; status?: unknown; statusCode?: unknown; code?: unknown };
-  const status = Number(value.statusCode ?? value.status);
-  return value.name === 'AbortError' || value.name === 'TimeoutError'
-    || status === 429 || status >= 500
-    || (typeof value.code === 'string' && ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN'].includes(value.code));
+function retryAfterSeconds(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const headers = (error as { headers?: unknown }).headers;
+  let value: string | null | undefined;
+  if (headers && typeof headers === 'object' && 'get' in headers && typeof headers.get === 'function') {
+    value = headers.get('retry-after');
+  } else if (headers && typeof headers === 'object') {
+    const values = headers as Record<string, unknown>;
+    const header = values['retry-after'] ?? values['Retry-After'];
+    value = typeof header === 'string' ? header : undefined;
+  }
+  if (!value) return undefined;
+  const seconds = /^\s*\d+(?:\.\d+)?\s*$/.test(value)
+    ? Number(value)
+    : Math.max(0, (Date.parse(value) - Date.now()) / 1000);
+  // Ignore malformed, expired, or unreasonable values rather than holding a UI retry indefinitely.
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 86_400) return undefined;
+  return Math.ceil(seconds);
 }
 
 function buildInput(evaluation: PersistedEvaluation) {
@@ -143,25 +154,24 @@ export function createAiAnalysisService(
       const input = buildInput(evaluation);
       let output: unknown;
       try {
-        for (let attempt = 0; ; attempt += 1) {
-          try {
-            output = await provider(input, AbortSignal.timeout(configuration.AI_TIMEOUT_MS));
-            break;
-          } catch (error) {
-            if (attempt >= 1 || !transient(error)) throw error;
-          }
-        }
+        // One provider call per user action. In particular, never retry 429 immediately:
+        // that can deepen rate limiting and repeat a paid request before Retry-After.
+        output = await provider(input, AbortSignal.timeout(configuration.AI_TIMEOUT_MS));
       } catch (error) {
         if (error instanceof HttpError) throw error;
         // Log only a stable category. Provider errors may contain prompts or credential metadata.
         const status = error && typeof error === 'object' ? Number((error as { status?: unknown; statusCode?: unknown }).statusCode ?? (error as { status?: unknown }).status) : 0;
+        const retryAfter = status === 429 ? retryAfterSeconds(error) : undefined;
         const failureCode = status === 401 || status === 403
           ? 'AI_PROVIDER_AUTH_FAILED'
           : status === 429 ? 'AI_RATE_LIMITED' : 'AI_UNAVAILABLE';
         console.warn('[ai-analysis] provider request failed', status === 401 || status === 403 ? 'provider_auth' : status === 429 ? 'rate_limited' : status >= 500 ? 'provider_error' : 'unavailable');
         throw new HttpError(503, failureCode, failureCode === 'AI_PROVIDER_AUTH_FAILED'
           ? 'AI provider authentication is misconfigured. Check the API Groq configuration.'
-          : 'AI analysis is temporarily unavailable. Please try again.');
+          : failureCode === 'AI_RATE_LIMITED'
+            ? 'The AI provider is rate limiting requests. Wait before trying again.'
+            : 'AI analysis is temporarily unavailable. Please try again.',
+        retryAfter === undefined ? undefined : { retryAfterSeconds: retryAfter });
       }
       const parsed = aiAnalysisContentSchema.safeParse(output);
       if (!parsed.success) {

@@ -19,6 +19,16 @@ describe('apiRequest', () => {
     });
   });
 
+  it('preserves a numeric Retry-After header for intentional AI analysis retries', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'AI_RATE_LIMITED', message: 'Wait before retrying', details: { retryAfterSeconds: 12 } },
+    }), { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': '12' } })));
+
+    await expect(apiRequest('/evaluations/id/ai-analysis')).rejects.toMatchObject({
+      name: 'ApiRequestError', status: 503, code: 'AI_RATE_LIMITED', retryAfterSeconds: 12,
+    });
+  });
+
   it('uses a safe fallback for unrecognized error responses', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('not json', { status: 502 })));
 

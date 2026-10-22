@@ -5,6 +5,7 @@ import { aiAnalysisResponseSchema, buildFinalEvaluationReport, evaluationRespons
 import { describe, expect, it } from 'vitest';
 import { AiAnalysisSummary, EvaluationRunResult } from './EvaluationPage';
 import { AiAnalysisReportView } from './AiAnalysisReportPage';
+import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 
 const candidateId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const roleWeightsUsed = { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 };
@@ -145,5 +146,21 @@ describe('evaluation run result', () => {
     expect(html).toContain('AI analysis is temporarily unavailable.');
     expect(html).toContain('View six category results');
     expect(html).toContain('Try again');
+  });
+});
+
+describe('AI analysis retry control', () => {
+  it('disables retry until the provider Retry-After deadline and prevents duplicate clicks while loading', () => {
+    const waiting = renderToStaticMarkup(createElement(AiAnalysisRetryButton, {
+      className: 'text-button', retryAt: Date.now() + 10_000,
+    }));
+    expect(waiting).toContain('disabled');
+    expect(waiting).toContain('Try again in');
+
+    const loading = renderToStaticMarkup(createElement(AiAnalysisRetryButton, {
+      className: 'text-button', pending: true,
+    }));
+    expect(loading).toContain('disabled');
+    expect(loading).toContain('Analyzing');
   });
 });
