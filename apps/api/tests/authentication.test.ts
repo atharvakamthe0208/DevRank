@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SupabaseConfigurationError } from '../src/config/supabase.js';
-import { createAuthenticate, createSupabaseTokenVerifier } from '../src/middleware/authenticate.js';
+import { createAuthenticate, createSupabaseTokenVerifier, isMissingRecruiterProfileDetailsSchema } from '../src/middleware/authenticate.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -73,7 +73,7 @@ describe('Supabase access-token and profile verification', () => {
 
   it('validates the supplied access token with Supabase and returns its recruiter profile', async () => {
     const user = { id: 'user-1', email: 'recruiter@example.com', email_confirmed_at: '2026-10-01T00:00:00Z' };
-    const profile = { id: 'user-1', display_name: 'Recruiter', role: 'recruiter', approval_status: 'approved' };
+    const profile = { id: 'user-1', display_name: 'Recruiter', phone_number: null, company_name: null, job_title: null, company_website: null, location_city: null, location_country: null, role: 'recruiter', approval_status: 'approved' };
     const { client } = fakeClient({ data: { user }, error: null }, { data: profile, error: null });
     const factory = vi.fn().mockReturnValue(client);
 
@@ -98,5 +98,32 @@ describe('Supabase access-token and profile verification', () => {
     );
     const identity = await createSupabaseTokenVerifier((() => client) as never)('valid-access-token');
     expect(identity).toMatchObject({ userId: 'user-without-profile', emailConfirmed: true, profile: null });
+  });
+
+  it('falls back to existing auth columns when optional recruiter profile columns are not migrated', async () => {
+    const selected: string[] = [];
+    const baseProfile = { id: 'user-1', display_name: 'Recruiter', role: 'recruiter', approval_status: 'approved' };
+    const client = {
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-1', email: 'recruiter@example.com', email_confirmed_at: '2026-10-01' } }, error: null }) },
+      from: vi.fn().mockReturnValue({ select: (columns: string) => {
+        selected.push(columns);
+        return { eq: () => ({ maybeSingle: async () => columns.includes('phone_number')
+          ? { data: null, error: { code: '42703', status: 400 } }
+          : { data: baseProfile, error: null } }) };
+      } }),
+    };
+    const identity = await createSupabaseTokenVerifier((() => client) as never)('valid-access-token');
+    expect(selected).toHaveLength(2);
+    expect(identity?.profile).toEqual({
+      ...baseProfile, phone_number: null, company_name: null, job_title: null,
+      company_website: null, location_city: null, location_country: null,
+    });
+  });
+
+  it('recognizes known missing-column errors without treating unrelated database failures as schema drift', () => {
+    expect(isMissingRecruiterProfileDetailsSchema({ code: '42703' })).toBe(true);
+    expect(isMissingRecruiterProfileDetailsSchema({ code: 'PGRST204' })).toBe(true);
+    expect(isMissingRecruiterProfileDetailsSchema({ code: '42501' })).toBe(false);
+    expect(isMissingRecruiterProfileDetailsSchema({ status: 503 })).toBe(false);
   });
 });

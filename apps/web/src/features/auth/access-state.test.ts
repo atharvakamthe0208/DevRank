@@ -4,6 +4,7 @@ import { classifyRecruiterAccess, type RecruiterProfile } from './access-state';
 const recruiter = (approval_status: RecruiterProfile['approval_status']): RecruiterProfile => ({
   id: 'user-1',
   display_name: 'Recruiter',
+  phone_number: null, company_name: null, job_title: null, company_website: null, location_city: null, location_country: null,
   role: 'recruiter',
   approval_status,
 });

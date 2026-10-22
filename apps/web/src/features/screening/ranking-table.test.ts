@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ScreeningComparisonResponse, ScreeningDetailsResponse, ScreeningScore } from '@devrank/contracts';
-import { filterAndSortScreeningResumes, scoreBand, scorePresentation } from './ranking-table';
+import { filterAndSortScreeningResumes, scoreBand, scorePresentation, screeningStatusLabel } from './ranking-table';
 
 const details: ScreeningDetailsResponse = {
   sessionId: '146ec40d-88c1-4575-8c08-e28601b26b4d', jobTitle: 'Engineer', status: 'partial', resumes: [
@@ -31,13 +31,13 @@ describe('screening ranking table data', () => {
     expect(filterAndSortScreeningResumes(details, ranking, '').scored.map(({ candidate }) => candidate?.name)).toEqual(['Zeta', 'Alpha']);
   });
 
-  it('preserves tied ranks and places unscored rows after all saved scored rows', () => {
+  it('preserves sequential API positions for equal scores and places unscored rows last', () => {
     const tied = { ...ranking, ranked: [
       { resumeId: details.resumes[0].id, rank: 1, score: 92 },
-      { resumeId: details.resumes[1].id, rank: 1, score: 92 },
+      { resumeId: details.resumes[1].id, rank: 2, score: 92 },
     ] };
     const result = filterAndSortScreeningResumes(details, tied, '');
-    expect(result.scored.map((resume) => result.rankById.get(resume.id)?.rank)).toEqual([1, 1]);
+    expect(result.scored.map((resume) => result.rankById.get(resume.id)?.rank)).toEqual([1, 2]);
     expect(result.unscored.map((resume) => resume.id)).toEqual([details.resumes[2].id]);
   });
 
@@ -45,15 +45,38 @@ describe('screening ranking table data', () => {
     expect([scoreBand(49), scoreBand(50), scoreBand(74), scoreBand(75), scoreBand(100)]).toEqual(['low', 'medium', 'medium', 'high', 'high']);
   });
 
-  it('labels preliminary scores without changing status or assigning rank', () => {
+  it('labels and ranks preliminary scores without changing their evaluation status', () => {
     const resume = { ...details.resumes[2], preliminaryEvaluation: {
       rubricVersion: 'resume-document-match-1.0.0' as const, score: 47, evidenceCoverage: 25,
       criteria: [{ id: 'req-1', categoryId: 'required_technical_skills' as const, description: 'TypeScript', importance: 'required' as const,
         status: 'supported' as const, matchedTerms: ['typescript'], matchPercentage: 100, evidenceExcerpt: 'TypeScript services' }],
     } };
     expect(resume.status).toBe('failed');
+    expect(screeningStatusLabel(resume)).toBe('Failed');
     expect(scorePresentation(resume)).toEqual({ score: 47, label: 'Preliminary match', preliminary: true });
-    expect(filterAndSortScreeningResumes({ ...details, resumes: [resume] }, { ...ranking, ranked: [], unranked: [] }, '').rankById.has(resume.id)).toBe(false);
+    const result = filterAndSortScreeningResumes({ ...details, resumes: [resume] }, { ...ranking,
+      ranked: [{ resumeId: resume.id, rank: 1, score: 47 }], unranked: [],
+    }, '');
+    expect(result.scored.map(({ id }) => id)).toEqual([resume.id]);
+    expect(result.rankById.get(resume.id)).toEqual({ resumeId: resume.id, rank: 1, score: 47 });
+  });
+
+  it('keeps insufficient-evidence status visible when a preliminary score is rankable', () => {
+    const resume = { ...details.resumes[0], preliminaryEvaluation: {
+      rubricVersion: 'resume-document-match-1.0.0' as const, score: 81.11, evidenceCoverage: 40,
+      criteria: [{ id: 'req-1', categoryId: 'required_technical_skills' as const, description: 'TypeScript', importance: 'required' as const,
+        status: 'supported' as const, matchedTerms: ['typescript'] }],
+    } };
+    expect(screeningStatusLabel(resume)).toBe('Insufficient evidence');
+    expect(scorePresentation(resume)).toEqual({ score: 81.11, label: 'Preliminary match', preliminary: true });
+  });
+
+  it('keeps an insufficient-evidence evaluation status visible even when it includes a numeric score', () => {
+    const insufficient: ScreeningScore = { rubricVersion: 'resume-job-match-1.0.0', scoreType: 'resume_job_match', status: 'insufficient_evidence', score: 54,
+      evidenceCoverage: 40, categories: [], requirements: [] } as unknown as ScreeningScore;
+    const resume = { ...details.resumes[0], evaluation: insufficient };
+    expect(screeningStatusLabel(resume)).toBe('Insufficient evidence');
+    expect(scorePresentation(resume)).toEqual({ score: 54, label: 'Validated score', preliminary: false });
   });
 
   it('always prefers a validated score when both validated and preliminary results exist', () => {
@@ -67,7 +90,7 @@ describe('screening ranking table data', () => {
     expect(scorePresentation(resume)).toEqual({ score: 88, label: 'Validated score', preliminary: false });
   });
 
-  it.each([1, 4, 5, 10, 20])('keeps preliminary-only rows unranked in a mixed %i-resume batch', (count) => {
+  it.each([1, 4, 5, 10, 20])('ranks each preliminary score and leaves only no-score rows unranked in a %i-resume batch', (count) => {
     const resumes: ScreeningDetailsResponse['resumes'] = Array.from({ length: count }, (_, index) => ({
       ...details.resumes[0],
       id: `f0000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, '0')}`,
@@ -77,13 +100,14 @@ describe('screening ranking table data', () => {
         criteria: [{ id: 'req-1', categoryId: 'required_technical_skills' as const, description: 'TypeScript', importance: 'required' as const,
           status: 'supported' as const, matchedTerms: ['typescript'], matchPercentage: 50, evidenceExcerpt: 'TypeScript services' }] },
     }));
-    const validatedId = resumes[0].id;
+    const noScore = { ...details.resumes[2], id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', evaluation: null, preliminaryEvaluation: null };
+    resumes.push(noScore);
     const result = filterAndSortScreeningResumes({ ...details, resumes }, { ...ranking,
-      ranked: [{ resumeId: validatedId, rank: 1, score: 91 }],
-      unranked: resumes.slice(1).map((resume) => ({ resumeId: resume.id, filename: resume.filename, status: resume.status, reason: 'Preliminary only.' })),
+      ranked: resumes.slice(0, count).map((resume, index) => ({ resumeId: resume.id, rank: index + 1, score: 70 - index })),
+      unranked: [{ resumeId: noScore.id, filename: noScore.filename, status: noScore.status, reason: 'No score.' }],
     }, '');
-    expect(result.scored.map((resume) => resume.id)).toEqual([validatedId]);
-    expect(result.unscored).toHaveLength(count - 1);
-    expect(result.unscored.every((resume) => resume.preliminaryEvaluation !== null && resume.status === 'completed')).toBe(true);
+    expect(result.scored.map((resume) => result.rankById.get(resume.id)?.rank)).toEqual(Array.from({ length: count }, (_, index) => index + 1));
+    expect(result.scored.every((resume) => resume.preliminaryEvaluation !== null && resume.status === 'completed')).toBe(true);
+    expect(result.unscored.map(({ id }) => id)).toEqual([noScore.id]);
   });
 });

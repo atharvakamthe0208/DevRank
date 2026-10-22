@@ -17,6 +17,7 @@ import { validateParams, validateQuery } from '../middleware/validate-request.js
 import { createCandidatePlatformController } from '../controllers/candidate-platform-controller.js';
 import { createEvaluationController } from '../controllers/evaluation-controller.js';
 import { evaluationRequestSchema } from '@devrank/contracts';
+import { createUnifiedReportController } from '../controllers/unified-report-controller.js';
 
 export function createCandidatesRouter(
   controller = createCandidateController(),
@@ -25,6 +26,7 @@ export function createCandidatesRouter(
   evaluationController = createEvaluationController(),
 ) {
   const router = Router();
+  const unifiedReportController = createUnifiedReportController();
   router.use(authMiddleware, requireApprovedRecruiter);
   router.get('/', validateQuery(candidateListQuerySchema), controller.list);
   router.post('/bulk-import/preview', validateBody(candidateImportRowsSchema), controller.previewImport);
@@ -44,6 +46,8 @@ export function createCandidatesRouter(
     platformController.submit,
   );
   router.get('/:id/platform-data', validateParams(candidateIdParamsSchema), platformController.getLatest);
+  router.get('/:id/unified-report', validateParams(candidateIdParamsSchema), unifiedReportController.get);
+  router.post('/:id/unified-report/resume', validateParams(candidateIdParamsSchema), unifiedReportController.linkResume);
   router.post(
     '/:id/platform-data/github-sync',
     validateParams(candidateIdParamsSchema),

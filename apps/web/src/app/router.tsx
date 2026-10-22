@@ -15,6 +15,8 @@ import { EvaluationResultPage } from '../features/evaluations/EvaluationResultPa
 import { ResumeScreeningPage } from '../features/screening/ResumeScreeningPage';
 import { AiAnalysisReportPage } from '../features/evaluation/AiAnalysisReportPage';
 import { AuthLoadingScreen } from '../features/auth/AuthLoadingScreen';
+import { RecruiterProfilePage } from '../features/profile/RecruiterProfilePage';
+import { UnifiedCandidateReportPage } from '../features/evaluations/UnifiedCandidateReportPage';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh, signOut } = useAuth();
@@ -156,6 +158,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
           { path: 'dashboard', element: <DashboardPage /> },
+          { path: 'profile', element: <RecruiterProfilePage /> },
           { path: 'dashboard/candidates', element: <CandidateListPage /> },
           { path: 'dashboard/reports', element: <InsightsPage /> },
           { path: 'screening', element: <ResumeScreeningPage /> },
@@ -164,6 +167,7 @@ export const router = createBrowserRouter([
           { path: 'evaluations/:evaluationId/analysis', element: <AiAnalysisReportPage /> },
           { path: 'candidates/new', element: <AddCandidatePage /> },
           { path: 'candidates/:id', element: <CandidateDetailsPage /> },
+          { path: 'candidates/:id/report', element: <UnifiedCandidateReportPage /> },
           { path: 'candidates/:id/evaluate', element: <EvaluationCreatePage /> },
         ],
       },

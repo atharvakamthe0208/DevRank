@@ -5,6 +5,7 @@ import devrankMark from '../../assets/devrank-mark.svg';
 
 const navItems = [
   { to: '/dashboard', label: 'Overview', icon: '⌂' },
+  { to: '/profile', label: 'My Profile', icon: '◉' },
   { to: '/dashboard/candidates', label: 'Candidates', icon: '♙' },
   { to: '/screening', label: 'Resume Screening', icon: '▧' },
   { to: '/evaluations', label: 'Evaluations', icon: '◉' },
@@ -17,6 +18,8 @@ export function AppShell() {
   const [signOutError, setSignOutError] = useState('');
   const pageTitle = location.pathname === '/candidates/new'
     ? 'Add candidate'
+    : location.pathname === '/profile'
+      ? 'Recruiter profile'
     : location.pathname.startsWith('/candidates/')
     ? 'Candidate profile'
     : location.pathname.startsWith('/screening')
