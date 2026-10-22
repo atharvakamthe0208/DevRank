@@ -5,22 +5,29 @@ type Props = {
   error: string;
   rows: RecruiterApplication[];
   filter: RecruiterFilter;
+  searchQuery?: string;
   activeId: string;
   activeDecision: 'approved' | 'rejected' | '';
   onRetry: () => void;
   onDecide: (row: RecruiterApplication, decision: 'approved' | 'rejected') => void;
 };
 
-export function RecruiterApplicationsList({ busy, error, rows, filter, activeId, activeDecision, onRetry, onDecide }: Props) {
+function recruiterInitials(name: string | null): string {
+  const parts = name?.trim().split(/\s+/).filter(Boolean) ?? [];
+  if (parts.length === 0) return '?';
+  return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].slice(0, 2)).toUpperCase();
+}
+
+export function RecruiterApplicationsList({ busy, error, rows, filter, searchQuery = '', activeId, activeDecision, onRetry, onDecide }: Props) {
   if (busy) return <p className="admin-empty" role="status">Loading recruiter accounts…</p>;
   if (error) return <div className="admin-load-error" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={onRetry}>Try again</button></div>;
-  if (rows.length === 0) return <p className="admin-empty">No {filter === 'all' ? 'recruiter' : filter} applications to show.</p>;
+  if (rows.length === 0) return <p className="admin-empty">{searchQuery.trim() ? 'No recruiters match your search.' : 'No ' + (filter === 'all' ? 'recruiter' : filter) + ' applications to show.'}</p>;
 
   return <div className="admin-table-scroll" role="region" tabIndex={0} aria-label="Recruiter application list; scroll horizontally on narrow screens">
     <table className="admin-table">
       <thead><tr><th scope="col">Recruiter</th><th scope="col">Work email</th><th scope="col">Registered</th><th scope="col">Status</th><th scope="col">Decision</th></tr></thead>
       <tbody>{rows.map((row) => <tr key={row.user_id}>
-        <td>{row.display_name || 'Name not provided'}</td>
+        <td><div className="admin-recruiter-cell"><span className="admin-recruiter-avatar" aria-hidden="true">{recruiterInitials(row.display_name)}</span><strong>{row.display_name || 'Name not provided'}</strong></div></td>
         <td>{row.email || '—'}</td>
         <td><time dateTime={row.registered_at}>{row.registered_at ? new Date(row.registered_at).toLocaleDateString() : '—'}</time></td>
         <td><span className={`admin-status status-${row.approval_status}`}>{row.approval_status}</span></td>
