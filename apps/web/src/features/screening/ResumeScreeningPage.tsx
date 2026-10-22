@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
 import { screeningComparisonResponseSchema, screeningDetailsResponseSchema, screeningRankingResponseSchema, screeningReportResponseSchema, screeningRetryableErrorCodes, screeningRetryResponseSchema, screeningSubmissionResponseSchema, type ScreeningComparisonResponse, type ScreeningDetailsResponse, type ScreeningReportResponse } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { screeningReportCsv } from './report-export';
 import { filterAndSortScreeningResumes, scoreBand } from './ranking-table';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
-import { screeningProgressLabel } from './screening-progress';
+import { screeningProgress, screeningProgressLabel } from './screening-progress';
 import './resume-screening-page.css';
 
 const MAX_FILES = 20;
@@ -47,6 +47,7 @@ export function ResumeScreeningPage() {
   const [retryingResumeId, setRetryingResumeId] = useState<string | null>(null);
   const [candidateSearch, setCandidateSearch] = useState('');
   const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
   async function loadScreeningResults(sessionId: string, accessToken: string, waitForCompletion: boolean, isCurrent: () => boolean = () => true) {
     let current: ScreeningDetailsResponse;
@@ -280,6 +281,17 @@ export function ResumeScreeningPage() {
     addFiles(event.currentTarget.files);
   }
 
+  function handleFileDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDraggingFiles(false);
+    addFiles(event.dataTransfer.files);
+  }
+
+  const canStartScreening = jobTitle.trim().length > 0 && jobTitle.trim().length <= 200
+    && jobDescription.trim().length >= 50 && jobDescription.trim().length <= 30000
+    && resumes.length > 0;
+  const currentProgress = details?.status === 'processing' ? screeningProgress(details.resumes) : null;
+
   return (
     <div className="resume-screening-page">
       <header className="resume-screening-heading">
@@ -295,15 +307,20 @@ export function ResumeScreeningPage() {
         <section className="screening-panel" aria-labelledby="screening-job-title">
           <div className="screening-panel-heading">
             <span className="screening-step">01</span>
-            <div><h2 id="screening-job-title">Job details</h2><p>These requirements would be shared by every resume in this session.</p></div>
+            <div><h2 id="screening-job-title">Job details</h2><p>Set the role context shared by every resume in this screening session.</p></div>
           </div>
-          <label className="screening-field">Job title
-            <input value={jobTitle} onChange={(event) => { setJobTitle(event.target.value); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} maxLength={200} required placeholder="e.g. Backend Engineer" />
-          </label>
-          <label className="screening-field">Job description
-            <textarea value={jobDescription} onChange={(event) => { setJobDescription(event.target.value); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} minLength={50} maxLength={30000} required rows={8} placeholder="Include the role responsibilities, required skills, experience, and relevant qualifications." />
-            <span className="screening-field-hint">{jobDescription.length.toLocaleString()} / 30,000 characters · minimum 50</span>
-          </label>
+          <div className="screening-job-layout">
+            <div className="screening-job-fields">
+              <label className="screening-field">Job title
+                <input value={jobTitle} onChange={(event) => { setJobTitle(event.target.value); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} maxLength={200} required placeholder="e.g. Senior Backend Engineer" />
+              </label>
+              <label className="screening-field">Job description
+                <textarea value={jobDescription} onChange={(event) => { setJobDescription(event.target.value); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} minLength={50} maxLength={30000} required rows={7} placeholder="Describe the role responsibilities, required skills, experience, and qualifications." />
+                <span className="screening-field-hint">{jobDescription.length.toLocaleString()} / 30,000 characters · minimum 50</span>
+              </label>
+            </div>
+            <aside className="screening-guidance-card" aria-label="Job description guidance"><span className="screening-guidance-icon" aria-hidden="true">✳</span><strong>Specific criteria help</strong><p>Include responsibilities, must-have skills, and relevant experience so the screening has clear job context.</p><span>Job-match scores are separate from developer evaluations.</span></aside>
+          </div>
         </section>
 
         <section className="screening-panel" aria-labelledby="screening-files-title">
@@ -311,12 +328,16 @@ export function ResumeScreeningPage() {
             <span className="screening-step">02</span>
             <div><h2 id="screening-files-title">Resume files</h2><p>PDF or DOCX · up to 20 files · 10 MB per file</p></div>
           </div>
-          <div className="screening-upload-area">
+          <div className="screening-upload-layout">
+          <div className={`screening-upload-area${isDraggingFiles ? ' is-dragging' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsDraggingFiles(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDraggingFiles(false); }} onDrop={handleFileDrop}>
             <span aria-hidden="true" className="screening-upload-icon">⇧</span>
-            <strong>Select resumes to add</strong>
-            <span>Files remain in this browser unless the screening API accepts the submission.</span>
+            <strong>{isDraggingFiles ? 'Drop resumes to add' : 'Add resumes to this screening'}</strong>
+            <span>PDF or DOCX · up to 20 files · 10 MB maximum per file</span>
             <input ref={inputRef} id="screening-resumes" className="screening-file-input" type="file" multiple accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleFileChange} aria-label="Choose PDF or DOCX resumes" />
             <label className="secondary-button screening-browse-button" htmlFor="screening-resumes">Browse files</label>
+            <small>Files are sent to the screening service when you start screening.</small>
+          </div>
+          <aside className="screening-upload-tips"><strong>For best results</strong><ul><li>Use readable, unencrypted PDF or DOCX files.</li><li>Text-selectable documents are easier to process.</li><li>Check each filename before starting the session.</li></ul></aside>
           </div>
 
           {validationMessages.length > 0 && <ul className="screening-validation-list" role="alert">{validationMessages.map((message, index) => <li key={`${index}-${message}`}>{message}</li>)}</ul>}
@@ -332,8 +353,8 @@ export function ResumeScreeningPage() {
         {error && <div className="screening-alert" role="alert"><p>{error}</p><button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Retrying…' : 'Try again'}</button></div>}
         <div className="screening-form-footer">
           <p>Resume job-match results will remain separate from existing GitHub, LeetCode, and developer evaluation scores.</p>
-          <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Start Screening'}
+          <button className="primary-button" type="submit" disabled={submitting || !canStartScreening}>
+            {submitting ? 'Submitting…' : <>Start Screening <span aria-hidden="true">→</span></>}
           </button>
         </div>
       </form>
@@ -345,7 +366,7 @@ export function ResumeScreeningPage() {
         </div>
         {submitted ? <>
           <p className="screening-session-status" role="status">Session {submitted.sessionId} · {details?.status ?? submitted.status}</p>
-          {details?.status === 'processing' && <p className="screening-progress" role="status">{screeningProgressLabel(details.resumes)}</p>}
+          {details?.status === 'processing' && <div className="screening-processing" role="status"><span>{screeningProgressLabel(details.resumes)}</span>{currentProgress && currentProgress.total > 0 && <div className="screening-processing-track" role="progressbar" aria-label="Resumes evaluated or failed" aria-valuemin={0} aria-valuemax={currentProgress.total} aria-valuenow={currentProgress.resolved}><span style={{ width: `${currentProgress.percent}%` }}/></div>}</div>}
           <ul className="screening-file-list screening-status-list">
             {(details?.resumes ?? submitted.resumes.map((resume) => ({ ...resume, candidate: null, evaluation: null, error: undefined }))).map((resume) => <li key={resume.id}>
               <span className="screening-file-icon" aria-hidden="true">CV</span>
