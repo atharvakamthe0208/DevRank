@@ -59,6 +59,11 @@ describe('CORS origin policy', () => {
     expect(isCorsOriginAllowed(configured, 'production', configured)).toBe(true);
     expect(isCorsOriginAllowed('http://localhost:5174', 'production', configured)).toBe(false);
   });
+  it('allows the exact production Vercel app origin and rejects other hosted origins', () => {
+    expect(isCorsOriginAllowed('https://dev-rank-ruddy.vercel.app', 'production', configured)).toBe(true);
+    expect(isCorsOriginAllowed('https://dev-rank-ruddy.vercel.app.attacker.example', 'production', configured)).toBe(false);
+    expect(isCorsOriginAllowed('https://another-app.vercel.app', 'production', configured)).toBe(false);
+  });
   it.each(['https://attacker.example', 'http://localhost.attacker.example:5174', 'http://localhost:5174.evil.test', 'http://localhost:5174/path', 'https://localhost:5174'])('rejects unsafe origin %s', (origin) => {
     expect(isCorsOriginAllowed(origin, 'development', configured)).toBe(false);
   });

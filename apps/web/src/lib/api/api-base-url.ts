@@ -12,6 +12,15 @@ export function resolveApiBaseUrl(configuredUrl: string | undefined, isProductio
         return undefined;
       }
     }
+    // API routes are mounted under /api. Accept a host-root Vercel setting as
+    // well as an already-prefixed base so callers can append paths consistently.
+    if (isProduction) {
+      const url = new URL(normalized);
+      if (!url.pathname.replace(/\/+$/, '').endsWith('/api')) {
+        url.pathname = `${url.pathname.replace(/\/+$/, '')}/api`;
+      }
+      return url.toString().replace(/\/$/, '');
+    }
     return normalized;
   }
   return isProduction ? undefined : LOCAL_API_BASE_URL;
