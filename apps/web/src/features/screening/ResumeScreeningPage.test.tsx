@@ -10,7 +10,7 @@ vi.mock('../auth/AuthProvider', () => ({
 import { AppShell } from '../../components/layout/AppShell';
 import { ResumeScreeningPage } from './ResumeScreeningPage';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
-import { screeningProgressLabel } from './screening-progress';
+import { screeningProgress, screeningProgressLabel } from './screening-progress';
 
 describe('Resume Screening route content', () => {
   it('shows the sidebar link and screening form inside the existing application shell', () => {
@@ -25,6 +25,7 @@ describe('Resume Screening route content', () => {
     expect(html).toContain('Job description');
     expect(html).toContain('Start Screening');
     expect(html).toContain('No screening results yet');
+    expect(html).toContain('disabled=""');
     expect(html).not.toContain('Sort by');
     expect(html).not.toContain('Average available score');
     expect(html).not.toContain('Highest available score');
@@ -47,5 +48,12 @@ describe('screening progress label', () => {
     expect(screeningProgressLabel([
       { status: 'completed' }, { status: 'failed' }, { status: 'queued' }, { status: 'processing' }, { status: 'uploaded' },
     ])).toBe('Evaluated 2 of 5 candidates · 2 pending · 1 processing');
+  });
+
+  it('reports an exact resolved-resume progress value without inventing an estimate', () => {
+    expect(screeningProgress([
+      { status: 'completed' }, { status: 'failed' }, { status: 'queued' }, { status: 'processing' }, { status: 'uploaded' },
+    ])).toEqual({ total: 5, resolved: 2, percent: 40 });
+    expect(screeningProgress([])).toEqual({ total: 0, resolved: 0, percent: 0 });
   });
 });

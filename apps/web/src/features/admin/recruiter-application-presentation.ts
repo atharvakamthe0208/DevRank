@@ -21,3 +21,11 @@ export function summarizeRecruiterApplications(rows: RecruiterApplication[]) {
 export function filterRecruiterApplications(rows: RecruiterApplication[], filter: RecruiterFilter) {
   return filter === 'all' ? rows : rows.filter((row) => row.approval_status === filter);
 }
+
+export function searchRecruiterApplications(rows: RecruiterApplication[], query: string) {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return rows;
+  return rows.filter((row) =>
+    [row.display_name, row.email].some((value) => value?.toLocaleLowerCase().includes(normalized)),
+  );
+}
