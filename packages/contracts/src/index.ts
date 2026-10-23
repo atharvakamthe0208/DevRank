@@ -1,4 +1,5 @@
 export * from './ai-analysis.js';
+export * from './admin-recruiter.js';
 export * from './api-error.js';
 export * from './candidate.js';
 export * from './candidate-api.js';

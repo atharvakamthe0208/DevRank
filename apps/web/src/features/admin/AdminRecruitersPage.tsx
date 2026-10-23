@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import devrankMark from '../../assets/devrank-mark.svg';
+import type { AdminRecruiterDetails } from '@devrank/contracts';
 import { AnimatedMetric } from '../../components/metrics/KpiCards';
 import { useAuth } from '../auth/AuthProvider';
 import { apiRequest } from '../../lib/api/client';
@@ -12,9 +13,11 @@ import {
   type RecruiterFilter,
 } from './recruiter-application-presentation';
 import { RecruiterApplicationsList } from './RecruiterApplicationsList';
+import { AdminRecruiterDetailsPanel } from './AdminRecruiterDetailsPanel';
 import './admin-recruiters-page.css';
 
 type RecruiterDecision = { row: RecruiterApplication; decision: 'approved' | 'rejected' };
+type RecruiterDetailsState = 'loading' | 'error' | 'ready';
 
 export function AdminRecruitersPage() {
   const { session, profile, signOut } = useAuth();
@@ -22,6 +25,10 @@ export function AdminRecruitersPage() {
   const [filter, setFilter] = useState<RecruiterFilter>('pending');
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState<RecruiterApplication[]>([]);
+  const [selectedRecruiter, setSelectedRecruiter] = useState<RecruiterApplication | null>(null);
+  const [recruiterDetails, setRecruiterDetails] = useState<AdminRecruiterDetails | null>(null);
+  const [detailsState, setDetailsState] = useState<RecruiterDetailsState>('loading');
+  const [detailsError, setDetailsError] = useState('');
   const [busy, setBusy] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [activeId, setActiveId] = useState('');
@@ -31,6 +38,7 @@ export function AdminRecruitersPage() {
   const [notice, setNotice] = useState('');
   const [logoutError, setLogoutError] = useState('');
   const decisionDialog = useRef<HTMLDialogElement>(null);
+  const detailsRequest = useRef(0);
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -51,6 +59,36 @@ export function AdminRecruitersPage() {
       setBusy(false);
     }
   }, [session]);
+
+  async function loadDetails(row: RecruiterApplication) {
+    if (!session) return;
+    const requestId = ++detailsRequest.current;
+    setSelectedRecruiter(row);
+    setDetailsState('loading');
+    setDetailsError('');
+    setRecruiterDetails(null);
+    try {
+      const result = await apiRequest<{ details: AdminRecruiterDetails }>(
+        `/admin/recruiters/${row.user_id}/details`,
+        undefined,
+        session.access_token,
+      );
+      if (requestId !== detailsRequest.current) return;
+      setRecruiterDetails(result.details);
+      setDetailsState('ready');
+    } catch (cause) {
+      if (requestId !== detailsRequest.current) return;
+      setDetailsError(cause instanceof Error ? cause.message : 'Recruiter details could not be loaded.');
+      setDetailsState('error');
+    }
+  }
+
+  function closeDetails() {
+    detailsRequest.current += 1;
+    setSelectedRecruiter(null);
+    setRecruiterDetails(null);
+    setDetailsError('');
+  }
 
   useEffect(() => { void load(); }, [load]);
 
@@ -132,8 +170,17 @@ export function AdminRecruitersPage() {
         </div>
         {notice && <p className="form-feedback" role="status">{notice}</p>}
         {logoutError && <p className="form-feedback form-feedback-error" role="alert">{logoutError}</p>}
-        <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} searchQuery={search} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
+        <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} searchQuery={search} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onViewDetails={(row) => void loadDetails(row)} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
       </section>
+
+      {selectedRecruiter && <AdminRecruiterDetailsPanel
+        name={selectedRecruiter.display_name || selectedRecruiter.email || 'Recruiter'}
+        state={detailsState}
+        details={recruiterDetails}
+        error={detailsError}
+        onRetry={() => void loadDetails(selectedRecruiter)}
+        onClose={closeDetails}
+      />}
 
       <p className="admin-security-note"><span aria-hidden="true">ⓘ</span> Only project-owner-provisioned administrators can review these applications. Recruiter accounts cannot grant themselves administrator access.</p>
     </main>
