@@ -1,7 +1,10 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import devrankMark from '../../assets/devrank-mark.svg';
+import { WorkspaceBreadcrumbContext } from './WorkspaceBreadcrumbContext';
+import { workspaceBreadcrumbs } from './workspace-breadcrumbs';
+import './workspace-breadcrumbs.css';
 
 const navItems = [
   { to: '/dashboard', label: 'Overview', icon: '⌂' },
@@ -16,23 +19,13 @@ export function AppShell() {
   const location = useLocation();
   const { profile, signOut } = useAuth();
   const [signOutError, setSignOutError] = useState('');
-  const pageTitle = location.pathname === '/candidates/new'
-    ? 'Add candidate'
-    : location.pathname === '/profile'
-      ? 'Recruiter profile'
-    : location.pathname.startsWith('/candidates/')
-    ? 'Candidate profile'
-    : location.pathname.startsWith('/screening')
-      ? 'Resume Screening'
-    : location.pathname.includes('evaluations') || location.pathname.endsWith('/evaluate')
-      ? 'Evaluation'
-      : location.pathname.includes('candidates')
-      ? 'Candidates'
-        : location.pathname.includes('reports')
-          ? 'Insights'
-        : location.pathname.includes('evaluations')
-          ? 'Evaluations'
-        : 'Overview';
+  const [breadcrumbLabels, setBreadcrumbLabels] = useState<{ pathname: string; candidateName?: string; evaluationName?: string } | null>(null);
+  const routeState = location.state as { candidateListReturn?: { path?: unknown; search?: unknown; scrollY?: unknown } } | null;
+  const returnPath = routeState?.candidateListReturn?.path;
+  const candidateListPath = typeof returnPath === 'string' && /^\/dashboard\/candidates(?:\?.*)?$/.test(returnPath) ? returnPath : undefined;
+  const labels = { ...(breadcrumbLabels?.pathname === location.pathname ? breadcrumbLabels : {}), candidateListPath };
+  const breadcrumbs = workspaceBreadcrumbs(location.pathname, labels);
+  const candidateListState = { candidateListSearch: typeof routeState?.candidateListReturn?.search === 'string' ? routeState.candidateListReturn.search : '', candidateListRestoreScroll: typeof routeState?.candidateListReturn?.scrollY === 'number' ? routeState.candidateListReturn.scrollY : undefined };
 
   return (
     <div className={`app-shell${location.pathname === '/dashboard' || /^\/evaluations\/[^/]+\/analysis$/.test(location.pathname) ? ' refined-workspace' : ''}`}>
@@ -50,8 +43,8 @@ export function AppShell() {
         </div>
       </aside>
       <div className="main-column">
-        <header className="topbar"><div className="mobile-brand"><img className="mobile-brand-img" src={devrankMark} alt=""/> devrank<span className="brand-period">.</span></div><div className="breadcrumb"><span>Workspace</span><span className="crumb-slash">/</span><strong>{pageTitle}</strong></div><div className="topbar-actions"><span className="data-chip"><i /> Recruiter workspace</span><button className="logout-button mobile-logout" type="button" onClick={() => { void signOut().catch(() => setSignOutError('Could not sign out. Try again.')); }}>Log out</button><div className="avatar avatar-user top-avatar">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</div></div></header>
-        <main className="page-content">{signOutError && <p className="form-feedback form-feedback-error" role="alert">{signOutError}</p>}<Outlet /></main>
+        <header className="topbar"><div className="mobile-brand"><img className="mobile-brand-img" src={devrankMark} alt=""/> devrank<span className="brand-period">.</span></div><nav className="breadcrumb" aria-label="Breadcrumb"><ol className="breadcrumb-list">{breadcrumbs.map((crumb, index) => <li key={`${crumb.label}-${index}`}>{index > 0 && <span className="crumb-slash" aria-hidden="true">/</span>}{crumb.to ? <Link to={crumb.to} state={crumb.label === 'Candidates' ? candidateListState : undefined}>{crumb.label}</Link> : <span aria-current="page">{crumb.label}</span>}</li>)}</ol></nav><div className="topbar-actions"><span className="data-chip"><i /> Recruiter workspace</span><button className="logout-button mobile-logout" type="button" onClick={() => { void signOut().catch(() => setSignOutError('Could not sign out. Try again.')); }}>Log out</button><div className="avatar avatar-user top-avatar">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</div></div></header>
+        <main className="page-content">{signOutError && <p className="form-feedback form-feedback-error" role="alert">{signOutError}</p>}<WorkspaceBreadcrumbContext.Provider value={setBreadcrumbLabels}><Outlet /></WorkspaceBreadcrumbContext.Provider></main>
       </div>
     </div>
   );

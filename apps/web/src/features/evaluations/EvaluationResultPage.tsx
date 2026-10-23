@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useState, type MouseEvent } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { evaluationResponseSchema, persistedEvaluationReadSchema, type Candidate, type EvaluationResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { parseCandidateApiResponse } from '../candidates/candidate-response-validation';
 import { EvaluationResults } from './EvaluationResults';
+import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
+import { useWorkspaceBreadcrumbLabels } from '../../components/layout/WorkspaceBreadcrumbContext';
 import { LegacyEvaluationResults } from './LegacyEvaluationResults';
 import './evaluation.css';
 
@@ -16,10 +18,27 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Could not load this evaluation. Check your connection and retry.';
 }
 
+function safeEvaluationReturn(value: unknown): string | null {
+  return typeof value === 'string' && (/^\/candidates\/[0-9a-f-]{36}$/i.test(value) || /^\/evaluations(?:\?[^#]*)?$/.test(value)) ? value : null;
+}
+
 export function EvaluationResultPage() {
   const { evaluationId = '' } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { session } = useAuth();
   const [state, setState] = useState<State>({ status: 'loading' });
+  const evaluationName = state.status === 'ready' ? `${state.data.candidate.name} · ${state.data.evaluation.targetRole.replaceAll('_', ' ')}` : undefined;
+  useWorkspaceBreadcrumbLabels({ evaluationName });
+  const returnTo = (location.state as { returnTo?: unknown; historyBackSteps?: unknown } | null)?.returnTo;
+  const backPath = safeEvaluationReturn(returnTo) ?? '/evaluations';
+  function backToParent(event: MouseEvent<HTMLAnchorElement>) {
+    const steps = (location.state as { historyBackSteps?: unknown } | null)?.historyBackSteps;
+    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && safeEvaluationReturn(returnTo) && (steps === 1 || steps === 2)) {
+      event.preventDefault();
+      navigate(-steps);
+    }
+  }
 
   async function load(signal?: AbortSignal) {
     if (!session?.access_token) { setState({ status: 'error', message: 'Your secure session is unavailable. Sign in again.' }); return; }
@@ -43,9 +62,14 @@ export function EvaluationResultPage() {
   }
 
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [evaluationId, session?.access_token]);
-  if (state.status === 'loading') return <main className="evaluation-page"><div className="evaluation-page-state" role="status">Loading saved evaluation…</div></main>;
-  if (state.status === 'error') return <main className="evaluation-page"><div className="evaluation-page-state" role="alert"><h1>{state.unsupported ? 'Historical evaluation' : 'Evaluation unavailable'}</h1><p>{state.message}</p>{!state.unsupported && <button className="primary-button" type="button" onClick={() => void load()}>Try again</button>}<Link className="secondary-button" to="/dashboard/candidates">Back to candidates</Link></div></main>;
-  return state.data.evaluation.result.schemaVersion === '4.0.0'
+  if (state.status === 'loading') return <main className="evaluation-page"><WorkspaceSkeleton variant="detail"/></main>;
+  if (state.status === 'error') {
+    return <main className="evaluation-page"><div className="evaluation-page-state" role="alert"><h1>{state.unsupported ? 'Historical evaluation' : 'Evaluation unavailable'}</h1><p>{state.message}</p>{!state.unsupported && <button className="primary-button" type="button" onClick={() => void load()}>Try again</button>}<Link className="secondary-button" to={backPath} replace onClick={backToParent}>Back</Link></div></main>;
+  }
+  return <>
+    <Link className="back-link" to={backPath} replace onClick={backToParent}>← <span>Back</span></Link>
+    {state.data.evaluation.result.schemaVersion === '4.0.0'
     ? <EvaluationResults candidate={state.data.candidate} evaluation={state.data.evaluation as PersistedEvaluation & { result: EvaluationResponse }}/>
-    : <LegacyEvaluationResults candidate={state.data.candidate} evaluation={state.data.evaluation as Exclude<PersistedEvaluationRead, PersistedEvaluation>}/>;
+    : <LegacyEvaluationResults candidate={state.data.candidate} evaluation={state.data.evaluation as Exclude<PersistedEvaluationRead, PersistedEvaluation>}/>}
+  </>;
 }

@@ -34,6 +34,8 @@ describe('proposed rubric and contribution panel', () => {
     expect(html).not.toContain('GitHub contribution history');
     expect(html).toContain('GitHub');
     expect(html).toContain('LeetCode');
+    expect(html).toContain('Sync LeetCode');
+    expect(html).not.toContain('Save LeetCode profile');
   });
 
   it('renders all six active categories, weights, sources, signals, and historical-version notice', () => {

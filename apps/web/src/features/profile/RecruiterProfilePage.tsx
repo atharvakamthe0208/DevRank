@@ -4,6 +4,8 @@ import { recruiterProfileDetailsSchema, recruiterProfileUpdateSchema, type Recru
 import { z } from 'zod';
 import { apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
+import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
+import './recruiter-profile-page.css';
 
 const recruiterProfileSchema = z.object({
   user: z.object({ id: z.string(), email: z.string().email().nullable() }),
@@ -46,18 +48,27 @@ export function RecruiterProfileFields({ identity }: { identity: RecruiterIdenti
   const profile = identity.profile;
   if (!profile) return null;
   const location = [profile.location_city, profile.location_country].filter((part): part is string => Boolean(part?.trim())).join(', ');
-  return <div className="recruiter-profile-fields">
-    <div><span>Work email</span><strong>{identity.user.email || 'Not available'}</strong></div>
-    <div><span>Account type</span><strong>{profile.role === 'admin' ? 'Administrator' : 'Recruiter'}</strong></div>
-    <div><span>Access status</span><strong>{profile.approval_status === 'approved' ? 'Approved' : profile.approval_status[0].toUpperCase() + profile.approval_status.slice(1)}</strong></div>
-    <div><span>Phone</span><strong>{display(profile.phone_number)}</strong></div>
-    <div><span>Company</span><strong>{display(profile.company_name)}</strong></div>
-    <div><span>Job title</span><strong>{display(profile.job_title)}</strong></div>
-    <div><span>Company website</span><strong>{profile.company_website ? <a href={profile.company_website} target="_blank" rel="noreferrer">{profile.company_website}</a> : 'Not provided'}</strong></div>
-    <div><span>Location</span><strong>{location || 'Not provided'}</strong></div>
+  return <div className="recruiter-profile-groups">
+    <section className="recruiter-profile-group" aria-labelledby="profile-account-details">
+      <div className="recruiter-profile-group-heading"><h3 id="profile-account-details">Account details</h3><p>Identity and workspace access</p></div>
+      <div className="recruiter-profile-fields">
+        <div><span>Work email</span><strong>{identity.user.email || 'Not available'}</strong></div>
+        <div><span>Account type</span><strong>{profile.role === 'admin' ? 'Administrator' : 'Recruiter'}</strong></div>
+        <div><span>Access status</span><strong>{profile.approval_status === 'approved' ? 'Approved' : profile.approval_status[0].toUpperCase() + profile.approval_status.slice(1)}</strong></div>
+        <div><span>Phone</span><strong>{display(profile.phone_number)}</strong></div>
+      </div>
+    </section>
+    <section className="recruiter-profile-group" aria-labelledby="profile-professional-details">
+      <div className="recruiter-profile-group-heading"><h3 id="profile-professional-details">Professional details</h3><p>Organization and location</p></div>
+      <div className="recruiter-profile-fields">
+        <div><span>Company</span><strong>{display(profile.company_name)}</strong></div>
+        <div><span>Job title</span><strong>{display(profile.job_title)}</strong></div>
+        <div><span>Company website</span><strong>{profile.company_website ? <a href={profile.company_website} target="_blank" rel="noreferrer">{profile.company_website}</a> : 'Not provided'}</strong></div>
+        <div><span>Location</span><strong>{location || 'Not provided'}</strong></div>
+      </div>
+    </section>
   </div>;
 }
-
 export function RecruiterProfileEditForm({
   form, email, saving, onFieldChange, onSubmit, onCancel,
 }: {
@@ -159,7 +170,7 @@ export function RecruiterProfilePage() {
   return <div className="recruiter-profile-page">
     <Link className="back-link" to="/dashboard"><span aria-hidden="true">←</span> Back to overview</Link>
     <header className="recruiter-profile-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> ACCOUNT</span><h1>Recruiter profile</h1><p className="page-subtitle">Your personal and professional details for the DevRank workspace.</p></div></header>
-    {loading ? <section className="recruiter-profile-state" role="status" aria-busy="true">Loading your recruiter profile…</section>
+    {loading ? <WorkspaceSkeleton variant="profile"/>
       : error && !identity ? <section className="recruiter-profile-state" role="alert"><p>{error}</p><button className="secondary-button recruiter-retry" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></section>
       : !identity || !profile ? <section className="recruiter-profile-state" role="alert"><h2>Profile unavailable</h2><p>Your signed-in account does not have a recruiter profile.</p></section>
       : <>
@@ -168,7 +179,7 @@ export function RecruiterProfilePage() {
         <section className="recruiter-profile-card" aria-labelledby="recruiter-profile-name">
           <div className="recruiter-profile-avatar" aria-label={`${profile.display_name || 'Recruiter'} profile initials`}>{recruiterInitials(profile.display_name)}</div>
           <div className="recruiter-profile-main">
-            <div className="recruiter-profile-title"><div><span className="recruiter-profile-kicker">RECRUITER ACCOUNT</span><h2 id="recruiter-profile-name">{profile.display_name || 'Name not provided'}</h2></div>
+            <div className="recruiter-profile-title"><div><span className="recruiter-profile-kicker">RECRUITER ACCOUNT</span><h2 id="recruiter-profile-name">{profile.display_name || 'Name not provided'}</h2><div className="recruiter-profile-badges"><span className="recruiter-profile-role">{profile.role === 'admin' ? 'Administrator' : 'Recruiter'}</span><span className={`recruiter-profile-access is-${profile.approval_status}`}><i aria-hidden="true"/>{profile.approval_status === 'approved' ? 'Approved access' : profile.approval_status[0].toUpperCase() + profile.approval_status.slice(1)}</span></div></div>
               {!editing && <button className="secondary-button recruiter-edit" type="button" onClick={() => { setForm(valuesFromProfile(identity)); setError(''); setNotice(''); setEditing(true); }}>Edit profile</button>}
             </div>
             {editing ? <RecruiterProfileEditForm form={form} email={identity.user.email} saving={saving} onFieldChange={updateField} onSubmit={(event) => void save(event)} onCancel={cancelEdit}/> : <RecruiterProfileFields identity={identity}/>}

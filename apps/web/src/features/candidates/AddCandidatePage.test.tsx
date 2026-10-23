@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../auth/AuthProvider', () => ({ useAuth: () => ({ session: null }) }));
@@ -10,7 +10,8 @@ import { AddCandidatePage } from './AddCandidatePage';
 
 describe('add candidate form', () => {
   it('keeps GitHub and LeetCode fields and omits the unused HackerRank field', () => {
-    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AddCandidatePage)));
+    const router = createMemoryRouter([{ path: '/candidates/new', element: createElement(AddCandidatePage) }], { initialEntries: ['/candidates/new'] });
+    const html = renderToStaticMarkup(createElement(RouterProvider, { router }));
 
     expect(html).toContain('GitHub username');
     expect(html).toContain('LeetCode username');

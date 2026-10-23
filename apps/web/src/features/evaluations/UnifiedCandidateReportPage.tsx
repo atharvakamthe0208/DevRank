@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { unifiedCandidateReportSchema, type UnifiedCandidateReport } from '@devrank/contracts';
 import { useAuth } from '../auth/AuthProvider';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
+import { useWorkspaceBreadcrumbLabels } from '../../components/layout/WorkspaceBreadcrumbContext';
 import './unified-candidate-report.css';
 
 type State = { status: 'loading' } | { status: 'ready'; report: UnifiedCandidateReport } | { status: 'error'; message: string };
@@ -22,6 +24,7 @@ export function UnifiedCandidateReportPage() {
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [linkError, setLinkError] = useState('');
   const [linking, setLinking] = useState(false);
+  useWorkspaceBreadcrumbLabels({ candidateName: state.status === 'ready' ? state.report.candidate.name : undefined });
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!session?.access_token) { setState({ status: 'error', message: 'Sign in again to view this report.' }); return; }
     setState({ status: 'loading' });
@@ -43,7 +46,7 @@ export function UnifiedCandidateReportPage() {
     finally { setLinking(false); }
   }
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
-  if (state.status === 'loading') return <main className="unified-report-page"><p role="status">Loading saved evaluation report…</p></main>;
+  if (state.status === 'loading') return <main className="unified-report-page"><WorkspaceSkeleton variant="detail"/></main>;
   if (state.status === 'error') return <main className="unified-report-page"><section className="unified-report-state" role="alert"><h1>Report unavailable</h1><p>{state.message}</p><button type="button" className="primary-button" onClick={() => void load()}>Try again</button><Link className="secondary-button link-button" to={`/candidates/${id}`}>Back to candidate</Link></section></main>;
   const { report } = state;
   return <UnifiedCandidateReportView report={report} selectedResumeId={selectedResumeId} linking={linking} linkError={linkError}

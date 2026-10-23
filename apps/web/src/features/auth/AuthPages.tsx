@@ -6,6 +6,7 @@ import { passwordResetRequestFailureMessage, passwordUpdateFailureMessage, reque
 import { supabase } from '../../lib/supabase/client';
 import { SignupFeatureShowcase } from './SignupFeatureShowcase';
 import { DelayedAuthLoadingScreen } from './DelayedAuthLoadingScreen';
+import { AuthLoadingScreen } from './AuthLoadingScreen';
 import devrankMark from '../../assets/devrank-mark.svg';
 import './signup.css';
 
@@ -31,6 +32,7 @@ export function LoginPage() {
   const returnTo = typeof requestedPath === 'string' && requestedPath.startsWith('/') && !requestedPath.startsWith('//') ? requestedPath : '/dashboard';
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [errors, setErrors] = useState<{email?: string; password?: string}>({});
   const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
+  if (state === 'loading') return <AuthLoadingScreen message="Restoring your secure session…"/>;
   if (state === 'approved') return <Navigate to={returnTo} replace/>;
   if (state === 'admin') return <Navigate to={returnTo === '/dashboard' ? '/admin/recruiters' : returnTo} replace/>;
   if (state === 'profile-missing') return <Navigate to="/dashboard" replace/>;
@@ -57,6 +59,7 @@ export function LoginPage() {
 export function SignupPage() {
   const { state } = useAuth(); const [fullName,setFullName] = useState(''); const [email,setEmail] = useState(''); const [password,setPassword] = useState(''); const [confirm,setConfirm] = useState('');
   const [errors,setErrors] = useState<Record<string,string|undefined>>({}); const [message,setMessage] = useState(''); const [busy,setBusy] = useState(false); const [verifyAfterSignup,setVerifyAfterSignup] = useState(false);
+  if (state === 'loading' && !busy) return <AuthLoadingScreen message={verifyAfterSignup ? 'Verifying recruiter access…' : 'Restoring your secure session…'}/>;
   if (state === 'approved') return <Navigate to="/dashboard" replace/>;
   if (state === 'admin') return <Navigate to="/admin/recruiters" replace/>;
   if (state === 'profile-missing') return <Navigate to="/dashboard" replace/>;
@@ -142,6 +145,7 @@ export function AuthCallbackPage() {
   const query = new URLSearchParams(location.search);
   const hash = new URLSearchParams(location.hash.replace(/^#/,''));
   const invalidLink = query.has('error') || query.has('error_description') || query.has('error_code') || hash.has('error') || hash.has('error_description') || hash.has('error_code');
+  if(state==='loading'&&!invalidLink)return <AuthLoadingScreen message="Confirming your secure session…"/>;
   if(state==='approved') return <Navigate to="/dashboard" replace/>;
   if(state==='admin') return <Navigate to="/admin/recruiters" replace/>;
   if(state==='profile-missing') return <Navigate to="/dashboard" replace/>;

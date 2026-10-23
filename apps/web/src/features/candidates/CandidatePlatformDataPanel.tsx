@@ -10,13 +10,12 @@ import {
   type LeetCodeSyncResponse,
 } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
-import { normalizePlatformProfile, platformSyncCapabilities } from './candidate-platform-form';
-import { parseCandidateApiResponse } from './candidate-response-validation';
+import { platformSyncCapabilities } from './candidate-platform-form';
+import { LeetCodeProfileSyncError, saveAndSyncLeetCodeProfile } from './leetcode-profile-sync';
 import { useAuth } from '../auth/AuthProvider';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import './candidate-platform-data.css';
 
-type ProfileSaveState = { status: 'idle' | 'saving' } | { status: 'saved' } | { status: 'error'; message: string };
 type SyncState = { status: 'idle' | 'loading' | 'syncing' } | { status: 'synced'; result: GitHubSyncResponse } | { status: 'error'; message: string; retry: 'load' | 'sync' };
 type LeetCodeState = { status: 'idle' | 'syncing' } | { status: 'synced'; result: LeetCodeSyncResponse } | { status: 'error'; message: string };
 
@@ -34,7 +33,6 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
   const [githubProfile, setGithubProfile] = useState(candidate.githubUsername ?? '');
   const [githubState, setGithubState] = useState<SyncState>({ status: 'loading' });
   const [leetcodeProfile, setLeetCodeProfile] = useState(candidate.leetcodeUsername ?? '');
-  const [profileSave, setProfileSave] = useState<ProfileSaveState>({ status: 'idle' });
   const [saved, setSaved] = useState<CandidatePlatformDataResponse['items']>([]);
   const [leetcodeState, setLeetCodeState] = useState<LeetCodeState>({ status: 'idle' });
 
@@ -78,36 +76,31 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
     } catch (error) { setGithubState({ status: 'error', message: requestErrorMessage(error), retry: 'sync' }); }
   }
 
-  async function syncLeetCode() {
-    const profile = leetcodeProfile.trim();
-    if (!profile) { setLeetCodeState({ status: 'error', message: 'Enter a LeetCode username or HTTPS profile URL.' }); return; }
+  async function syncLeetCode(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (leetcodeState.status === 'syncing') return;
     if (!session?.access_token) { setLeetCodeState({ status: 'error', message: 'Your secure session expired. Sign in again to continue.' }); return; }
     setLeetCodeState({ status: 'syncing' });
     try {
-      const result = leetCodeSyncResponseSchema.parse(await apiRequest<unknown>(`/candidates/${candidate.id}/platform-data/leetcode-sync`, {
-        method: 'POST', body: JSON.stringify({ profile }),
-      }, session.access_token));
-      setLeetCodeState({ status: 'synced', result });
-      setLeetCodeProfile(result.handle);
-      setSaved((current) => [result, ...current.filter((item) => !('platform' in item && item.platform === 'leetcode' && item.provenance === 'alfa_leetcode_api'))]);
-    } catch (error) { setLeetCodeState({ status: 'error', message: requestErrorMessage(error) }); }
-  }
-
-  async function saveLeetCodeProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const normalized = normalizePlatformProfile('leetcode', leetcodeProfile);
-    if (!normalized.success) { setProfileSave({ status: 'error', message: normalized.message }); return; }
-    if (!session?.access_token) { setProfileSave({ status: 'error', message: 'Your secure session expired. Sign in again to continue.' }); return; }
-    setProfileSave({ status: 'saving' });
-    try {
-      const response = await apiRequest<unknown>(`/candidates/${candidate.id}`, { method: 'PATCH', body: JSON.stringify({ leetcodeUsername: normalized.handle }) }, session.access_token);
-      const updated = parseCandidateApiResponse(response);
-      if (!updated) throw new Error('The profile link was saved, but the candidate response could not be validated. Reload this page.');
-      setLeetCodeProfile(normalized.handle);
-      onCandidateUpdated?.(updated);
-      setProfileSave({ status: 'saved' });
+      const outcome = await saveAndSyncLeetCodeProfile(candidate.id, leetcodeProfile, session.access_token,
+        (path, init, token) => apiRequest<unknown>(path, init, token));
+      setLeetCodeProfile(outcome.handle);
+      onCandidateUpdated?.(outcome.candidate);
+      setLeetCodeState({ status: 'synced', result: outcome.result });
+      setSaved((current) => [outcome.result, ...current.filter((item) => !('platform' in item && item.platform === 'leetcode' && item.provenance === 'alfa_leetcode_api'))]);
     } catch (error) {
-      setProfileSave({ status: 'error', message: requestErrorMessage(error) });
+      const workflowError = error instanceof LeetCodeProfileSyncError ? error : undefined;
+      if (workflowError?.savedCandidate) {
+        setLeetCodeProfile(workflowError.savedCandidate.leetcodeUsername ?? leetcodeProfile.trim());
+        onCandidateUpdated?.(workflowError.savedCandidate);
+      }
+      const cause = workflowError?.originalError ?? error;
+      const message = workflowError?.stage === 'validation'
+        ? workflowError.message
+        : workflowError?.stage === 'sync'
+          ? `${workflowError.message} ${requestErrorMessage(cause)}`
+          : requestErrorMessage(cause);
+      setLeetCodeState({ status: 'error', message });
     }
   }
 
@@ -122,15 +115,12 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
       </div>}
     </article>
     <article className="platform-data-card platform-data-card-leetcode">
-      <div className="platform-data-heading"><span className="platform-mark leetcode-mark"><PlatformLogo platform="leetcode" size="regular"/></span><div><h3>LeetCode</h3><p>Profile link and any previously saved candidate-provided summary</p></div><span className={`source-status ${latestLeetCode?.availability === 'available' ? 'is-available' : latestLeetCode ? 'is-unavailable' : 'is-idle'}`} role="status">{latestLeetCode ? latestLeetCode.availability.replace('_', ' ') : 'No stats saved'}</span></div>
-      <form className="platform-data-form" onSubmit={(event) => void saveLeetCodeProfile(event)}>
-        <label>LeetCode username or profile URL<input value={leetcodeProfile} onChange={(event) => { setLeetCodeProfile(event.target.value); setProfileSave({ status: 'idle' }); }} placeholder="username or https://leetcode.com/u/username" autoComplete="off" /></label>
-        <div className="platform-submit-row"><p>{platformSyncCapabilities.leetcode.explanation}</p><button className="primary-button" type="submit" disabled={profileSave.status === 'saving'}>{profileSave.status === 'saving' ? 'Saving…' : <><PlatformLogo platform="leetcode"/>Save LeetCode profile</>}</button></div>
-        <button type="button" className="secondary-button" onClick={() => void syncLeetCode()} disabled={leetcodeState.status === 'syncing'}>{leetcodeState.status === 'syncing' ? 'Syncing…' : <><PlatformLogo platform="leetcode"/>Sync LeetCode</>}</button>
-        {leetcodeState.status === 'error' && <div className="platform-feedback is-error" role="alert"><p>{leetcodeState.message}</p><button type="button" className="text-button" onClick={() => void syncLeetCode()}>Try again</button></div>}
-        {leetcodeState.status === 'synced' && <div className="saved-platform-data" role="status"><p>Synced {when(leetcodeState.result.syncedAt)} via {leetcodeState.result.provider}. Public profile data does not independently verify identity and is not used as an evaluation score.</p></div>}
-        {profileSave.status === 'error' && <p className="platform-feedback is-error" role="alert">{profileSave.message}</p>}
-        {profileSave.status === 'saved' && <p className="platform-feedback is-success" role="status">LeetCode profile link saved to this candidate.</p>}
+      <div className="platform-data-heading"><span className="platform-mark leetcode-mark"><PlatformLogo platform="leetcode" size="regular"/></span><div><h3>LeetCode</h3><p>Profile link and any previously saved candidate-provided summary</p></div><span className={`source-status ${leetcodeState.status === 'syncing' ? 'is-pending' : latestLeetCode?.availability === 'available' ? 'is-available' : latestLeetCode ? 'is-unavailable' : 'is-idle'}`} role="status">{leetcodeState.status === 'syncing' ? 'Syncing…' : latestLeetCode ? latestLeetCode.availability.replace('_', ' ') : 'No stats saved'}</span></div>
+      <form className="platform-data-form leetcode-sync-form" onSubmit={(event) => void syncLeetCode(event)}>
+        <label>LeetCode username or profile URL<input value={leetcodeProfile} onChange={(event) => { setLeetCodeProfile(event.target.value); if (leetcodeState.status === 'error') setLeetCodeState({ status: 'idle' }); }} placeholder="username or https://leetcode.com/u/username" autoComplete="off" aria-invalid={leetcodeState.status === 'error'} aria-describedby={leetcodeState.status === 'error' ? 'leetcode-profile-feedback' : undefined} /></label>
+        <div className="platform-submit-row"><p>{platformSyncCapabilities.leetcode.explanation}</p><button className="primary-button" type="submit" disabled={leetcodeState.status === 'syncing'}>{leetcodeState.status === 'syncing' ? 'Syncing…' : <><PlatformLogo platform="leetcode"/>Sync LeetCode</>}</button></div>
+        {leetcodeState.status === 'error' && <div id="leetcode-profile-feedback" className="platform-feedback is-error" role="alert"><p>{leetcodeState.message}</p><button type="button" className="text-button" onClick={() => void syncLeetCode()}>Try again</button></div>}
+        {leetcodeState.status === 'synced' && <div className="saved-platform-data" role="status"><p>Profile saved and synced {when(leetcodeState.result.syncedAt)} via {leetcodeState.result.provider}. Public profile data does not independently verify identity and is not used as an evaluation score.</p></div>}
         {latestLeetCode && <div className="saved-platform-data"><p>Last saved {when(latestLeetCode.submittedAt)} · {latestLeetCode.provenance.replaceAll('_', ' ')}</p>{latestLeetCode.statistics && <ul>{Object.entries(latestLeetCode.statistics).map(([name, value]) => <li key={name}><span>{name.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</span><strong>{value}</strong></li>)}</ul>}</div>}
       </form>
     </article>

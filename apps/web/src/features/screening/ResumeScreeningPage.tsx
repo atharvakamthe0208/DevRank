@@ -2,21 +2,35 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type For
 import { screeningComparisonResponseSchema, screeningDetailsResponseSchema, screeningRankingResponseSchema, screeningReportResponseSchema, screeningRetryableErrorCodes, screeningRetryResponseSchema, screeningSubmissionResponseSchema, type ScreeningComparisonResponse, type ScreeningDetailsResponse, type ScreeningReportResponse } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
+import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { screeningReportCsv } from './report-export';
 import { filterAndSortScreeningResumes, scoreBand, scorePresentation, screeningStatusLabel } from './ranking-table';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
 import { ScreeningResultList } from './ScreeningResultList';
 import { screeningProgressLabel } from './screening-progress';
+import { createUserSessionCache } from './screening-navigation-cache';
+import { isValidScreeningSessionId, shouldShowScreeningRestoreSkeleton } from './screening-restore';
 import './resume-screening-page.css';
 
 const MAX_FILES = 20;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx'];
 const SCREENING_POLL_MS = 1000;
+const MIN_UNCACHED_RESTORE_SKELETON_MS = 1150;
 const SCREENING_SESSION_STORAGE_KEY = 'devrank.resume-screening.session-id';
 
 type SelectedResume = { id: string; file: File };
 type SubmittedSession = ReturnType<typeof screeningSubmissionResponseSchema.parse>;
+type ScreeningNavigationSnapshot = {
+  submitted: SubmittedSession; details: ScreeningDetailsResponse; selectedIds: string[];
+  comparison: ScreeningComparisonResponse | null; rankingData: ReturnType<typeof screeningRankingResponseSchema.parse> | null;
+  report: ScreeningReportResponse | null; candidateSearch: string; expandedDetailsId: string | null;
+};
+const screeningNavigationCache = createUserSessionCache<ScreeningNavigationSnapshot>();
+function storedScreeningSessionId() {
+  if (typeof window === 'undefined') return null;
+  try { return sessionStorage.getItem(SCREENING_SESSION_STORAGE_KEY); } catch { return null; }
+}
 
 function waitForScreeningPoll(): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, SCREENING_POLL_MS));
@@ -28,6 +42,8 @@ function formatSize(size: number): string {
 
 export function ResumeScreeningPage() {
   const { session } = useAuth();
+  const storedSessionId = storedScreeningSessionId();
+  const cachedNavigation = session?.user?.id && storedSessionId ? screeningNavigationCache.get(session.user.id, storedSessionId) : undefined;
   const inputRef = useRef<HTMLInputElement>(null);
   const nextFileId = useRef(0);
   const idempotencyKey = useRef<string | null>(null);
@@ -37,30 +53,37 @@ export function ResumeScreeningPage() {
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [submitted, setSubmitted] = useState<SubmittedSession | null>(null);
-  const [details, setDetails] = useState<ScreeningDetailsResponse | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [comparison, setComparison] = useState<ScreeningComparisonResponse | null>(null);
-  const [rankingData, setRankingData] = useState<ReturnType<typeof screeningRankingResponseSchema.parse> | null>(null);
-  const [report, setReport] = useState<ScreeningReportResponse | null>(null);
+  const [submitted, setSubmitted] = useState<SubmittedSession | null>(cachedNavigation?.submitted ?? null);
+  const [details, setDetails] = useState<ScreeningDetailsResponse | null>(cachedNavigation?.details ?? null);
+  const [selectedIds, setSelectedIds] = useState<string[]>(cachedNavigation?.selectedIds ?? []);
+  const [comparison, setComparison] = useState<ScreeningComparisonResponse | null>(cachedNavigation?.comparison ?? null);
+  const [rankingData, setRankingData] = useState<ReturnType<typeof screeningRankingResponseSchema.parse> | null>(cachedNavigation?.rankingData ?? null);
+  const [report, setReport] = useState<ScreeningReportResponse | null>(cachedNavigation?.report ?? null);
   const [reviewError, setReviewError] = useState('');
   const [reviewBusy, setReviewBusy] = useState(false);
   const [retryingResumeId, setRetryingResumeId] = useState<string | null>(null);
-  const [candidateSearch, setCandidateSearch] = useState('');
-  const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(null);
+  const [candidateSearch, setCandidateSearch] = useState(cachedNavigation?.candidateSearch ?? '');
+  const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(cachedNavigation?.expandedDetailsId ?? null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [restoringSession, setRestoringSession] = useState(() => shouldShowScreeningRestoreSkeleton(
+    session?.access_token, storedSessionId, cachedNavigation?.details.sessionId,
+  ));
 
-  async function loadScreeningResults(sessionId: string, accessToken: string, waitForCompletion: boolean, isCurrent: () => boolean = () => true) {
-    let current: ScreeningDetailsResponse;
-    do {
+  async function loadScreeningResults(sessionId: string, accessToken: string, waitForCompletion: boolean, isCurrent: () => boolean = () => true, initialDetails?: ScreeningDetailsResponse) {
+    let current = initialDetails;
+    if (!current) {
       if (!isCurrent()) return;
-      const result = await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}`, {}, accessToken);
-      current = screeningDetailsResponseSchema.parse(result);
+      current = screeningDetailsResponseSchema.parse(await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}`, {}, accessToken));
       if (!isCurrent()) return;
       setDetails(current);
-      if (current.status === 'processing' && waitForCompletion) await waitForScreeningPoll();
-      else break;
-    } while (current.status === 'processing');
+    }
+    while (current.status === 'processing' && waitForCompletion) {
+      await waitForScreeningPoll();
+      if (!isCurrent()) return;
+      current = screeningDetailsResponseSchema.parse(await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}`, {}, accessToken));
+      if (!isCurrent()) return;
+      setDetails(current);
+    }
     if (!isCurrent()) return;
     const rankingResult = await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}/ranking`, {}, accessToken);
     if (!isCurrent()) return;
@@ -70,9 +93,18 @@ export function ResumeScreeningPage() {
   useEffect(() => {
     if (!session?.access_token) return;
     let active = true;
-    let storedSessionId: string | null = null;
-    try { storedSessionId = sessionStorage.getItem(SCREENING_SESSION_STORAGE_KEY); } catch { return; }
-    if (!storedSessionId || !/^[0-9a-f-]{36}$/i.test(storedSessionId)) return;
+    if (!isValidScreeningSessionId(storedSessionId)) return;
+    if (cachedNavigation?.details.sessionId === storedSessionId) {
+      if (cachedNavigation.details.status === 'processing' || !cachedNavigation.rankingData) void loadScreeningResults(storedSessionId, session.access_token, cachedNavigation.details.status === 'processing', () => active, cachedNavigation.details);
+      return () => { active = false; };
+    }
+    const restoreStartedAt = Date.now();
+    async function finishRestore() {
+      const remaining = MIN_UNCACHED_RESTORE_SKELETON_MS - (Date.now() - restoreStartedAt);
+      if (remaining > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
+      if (active) setRestoringSession(false);
+    }
+    setRestoringSession(true);
     void (async () => {
       try {
         const value = await apiRequest<unknown>(`/screenings/${encodeURIComponent(storedSessionId!)}`, {}, session.access_token);
@@ -83,16 +115,24 @@ export function ResumeScreeningPage() {
           sessionId: initial.sessionId, status: initial.status,
           resumes: initial.resumes.map(({ id, filename, status }) => ({ id, filename, status })),
         }));
-        await loadScreeningResults(initial.sessionId, session.access_token, true, () => active);
+        await finishRestore();
+        if (!active) return;
+        await loadScreeningResults(initial.sessionId, session.access_token, true, () => active, initial);
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : 'Could not restore screening progress.');
+        if (active) { setError(cause instanceof Error ? cause.message : 'Could not restore screening progress.'); await finishRestore(); }
       }
     })();
     return () => { active = false; };
-  }, [session?.access_token]);
+  }, [session?.access_token, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id || !submitted || !details || submitted.sessionId !== details.sessionId) return;
+    screeningNavigationCache.set(session.user.id, submitted.sessionId, { submitted, details, selectedIds, comparison, rankingData, report, candidateSearch, expandedDetailsId });
+  }, [session?.user?.id, submitted, details, selectedIds, comparison, rankingData, report, candidateSearch, expandedDetailsId]);
 
   function addFiles(files: FileList | null) {
     if (!files) return;
+    if (session?.user?.id && submitted?.sessionId) screeningNavigationCache.delete(session.user.id, submitted.sessionId);
     const messages: string[] = [];
     const accepted: SelectedResume[] = [];
     const currentTotal = resumes.length;
@@ -120,6 +160,9 @@ export function ResumeScreeningPage() {
     setRankingData(null);
     setComparison(null);
     setReport(null);
+    setSelectedIds([]);
+    setCandidateSearch('');
+    setExpandedDetailsId(null);
     setDetails(null);
     setRankingData(null);
     if (inputRef.current) inputRef.current.value = '';
@@ -291,7 +334,7 @@ export function ResumeScreeningPage() {
   const canStartScreening = jobTitle.trim().length > 0 && jobTitle.trim().length <= 200
     && jobDescription.trim().length >= 50 && jobDescription.trim().length <= 30000
     && resumes.length > 0;
-  const currentProgress = details?.status === 'processing' ? screeningProgress(details.resumes) : null;
+  if (restoringSession) return <div className="resume-screening-page"><WorkspaceSkeleton variant="screening"/></div>;
 
   return (
     <div className="resume-screening-page">

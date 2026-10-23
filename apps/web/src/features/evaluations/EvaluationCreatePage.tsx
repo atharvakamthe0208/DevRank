@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { evaluationRequestSchema, persistedEvaluationSchema, roleProfileListResponseSchema, type Candidate, type RoleProfileOption } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
+import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
+import { useWorkspaceBreadcrumbLabels } from '../../components/layout/WorkspaceBreadcrumbContext';
+import { useUnsavedChangesBlocker } from '../../app/useUnsavedChangesBlocker';
 import { parseCandidateApiResponse } from '../candidates/candidate-response-validation';
 import './evaluation.css';
 
@@ -16,6 +19,7 @@ function labelRole(name: string): string { return name.split('_').map((part) => 
 export function EvaluationCreatePage() {
   const { id = '' } = useParams();
   const { session } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [profiles, setProfiles] = useState<RoleProfileOption[]>([]);
@@ -23,6 +27,14 @@ export function EvaluationCreatePage() {
   const [state, setState] = useState<PageState>('loading');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [roleEdited, setRoleEdited] = useState(false);
+  const allowNavigationRef = useRef(false);
+  useWorkspaceBreadcrumbLabels({ candidateName: candidate?.name });
+  useUnsavedChangesBlocker(roleEdited && !submitting, 'You changed the selected role profile. Leave this page and discard that choice?', allowNavigationRef);
+  const returnTo = (location.state as { returnTo?: unknown } | null)?.returnTo;
+  function backToCandidate(event: MouseEvent<HTMLAnchorElement>) {
+    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && returnTo === `/candidates/${id}`) { event.preventDefault(); navigate(-1); }
+  }
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!session?.access_token) { setError('Your secure session is unavailable. Sign in again.'); setState('error'); return; }
@@ -56,21 +68,23 @@ export function EvaluationCreatePage() {
     try {
       const response = await apiRequest<unknown>(`/candidates/${id}/evaluations`, { method: 'POST', body: JSON.stringify(request.data) }, session.access_token);
       const saved = persistedEvaluationSchema.parse(response);
-      navigate(`/evaluations/${saved.id}`);
+      setRoleEdited(false);
+      allowNavigationRef.current = true;
+      navigate(`/evaluations/${saved.id}`, { state: { ...(location.state as object | null), returnTo: `/candidates/${id}`, historyBackSteps: 2 } });
     } catch (cause) { setError(messageFor(cause)); setSubmitting(false); }
   }
 
-  if (state === 'loading') return <main className="evaluation-page"><div className="evaluation-page-state" role="status">Loading candidate and saved role profiles…</div></main>;
-  if (state === 'error') return <main className="evaluation-page"><div className="evaluation-page-state" role="alert"><h1>Evaluation setup unavailable</h1><p>{error}</p><button className="primary-button" onClick={() => void load()}>Try again</button><Link className="secondary-button" to={`/candidates/${id}`}>Back to candidate</Link></div></main>;
+  if (state === 'loading') return <main className="evaluation-page"><WorkspaceSkeleton variant="evaluations"/></main>;
+  if (state === 'error') return <main className="evaluation-page"><div className="evaluation-page-state" role="alert"><h1>Evaluation setup unavailable</h1><p>{error}</p><button className="primary-button" onClick={() => void load()}>Try again</button><Link className="secondary-button" to={`/candidates/${id}`} replace onClick={backToCandidate}>Back to candidate</Link></div></main>;
   if (!candidate) return null;
   const usableProfiles = profiles.filter((profile) => profile.usable);
   const chosen = usableProfiles.find((profile) => profile.id === selected);
   return <main className="evaluation-page">
-    <Link className="back-link" to={`/candidates/${candidate.id}`}>← <span>Back to candidate</span></Link>
+    <Link className="back-link" to={`/candidates/${candidate.id}`} replace onClick={backToCandidate}>← <span>Back to candidate</span></Link>
     <header className="evaluation-header"><div><span className="eyebrow"><span className="eyebrow-line"/> NEW EVALUATION</span><h1>{candidate.name}</h1><p>{candidate.email || 'Email not provided'} · Candidate profile selected</p></div></header>
     <section className="evaluation-setup-card"><h2>Choose a saved role profile</h2><p>Evaluation uses this profile’s saved v4 category weights. New profiles must use the active GitHub + LeetCode categories.</p>
       {profiles.length === 0 ? <div className="evaluation-empty"><h3>No compatible role profiles</h3><p>Create or reconfigure a role profile with all six active v4 category weights before evaluating this candidate. Historical profiles are not changed automatically.</p></div> : <form onSubmit={(event) => void createEvaluation(event)}>
-        <label className="evaluation-select-label">Role profile<select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Select a valid saved profile</option>{profiles.map((profile) => <option key={profile.id} value={profile.id} disabled={!profile.usable}>{profile.usable ? labelRole(profile.name) : `${profile.name} — invalid configuration`}</option>)}</select></label>
+        <label className="evaluation-select-label">Role profile<select value={selected} onChange={(event) => { setSelected(event.target.value); setRoleEdited(true); }}><option value="">Select a valid saved profile</option>{profiles.map((profile) => <option key={profile.id} value={profile.id} disabled={!profile.usable}>{profile.usable ? labelRole(profile.name) : `${profile.name} — invalid configuration`}</option>)}</select></label>
         {chosen && chosen.weights && <><div className="role-weight-preview"><h3>Saved category weights</h3><ul>{Object.entries(chosen.weights).map(([key, value]) => <li key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}%</strong></li>)}</ul><p>This profile’s role weights are stored as preliminary; confirm your organization has approved them before use.</p></div><button className="primary-button" type="submit" disabled={submitting}>{submitting ? 'Calculating evaluation…' : 'Calculate evaluation'}</button></>}
         {error && <p className="evaluation-error" role="alert">{error}</p>}
       </form>}

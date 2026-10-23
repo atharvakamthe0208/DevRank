@@ -1,0 +1,16 @@
+.breadcrumb-list { display: flex; align-items: center; gap: 10px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.breadcrumb-list li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.breadcrumb-list a, .breadcrumb-list [aria-current="page"] { display: block; overflow: hidden; max-width: min(28vw, 260px); text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumb-list a { color: #75829a; text-decoration: none; border-radius: 3px; }
+.breadcrumb-list a:hover { color: #3155d9; text-decoration: underline; text-underline-offset: 3px; }
+.breadcrumb-list a:focus-visible { outline: 2px solid #596ee8; outline-offset: 3px; }
+.breadcrumb-list [aria-current="page"] { color: #24314b; font-weight: 650; }
+.breadcrumb-list .crumb-slash { color: #a8b2c3; }
+@media (max-width: 600px) {
+  .app-shell .breadcrumb { display: flex; flex: 1; overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-width: none; margin: 0 8px; }
+  .app-shell .breadcrumb::-webkit-scrollbar { display: none; }
+  .breadcrumb-list { min-width: max-content; }
+  .breadcrumb-list { gap: 6px; }
+  .breadcrumb-list li { gap: 6px; font-size: 10px; }
+  .breadcrumb-list a, .breadcrumb-list [aria-current="page"] { max-width: 26vw; }
+}

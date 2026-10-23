@@ -14,7 +14,7 @@ describe('recruiter profile page', () => {
   it('shows an accessible loading state while the authenticated profile is fetched', () => {
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(RecruiterProfilePage)));
     expect(html).toContain('role="status"');
-    expect(html).toContain('Loading your recruiter profile');
+    expect(html).toContain('Loading recruiter profile');
   });
 
   it('uses initials from an actual name and a neutral fallback when absent', () => {
