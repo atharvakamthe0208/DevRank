@@ -82,6 +82,90 @@ describe('admin recruiter-management API', () => {
     expect(rpc).toHaveBeenCalledWith('list_recruiter_applications', { p_status: null });
   });
 
+  it('returns validated profile details through the administrator-only details RPC', async () => {
+    const details = {
+      profile: {
+        userId: applicationId, email: 'recruiter@example.com', displayName: 'Recruiter', phoneNumber: null,
+        companyName: null, jobTitle: null, companyWebsite: null, locationCity: null, locationCountry: null,
+        role: 'recruiter', approvalStatus: 'approved', emailConfirmed: true,
+        registeredAt: '2026-10-19T10:00:00+00:00', profileUpdatedAt: '2026-10-20T10:00:00+00:00',
+        lastApprovalDecision: { status: 'approved', decidedAt: '2026-10-20T10:00:00+00:00', decidedByUserId: adminAuth.userId },
+      },
+      stats: {
+        totalEvaluations: 4, completedEvaluations: 2, inProgressEvaluations: 1, distinctCandidatesEvaluated: 2,
+        resumeScreeningsInitiated: 3, completedResumeScreenings: 2, averageCompletedEvaluationScore: 74.5,
+        recentActivityCount30Days: 5,
+      },
+      recentActivity: [{ id: 'evaluation:record-1', type: 'evaluation_created', occurredAt: '2026-10-20T10:00:00+00:00', summary: 'Evaluation created' }],
+    };
+    const rpc = vi.fn().mockResolvedValue({ data: details, error: null });
+    const result = await invoke(routeHandler(adminRouter(rpc), '/recruiters/:id/details', 'get'), {
+      params: { id: applicationId }, auth: adminAuth,
+    });
+    expect(result).toEqual({ status: 200, body: { details } });
+    expect(rpc).toHaveBeenCalledWith('get_admin_recruiter_details', { p_user_id: applicationId });
+  });
+
+  it('rejects malformed recruiter IDs before calling the details RPC', async () => {
+    const rpc = vi.fn();
+    const result = await invoke(routeHandler(adminRouter(rpc), '/recruiters/:id/details', 'get'), {
+      params: { id: 'not-a-uuid' }, auth: adminAuth,
+    });
+    expect(result.status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed database detail data without exposing it', async () => {
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const rpc = vi.fn().mockResolvedValue({ data: { profile: { email: 'not-an-email', phoneNumber: 17 }, privateField: 'sensitive' }, error: null });
+    try {
+      const result = await invoke(routeHandler(adminRouter(rpc), '/recruiters/:id/details', 'get'), {
+        params: { id: applicationId }, auth: adminAuth,
+      });
+      expect(result).toMatchObject({ status: 503, body: { error: { code: 'RECRUITER_DETAILS_UNAVAILABLE' } } });
+      expect(JSON.stringify(result.body)).not.toContain('sensitive');
+      expect(diagnostic).toHaveBeenCalledWith('[admin-recruiter-details] RPC response contract validation failed', {
+        issueCodes: expect.arrayContaining(['invalid_type', 'invalid_string']),
+        issuePaths: expect.arrayContaining(['profile.email', 'profile.phoneNumber']),
+      });
+      expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('sensitive');
+    } finally {
+      diagnostic.mockRestore();
+    }
+  });
+
+  it('logs only the safe RPC-resolution category and database code when the details function is unavailable', async () => {
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: {
+      code: 'PGRST202', message: 'private recruiter email and schema details', details: 'sensitive database text',
+    } });
+    try {
+      const result = await invoke(routeHandler(adminRouter(rpc), '/recruiters/:id/details', 'get'), {
+        params: { id: applicationId }, auth: adminAuth,
+      });
+      expect(result).toMatchObject({ status: 503, body: { error: { code: 'RECRUITER_DETAILS_UNAVAILABLE' } } });
+      expect(diagnostic).toHaveBeenCalledWith('[admin-recruiter-details] RPC failed', {
+        failureCategory: 'rpc_resolution', errorCode: 'PGRST202',
+      });
+      expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('private recruiter');
+      expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('sensitive database text');
+      expect(rpc).toHaveBeenCalledWith('get_admin_recruiter_details', { p_user_id: applicationId });
+    } finally {
+      diagnostic.mockRestore();
+    }
+  });
+
+  it('maps forbidden and missing recruiter details without exposing RPC messages', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: '42501', message: 'internal detail' } });
+    const handler = routeHandler(adminRouter(rpc), '/recruiters/:id/details', 'get');
+    const forbidden = await invoke(handler, { params: { id: applicationId }, auth: adminAuth });
+    expect(forbidden.status).toBe(403);
+    expect(JSON.stringify(forbidden.body)).not.toContain('internal detail');
+    rpc.mockResolvedValueOnce({ data: null, error: { code: 'P0002', message: 'internal detail' } });
+    const missing = await invoke(handler, { params: { id: applicationId }, auth: adminAuth });
+    expect(missing).toMatchObject({ status: 404, body: { error: { code: 'RECRUITER_NOT_FOUND' } } });
+  });
+
   it.each(['approved', 'rejected'] as const)('sends a %s decision to the database guard', async (decision) => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const result = await invoke(routeHandler(adminRouter(rpc), '/recruiters/:id/decision', 'patch', -1), {
