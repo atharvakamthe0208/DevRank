@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { dashboardResponseSchema, persistedEvaluationReadSchema, type DashboardResponse } from '@devrank/contracts';
 import { apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
-import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
 import { useCandidates } from '../candidates/useCandidates';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import { KpiCard } from '../../components/metrics/KpiCards';
+import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { ActiveDashboardReports } from '../insights/ProposedDashboardReports';
 import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
 
@@ -86,8 +86,9 @@ export function DashboardPage() {
     : undefined;
   const recentScoreTrend = dashboard?.recentEvaluations.flatMap((item) => item.score === undefined ? [] : [item.score]) ?? [];
 
+  if (loading || candidatesLoading) return <div className="dashboard-page"><WorkspaceSkeleton variant="dashboard"/></div>;
+
   return <div className="dashboard-page">
-    <DelayedAuthLoadingScreen loading={dashboardLoading || candidatesLoading} message="Loading your workspace…"/>
     <section className="dashboard-hero">
       <div><div className="eyebrow"><span className="eyebrow-line" />{displayDate.toUpperCase()}</div><h1>{firstName ? `Welcome, ${firstName}` : 'Recruiter overview'}</h1><p className="page-subtitle">A clear view of your candidates and evaluation workload.</p></div>
       <Link className="primary-button link-button" to="/candidates/new"><span aria-hidden="true">＋</span> Add candidate</Link>

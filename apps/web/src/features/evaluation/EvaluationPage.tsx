@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   aiAnalysisResponseSchema,
   candidateListResponseSchema,
@@ -13,7 +13,8 @@ import {
 } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
-import { DelayedAuthLoadingScreen } from '../auth/DelayedAuthLoadingScreen';
+import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
+import { useUnsavedChangesBlocker } from '../../app/useUnsavedChangesBlocker';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import { AnimatedMetric } from '../../components/metrics/KpiCards';
 import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
@@ -37,9 +38,15 @@ function explainError(error: unknown): string {
     : 'The server returned data that could not be verified. Try again.';
 }
 
+function safeEvaluationReturn(value: unknown): string | null {
+  return typeof value === 'string' && /^\/candidates\/[0-9a-f-]{36}$/i.test(value) ? value : null;
+}
+
 export function EvaluationPage() {
   const { session } = useAuth();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const preselectedCandidateId = searchParams.get('candidateId') ?? '';
   const [pageState, setPageState] = useState<PageState>('loading');
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -47,7 +54,8 @@ export function EvaluationPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [roles, setRoles] = useState<EvaluationRole[]>([]);
   const [candidateId, setCandidateId] = useState(preselectedCandidateId);
-  const [roleId, setRoleId] = useState<EvaluationRole['id'] | ''>('');
+  const [roleId, setRoleId] = useState<EvaluationRole['id'] | ''>((searchParams.get('roleId') as EvaluationRole['id'] | null) ?? '');
+  const [selectionEdited, setSelectionEdited] = useState(false);
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
   const [runError, setRunError] = useState('');
@@ -57,6 +65,18 @@ export function EvaluationPage() {
   const [analysisError, setAnalysisError] = useState('');
   const [analysisRetryAt, setAnalysisRetryAt] = useState<number>();
   const analysisRequestRef = useRef(false);
+  useUnsavedChangesBlocker(selectionEdited && !running, 'You changed the evaluation selections. Leave this page and discard those choices?');
+  const returnToCandidate = safeEvaluationReturn((location.state as { returnTo?: unknown } | null)?.returnTo);
+  function backToCandidate(event: MouseEvent<HTMLAnchorElement>) {
+    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && returnToCandidate) { event.preventDefault(); navigate(-1); }
+  }
+
+  function updateSelectionParams(candidate: string, role: string) {
+    const next = new URLSearchParams(searchParams);
+    if (candidate) next.set('candidateId', candidate); else next.delete('candidateId');
+    if (role) next.set('roleId', role); else next.delete('roleId');
+    setSearchParams(next, { replace: true, state: location.state });
+  }
 
   useEffect(() => {
     let active = true;
@@ -87,12 +107,12 @@ export function EvaluationPage() {
         if (!active) return;
         setCandidates(candidateItems);
         setRoles(parsedRoles.roles);
-        setCandidateId((current) => candidateItems.some(({ id }) => id === current)
+      setCandidateId((current) => candidateItems.some(({ id }) => id === current)
           ? current
           : candidateItems.some(({ id }) => id === preselectedCandidateId) ? preselectedCandidateId : '');
-        setRoleId((current) => parsedRoles.roles.some(({ id }) => id === current)
+      setRoleId((current) => parsedRoles.roles.some(({ id }) => id === current)
           ? current
-          : parsedRoles.roles[0]?.id || '');
+        : parsedRoles.roles.some(({ id }) => id === (searchParams.get('roleId') ?? '')) ? searchParams.get('roleId') as EvaluationRole['id'] : parsedRoles.roles[0]?.id || '');
         setPageState('ready');
       } catch (error) {
         if (!active) return;
@@ -102,7 +122,15 @@ export function EvaluationPage() {
     }
     void load();
     return () => { active = false; };
-  }, [session?.access_token, preselectedCandidateId, loadAttempt]);
+  }, [session?.access_token, loadAttempt]);
+
+  useEffect(() => {
+    if (candidates.some(({ id }) => id === preselectedCandidateId) && candidateId !== preselectedCandidateId) setCandidateId(preselectedCandidateId);
+  }, [preselectedCandidateId, candidates, candidateId]);
+  const preselectedRoleId = searchParams.get('roleId') ?? '';
+  useEffect(() => {
+    if (roles.some(({ id }) => id === preselectedRoleId) && roleId !== preselectedRoleId) setRoleId(preselectedRoleId as EvaluationRole['id']);
+  }, [preselectedRoleId, roles, roleId]);
 
   async function runEvaluation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,6 +162,7 @@ export function EvaluationPage() {
       if (parsed.candidate.id !== candidateId || parsed.role.id !== roleId) {
         throw new Error('The evaluation response did not match the selected candidate and role.');
       }
+      setSelectionEdited(false);
       setResult(parsed);
     } catch (error) {
       setRunError(explainError(error));
@@ -168,14 +197,13 @@ export function EvaluationPage() {
   }
 
   return <div className="evaluation-page">
-    <DelayedAuthLoadingScreen loading={pageState === 'loading'} message="Loading evaluations…"/>
-    <section className="evaluation-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE ASSESSMENT</span><h1>Evaluation</h1><p className="page-subtitle">Evaluate saved GitHub and LeetCode evidence using the active six-category v4 rubric.</p></div><Link className="secondary-button evaluation-back-link" to="/dashboard/candidates">View candidates</Link></section>
-    {pageState === 'loading' ? <section className="evaluation-panel evaluation-state" role="status">Loading candidates and supported roles…</section> : pageState === 'error' ? <section className="evaluation-panel evaluation-state" role="alert"><h2>Could not load evaluation setup</h2><p>{loadError}</p><button className="secondary-button" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></section> : <>
+    <section className="evaluation-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE ASSESSMENT</span><h1>Evaluation</h1><p className="page-subtitle">Evaluate saved GitHub and LeetCode evidence using the active six-category v4 rubric.</p></div><Link className="secondary-button evaluation-back-link" to={returnToCandidate ?? '/dashboard/candidates'} replace onClick={backToCandidate}>{returnToCandidate ? 'Back to candidate' : 'View candidates'}</Link></section>
+    {pageState === 'loading' ? <WorkspaceSkeleton variant="evaluations"/> : pageState === 'error' ? <section className="evaluation-panel evaluation-state" role="alert"><h2>Could not load evaluation setup</h2><p>{loadError}</p><button className="secondary-button" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></section> : <>
       <form className="evaluation-panel evaluation-form" onSubmit={(event) => void runEvaluation(event)}>
         <div className="evaluation-panel-heading"><div><h2>Run final rubric evaluation</h2><p>Select a candidate and role. Scores use the candidate’s saved provider snapshots.</p></div><span className="evaluation-rule-tag">Active rubric · v4</span></div>
         {candidates.length === 0 ? <div className="evaluation-empty"><h3>No candidates available</h3><p>Add a candidate before starting an evaluation.</p><Link className="primary-button link-button" to="/candidates/new">Add candidate</Link></div> : <div className="evaluation-select-grid">
-          <label htmlFor="evaluation-candidate">Candidate<select id="evaluation-candidate" required disabled={running} value={candidateId} onChange={(event) => { setCandidateId(event.target.value); setResult(null); setRunError(''); }}><option value="">Choose a candidate</option>{candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></label>
-          <label htmlFor="evaluation-role">Role<select id="evaluation-role" required disabled={running} value={roleId} onChange={(event) => { setRoleId(event.target.value as EvaluationRole['id']); setResult(null); setRunError(''); }}><option value="">Choose a role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label>
+          <label htmlFor="evaluation-candidate">Candidate<select id="evaluation-candidate" required disabled={running} value={candidateId} onChange={(event) => { setCandidateId(event.target.value); updateSelectionParams(event.target.value, roleId); setSelectionEdited(true); setResult(null); setRunError(''); }}><option value="">Choose a candidate</option>{candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></label>
+          <label htmlFor="evaluation-role">Role<select id="evaluation-role" required disabled={running} value={roleId} onChange={(event) => { const value = event.target.value as EvaluationRole['id']; setRoleId(value); updateSelectionParams(candidateId, value); setSelectionEdited(true); setResult(null); setRunError(''); }}><option value="">Choose a role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label>
         </div>}
         {candidates.length > 0 && <div className="evaluation-form-footer"><details className="evaluation-weights"><summary>View scoring weights</summary>{roles.find(({ id }) => id === roleId)?.weights && <ul>{scoringCategories.map(({ id, displayName }) => <li key={id}><span>{displayName}</span><strong>{roles.find(({ id: roleKey }) => roleKey === roleId)?.weights[id]}%</strong></li>)}</ul>}<p>These are the selected role’s saved weights for the active scoring version.</p></details><button className="primary-button" type="submit" disabled={running || !candidateId || !roleId}>{running ? 'Running evaluation…' : 'Run Evaluation'}</button></div>}
         {running && <p className="evaluation-progress" role="status">Verifying candidate access and calculating available evidence…</p>}

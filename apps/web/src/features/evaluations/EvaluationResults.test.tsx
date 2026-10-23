@@ -1,4 +1,5 @@
 import { createElement } from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { candidateSchema, evaluationResponseSchema, persistedEvaluationReadSchema, persistedEvaluationSchema, scoringCategories, type EvaluationResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
@@ -26,6 +27,14 @@ function evaluation(complete: boolean): PersistedEvaluation & { result: Evaluati
 }
 
 describe('evaluation result view', () => {
+  it('keeps the report panel and three-column report grid separate from the evaluation setup grid', () => {
+    const reportCss = readFileSync(new URL('./evaluation.css', import.meta.url), 'utf8');
+    const setupCss = readFileSync(new URL('../evaluation/evaluation-page.css', import.meta.url), 'utf8');
+    expect(setupCss).toContain('.evaluation-categories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(reportCss).toContain('.evaluation-report-panel { display: block; width: 100%; min-width: 0;');
+    expect(reportCss).toContain('.evaluation-report-grid { display: grid; width: 100%; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr));');
+  });
+
   it('renders all six active v4 categories, scores, progress indicators, and deterministic overall score', () => {
     const saved = evaluation(true);
     const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result: saved.result } }));
@@ -33,11 +42,20 @@ describe('evaluation result view', () => {
     expect(html).toContain('83.45');
     expect(html).toContain('Active GitHub + LeetCode evaluation');
     expect(html).toContain('Evaluation report');
+    expect(html).toContain('class="evaluation-report-panel"');
+    expect(html).toContain('class="evaluation-report-grid"');
+    expect(html).toContain('About scoring');
+    expect(html).toContain('Weighted score calculated from all six categories.');
+    expect(html).toContain('Each category uses its saved role weight and supporting evidence. Missing evidence remains unscored.');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html.match(/<progress/g)).toHaveLength(6);
+    expect(html).toContain('View evidence (1)');
+    expect(html).toContain('<details><summary>View evidence (1)</summary>');
+    expect(html).toContain('data-score-state="scored"');
     expect(html).not.toContain('AI evidence summary');
     expect(html).toContain('Project Portfolio');
     expect(html).toContain('data-category="project_portfolio"');
+    expect(html.match(/class="evaluation-category-card"/g)).toHaveLength(6);
     expect(html).not.toContain('Communication Skills');
   });
 
@@ -49,6 +67,11 @@ describe('evaluation result view', () => {
     expect(html).toContain('Not calculated');
     expect(html.match(/<progress/g)).toHaveLength(2);
     expect(html).toContain('Not scored');
+    expect(html).toContain('No normalized evidence for DSA &amp; Problem-Solving.');
+    expect(html).toContain('data-score-state="unscored"');
+    const dsaCard = html.match(/<article class="evaluation-category-card"[^>]*data-category="problem_solving_dsa"[\s\S]*?<\/article>/)?.[0];
+    expect(dsaCard).toContain('Not scored');
+    expect(dsaCard).not.toContain('<progress');
     expect(html).not.toContain('OVERALL SCORE</span><strong class="evaluation-overall-score">0');
   });
 

@@ -6,6 +6,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { parseCandidateApiResponse } from '../candidates/candidate-response-validation';
 import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
 import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
+import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
+import { useWorkspaceBreadcrumbLabels } from '../../components/layout/WorkspaceBreadcrumbContext';
 import './ai-analysis-report.css';
 
 type CandidateSummary = { id: string; name: string };
@@ -25,6 +27,8 @@ export function AiAnalysisReportPage() {
   const location = useLocation();
   const { session } = useAuth();
   const [state, setState] = useState<PageState>({ status: 'loading' });
+  const evaluationName = state.status === 'saved' ? `${state.candidate.name} · ${state.evaluation.targetRole.replaceAll('_', ' ')}` : undefined;
+  useWorkspaceBreadcrumbLabels({ evaluationName });
   const [attempt, setAttempt] = useState(0);
   const retryRequestRef = useRef(false);
   const initialResponse = useMemo(() => {
@@ -88,7 +92,7 @@ export function AiAnalysisReportPage() {
 
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load, attempt]);
 
-  if (state.status === 'loading') return <main className="ai-report-page"><p className="ai-report-state" role="status">Loading the saved evaluation…</p></main>;
+  if (state.status === 'loading') return <main className="ai-report-page"><WorkspaceSkeleton variant="detail"/></main>;
   if (state.status === 'error') return <main className="ai-report-page"><section className="ai-report-state" role="alert"><span className="dashboard-kicker">EVALUATION REPORT</span><h1>Report unavailable</h1><p>{state.message}</p><button type="button" className="dashboard-secondary-button" onClick={() => setAttempt((value) => value + 1)}>Try again</button><Link className="dashboard-text-link" to={`/evaluations/${evaluationId}`}>Back to evaluation</Link></section></main>;
 
   const currentEvaluation = persistedEvaluationSchema.safeParse(state.evaluation);

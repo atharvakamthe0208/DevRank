@@ -369,6 +369,7 @@
 .app-shell .evaluation-results,
 .app-shell .evaluation-summary-card,
 .app-shell .evaluation-categories,
+.app-shell .evaluation-report-panel,
 .app-shell .insights-panel,
 .app-shell .candidate-form-card {
   border-color: #e1e7f2;
@@ -453,7 +454,8 @@
 .app-shell .evaluation-missing-details summary { color: #20304b; }
 .app-shell .evaluation-rule-tag,
 .app-shell .evaluation-status { border-radius: 999px; }
-.app-shell .evaluation-categories { padding: 20px; }
+.app-shell .evaluation-categories,
+.app-shell .evaluation-report-panel { padding: 20px; }
 
 .app-shell .insights-page { gap: 17px; }
 .app-shell .insights-panel { padding: 20px 22px; }
@@ -496,6 +498,7 @@
   .app-shell .evaluation-panel,
   .app-shell .evaluation-results,
   .app-shell .evaluation-categories,
+  .app-shell .evaluation-report-panel,
   .app-shell .insights-panel { padding: 16px; }
   .app-shell .evaluation-heading { align-items: flex-start; }
 }
