@@ -334,8 +334,14 @@ export function ResumeScreeningPage() {
   const canStartScreening = jobTitle.trim().length > 0 && jobTitle.trim().length <= 200
     && jobDescription.trim().length >= 50 && jobDescription.trim().length <= 30000
     && resumes.length > 0;
-  if (restoringSession) return <div className="resume-screening-page"><WorkspaceSkeleton variant="screening"/></div>;
-
+    
+if (restoringSession || (submitting && !submitted)) {
+  return (
+    <div className="resume-screening-page">
+      <WorkspaceSkeleton variant="screening" />
+    </div>
+  );
+}
   return (
     <div className="resume-screening-page">
       <header className="resume-screening-heading">

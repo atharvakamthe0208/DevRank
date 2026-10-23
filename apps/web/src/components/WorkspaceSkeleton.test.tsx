@@ -23,10 +23,14 @@ describe('workspace page skeletons', () => {
     expect(html).toContain('aria-hidden="true"');
   });
 
-  it('uses a visible shimmer overlay and a static reduced-motion fallback', () => {
+  it('sweeps a distinct highlight across each placeholder and has a static reduced-motion fallback', () => {
     const css = readFileSync(new URL('./workspace-skeleton.css', import.meta.url), 'utf8');
     expect(css).toContain('.workspace-skeleton-block::after');
+    expect(css).toContain('width:70%');
+    expect(css).toContain('rgba(255,255,255,.98)');
+    expect(css).toContain('animation:workspace-skeleton-sweep 1.25s ease-in-out infinite');
     expect(css).toContain('@keyframes workspace-skeleton-sweep');
+    expect(css).toContain('to{left:110%}');
     expect(css).toContain('@media(prefers-reduced-motion:reduce)');
     expect(css).toContain('.workspace-skeleton-block::after{display:none;animation:none}');
   });

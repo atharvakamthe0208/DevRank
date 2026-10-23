@@ -5,8 +5,8 @@
 @media(max-width:900px){.workspace-skeleton-screening-job,.workspace-skeleton-screening-upload{grid-template-columns:1fr}.workspace-skeleton-screening-guidance,.workspace-skeleton-screening-tips{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace-skeleton-screening-guidance .is-kicker,.workspace-skeleton-screening-tips .is-kicker{grid-column:1/-1}}
 @media(max-width:520px){.workspace-skeleton-screening-heading{align-items:flex-start;flex-direction:column}.workspace-skeleton-block.is-rubric{width:180px}.workspace-skeleton-screening-fields{grid-template-columns:1fr}.workspace-skeleton-screening-fields>.is-field-label:not(:first-child){margin-top:8px}.workspace-skeleton-screening-guidance,.workspace-skeleton-screening-tips{grid-template-columns:1fr;padding:12px}.workspace-skeleton-screening-actions{align-items:stretch;flex-direction:column}.workspace-skeleton-screening-actions>.is-action{width:100%}.workspace-skeleton-screening .workspace-skeleton-row{grid-template-columns:28px minmax(50px,1fr) minmax(45px,.7fr);gap:8px}.workspace-skeleton-screening-file{grid-template-columns:28px minmax(50px,1fr) minmax(45px,.7fr);gap:8px}}
 
-/* Use an overlay for shimmer so component-specific background shorthands cannot disable it. */
+/* A narrow, bright overlay remains visible against each placeholder's static base. */
 .workspace-skeleton-block{position:relative;overflow:hidden;animation:none}
-.workspace-skeleton-block::after{position:absolute;inset:0;content:"";pointer-events:none;background:linear-gradient(105deg,transparent 25%,rgba(91,112,224,.18) 42%,rgba(255,255,255,.94) 50%,rgba(117,101,227,.16) 58%,transparent 75%);transform:translateX(-110%);animation:workspace-skeleton-sweep 1.15s linear infinite}
-@keyframes workspace-skeleton-sweep{to{transform:translateX(110%)}}
+.workspace-skeleton-block::after{position:absolute;inset:0 auto 0 -70%;width:70%;content:"";pointer-events:none;background:linear-gradient(105deg,transparent 0%,rgba(91,112,224,.24) 32%,rgba(255,255,255,.98) 52%,rgba(117,101,227,.24) 72%,transparent 100%);animation:workspace-skeleton-sweep 1.25s ease-in-out infinite}
+@keyframes workspace-skeleton-sweep{to{left:110%}}
 @media(prefers-reduced-motion:reduce){.workspace-skeleton-block::after{display:none;animation:none}.workspace-skeleton-block{animation:none;background-color:#eff2f8}}
