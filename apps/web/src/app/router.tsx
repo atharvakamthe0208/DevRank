@@ -6,6 +6,7 @@ import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { AccessPendingPage, AuthCallbackPage, ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage } from '../features/auth/AuthPages';
 import { useAuth } from '../features/auth/AuthProvider';
 import { AdminRecruitersPage } from '../features/admin/AdminRecruitersPage';
+import { AdminRecruiterDetailsPage } from '../features/admin/AdminRecruiterDetailsPage';
 import { CandidateListPage } from '../features/candidates/CandidateListPage';
 import { AddCandidatePage } from '../features/candidates/AddCandidatePage';
 import { EvaluationPage } from '../features/evaluation/EvaluationPage';
@@ -145,6 +146,10 @@ export const router = createBrowserRouter([
       {
         path: '/admin/recruiters',
         element: <AdminRecruitersPage />,
+      },
+      {
+        path: '/admin/recruiters/:recruiterId',
+        element: <AdminRecruiterDetailsPage />,
       },
     ],
   },

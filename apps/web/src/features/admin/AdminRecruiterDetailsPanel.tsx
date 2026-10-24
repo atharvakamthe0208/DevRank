@@ -7,6 +7,7 @@ type Props = {
   error: string;
   onRetry: () => void;
   onClose: () => void;
+  showHeader?: boolean;
 };
 
 function shown(value: string | null): string {
@@ -25,15 +26,15 @@ const activityLabels: Record<AdminRecruiterDetails['recentActivity'][number]['ty
   recruiter_rejected: 'Recruiter rejected',
 };
 
-export function AdminRecruiterDetailsPanel({ name, state, details, error, onRetry, onClose }: Props) {
-  return <section className="admin-detail-panel" aria-labelledby="admin-recruiter-detail-heading" aria-busy={state === 'loading'}>
-    <header className="admin-detail-heading">
+export function AdminRecruiterDetailsPanel({ name, state, details, error, onRetry, onClose, showHeader = true }: Props) {
+  return <section className="admin-detail-panel" aria-labelledby={showHeader ? 'admin-recruiter-detail-heading' : undefined} aria-label={showHeader ? undefined : 'Recruiter account and activity details'} aria-busy={state === 'loading'}>
+    {showHeader && <header className="admin-detail-heading">
       <div>
         <div className="eyebrow"><span className="eyebrow-line"/> RECRUITER DETAILS</div>
         <h2 id="admin-recruiter-detail-heading">{name}</h2>
       </div>
       <button className="secondary-button" type="button" onClick={onClose}>Close details</button>
-    </header>
+    </header>}
 
     {state === 'loading' && <div className="admin-detail-loading" role="status">
       <span className="sr-only">Loading recruiter profile and activity…</span>
