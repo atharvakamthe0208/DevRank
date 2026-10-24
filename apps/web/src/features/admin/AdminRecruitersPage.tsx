@@ -149,11 +149,11 @@ export function AdminRecruitersPage() {
         <span className="admin-role-badge">Project administrator</span>
       </div>
 
-      <section className="admin-summary" aria-label="Recruiter application counts" aria-busy={busy}>
+      <section className="admin-summary" aria-label={busy && !hasLoaded ? "Loading recruiter application counts" : "Recruiter application counts"} aria-busy={busy && !hasLoaded}>
         {(['pending', 'approved', 'rejected'] as const).map((status, index) => <article className={'admin-summary-card status-' + status} key={status} style={{ '--admin-card-index': index } as CSSProperties}>
           <span className="admin-summary-icon" aria-hidden="true">{status === 'pending' ? '◷' : status === 'approved' ? '✓' : '×'}</span>
           <span className="admin-summary-label">{status === 'pending' ? 'Pending recruiters' : status === 'approved' ? 'Approved recruiters' : 'Rejected recruiters'}</span>
-          <strong>{hasLoaded ? <AnimatedMetric value={counts[status]}/> : '—'}</strong>
+          <strong>{hasLoaded ? <AnimatedMetric value={counts[status]}/> : busy ? <span className="admin-summary-value-skeleton" aria-hidden="true"/> : '—'}</strong>
         </article>)}
       </section>
 

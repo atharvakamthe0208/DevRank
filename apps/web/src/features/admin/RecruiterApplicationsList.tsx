@@ -20,7 +20,22 @@ function recruiterInitials(name: string | null): string {
 }
 
 export function RecruiterApplicationsList({ busy, error, rows, filter, searchQuery = '', activeId, activeDecision, onRetry, onViewDetails, onDecide }: Props) {
-  if (busy) return <p className="admin-empty" role="status">Loading recruiter accounts…</p>;
+  if (busy) return <div className="admin-table-loading" role="status" aria-busy="true">
+    <span className="sr-only">Loading recruiter accounts…</span>
+    <div className="admin-table-scroll" aria-hidden="true">
+      <table className="admin-table admin-table-skeleton">
+        <thead><tr><th scope="col">Recruiter</th><th scope="col">Work email</th><th scope="col">Registered</th><th scope="col">Status</th><th scope="col">Details</th><th scope="col">Decision</th></tr></thead>
+        <tbody>{Array.from({ length: 5 }, (_, index) => <tr key={index}>
+          <td><span className="admin-skeleton admin-skeleton-person"/></td>
+          <td><span className="admin-skeleton admin-skeleton-email"/></td>
+          <td><span className="admin-skeleton admin-skeleton-date"/></td>
+          <td><span className="admin-skeleton admin-skeleton-status"/></td>
+          <td><span className="admin-skeleton admin-skeleton-detail"/></td>
+          <td><span className="admin-skeleton-actions"><span className="admin-skeleton admin-skeleton-action"/><span className="admin-skeleton admin-skeleton-action"/></span></td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  </div>;
   if (error) return <div className="admin-load-error" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={onRetry}>Try again</button></div>;
   if (rows.length === 0) return <p className="admin-empty">{searchQuery.trim() ? 'No recruiters match your search.' : 'No ' + (filter === 'all' ? 'recruiter' : filter) + ' applications to show.'}</p>;
 
