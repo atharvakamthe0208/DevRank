@@ -75,14 +75,19 @@ describe('evaluation run result', () => {
 
     expect(html).toContain('Evaluation report');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
-    expect(html).not.toContain('Communication Skills');
-    expect(html).toContain('DSA &amp; Problem-Solving');
+    for (const category of scoringCategories) expect(html).toContain(category.displayName.replaceAll('&', '&amp;'));
     expect(html).toContain('100 / 100');
     expect(html).toContain('Overall score');
-    expect(html).toContain('Insufficient evidence');
+    expect(html).toContain('Overall score withheld');
     expect(html).not.toContain('out of 100</small>');
-    expect(html).toContain('Problems solved');
-    expect(html).toContain('LeetCode statistics provider');
+    expect(html).toContain('View evidence');
+    expect(html).toContain('Generate AI analysis');
+    expect(html).toContain('evaluation-ai-primary-action');
+    expect(html).not.toContain('Arithmetic mean of 1 available normalized evidence value(s), rounded to two decimal places');
+    expect(html).not.toContain('Scoring notes and evidence limitations');
+    expect(html).not.toContain('Technical source details');
+    expect(html).not.toContain('Scored · evidence available · 1 supporting item');
+    expect(html).toContain('evaluation-category-grid');
     expect(html).not.toContain('alfa_leetcode_api');
     expect(html).not.toContain('{&quot;statistics&quot;');
   });
@@ -95,8 +100,62 @@ describe('evaluation run result', () => {
     expect(html).toContain('Evaluation report');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html).toContain('Not scored');
-    expect(html).not.toContain('Communication Skills');
+    expect(html).toContain('Unavailable');
     expect(html).toContain('Insufficient evidence');
+  });
+
+  it('shows real candidate profile details and available repository coverage in the compact header', () => {
+    const base = runResult(false);
+    const result = evaluationRunResponseSchema.parse({
+      ...base,
+      evaluation: {
+        ...base.evaluation,
+        platformEvidence: [{
+          evidenceId: 'saved-github-row', candidateId, source: 'github', evidenceType: 'repository_snapshot',
+          availability: 'available', observedAt: '2026-10-17T10:00:00.000Z',
+          normalizedValue: {
+            publicRepositoryCount: 14,
+            languageSummary: { totalEligibleRepositories: 14, repositoriesAnalyzed: 14, observedLanguages: ['Python', 'TypeScript'], repositoriesMissingLanguage: 0, coverageStatus: 'complete' },
+          },
+          verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed', limitations: [],
+          categoryMappings: [],
+        }],
+      },
+    });
+    const html = renderToStaticMarkup(createElement(EvaluationRunResult, {
+      result,
+      candidate: { id: candidateId, name: 'Candidate Example', email: 'person@example.com', githubUsername: 'candidate-gh', leetcodeUsername: 'candidate-lc', createdAt: '2026-10-17T10:00:00.000Z', updatedAt: '2026-10-17T10:00:00.000Z' },
+      analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined,
+    }));
+    expect(html).toContain('Candidate Example');
+    expect(html).toContain('person@example.com');
+    expect(html).toContain('GitHub @candidate-gh');
+    expect(html).toContain('LeetCode @candidate-lc');
+    expect(html).toContain('Evidence-backed');
+    expect(html).toContain('14 public repositories');
+    expect(html).toContain('2 detected languages');
+  });
+
+  it('labels partial technical evidence and preserves the actual coverage explanation without assigning a score', () => {
+    const base = runResult(false);
+    const evaluation = {
+      ...base.evaluation,
+      finalReport: {
+        ...base.evaluation.finalReport!,
+        status: 'partial' as const,
+        categories: base.evaluation.finalReport!.categories.map((category) => category.categoryId === 'technical_skills'
+          ? { ...category, status: 'partial' as const, metrics: { repositoriesAnalyzed: 5, totalEligibleRepositories: 8, distinctRepositoryLanguages: 2, languagesObserved: 'Python, TypeScript', languageCoverageStatus: 'partial' } }
+          : category),
+      },
+    };
+    const result = evaluationRunResponseSchema.parse({ ...base, evaluation });
+    const html = renderToStaticMarkup(createElement(EvaluationRunResult, {
+      result, analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined,
+    }));
+    expect(html).toContain('Partial evidence');
+    expect(html).toContain('5 of 8 eligible repositories analyzed');
+    expect(html).toContain('Python, TypeScript');
+    expect(html).toContain('Not scored');
   });
 
   it('shows a concise cited summary with a route to the detailed report', () => {
