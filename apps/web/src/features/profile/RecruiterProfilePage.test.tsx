@@ -1,4 +1,5 @@
 import { createElement } from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -56,6 +57,11 @@ describe('recruiter profile page', () => {
     })).toEqual({ displayName: 'Priya Sharma', phoneNumber: '+1 555 123 4567', companyName: 'Northwind', jobTitle: 'Talent Partner', companyWebsite: 'https://northwind.example', locationCity: 'Seattle', locationCountry: 'USA' });
   });
 
+  it('uses the shared blue profile primary button styling', () => {
+    const css = readFileSync(new URL('./recruiter-profile-page.css', import.meta.url), 'utf8');
+    expect(css).toContain('background:var(--workspace-blue)');
+    expect(css).toContain('background:var(--workspace-blue-hover)');
+  });
   it('renders every editable field while keeping email read-only and access controls absent', () => {
     const html = renderToStaticMarkup(createElement(RecruiterProfileEditForm, {
       form: { displayName: 'Priya Sharma', phoneNumber: '+1 555 123 4567', companyName: 'Northwind', jobTitle: 'Talent Partner', companyWebsite: 'https://northwind.example', locationCity: 'Seattle', locationCountry: 'USA' },

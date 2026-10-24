@@ -94,15 +94,15 @@ export function DashboardPage() {
       <Link className="primary-button link-button" to="/candidates/new"><span aria-hidden="true">＋</span> Add candidate</Link>
     </section>
 
-    {!loading && dashboard && !error && <section className="workspace-kpi-grid" aria-label="Workspace metrics">
-      <KpiCard icon="♙" label="Total candidates" value={dashboard.candidateCount} detail="Recruiter workspace"/>
+    {!loading && dashboard && !error && <section className="workspace-kpi-grid" aria-label="Home metrics">
+      <KpiCard icon="♙" label="Total candidates" value={dashboard.candidateCount} detail="Recruiter home"/>
       <KpiCard icon="▤" label="Evaluations" value={dashboard.evaluationCount} detail="All saved evaluation runs"/>
       <KpiCard icon="✓" label="Completed" value={dashboard.statusCounts.completed ?? 0} detail="Completed evaluation runs" progress={dashboard.evaluationCount > 0 ? { value: dashboard.statusCounts.completed ?? 0, max: dashboard.evaluationCount, label: 'Completed evaluations out of all saved evaluations' } : undefined}/>
       <KpiCard icon="◉" label="Recent average" value={recentAverageProgress} decimals={1} suffix=" / 100" detail={recentScoreSummary.count ? `Across ${recentScoreSummary.count} scored recent evaluations` : 'No scored evaluations yet'} progress={recentAverageProgressBar} trend={recentScoreTrend}/>
     </section>}
 
     <section className="dashboard-panel" aria-labelledby="recent-evaluations-heading">
-      <div className="dashboard-section-heading"><div><span className="dashboard-kicker">WORKSPACE ACTIVITY</span><h2 id="recent-evaluations-heading">Recent evaluations</h2></div><Link className="dashboard-text-link" to="/evaluations">Run evaluation <span aria-hidden="true">→</span></Link></div>
+      <div className="dashboard-section-heading"><div><span className="dashboard-kicker">HOME ACTIVITY</span><h2 id="recent-evaluations-heading">Recent evaluations</h2></div><Link className="dashboard-text-link" to="/evaluations">Run evaluation <span aria-hidden="true">→</span></Link></div>
       {loading ? <p className="dashboard-state" role="status">Loading evaluation activity…</p> : error ? <div className="dashboard-state" role="alert"><p>Evaluation activity could not be loaded.</p><button className="dashboard-secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : dashboard?.recentEvaluations.length ? <div className="dashboard-evaluation-list">
         {dashboard.recentEvaluations.slice(0, 5).map((item) => <article className="dashboard-evaluation-row" key={item.id}>
           <Link className="dashboard-candidate-link" to={`/candidates/${item.candidateId}`}><span className="dashboard-avatar" aria-hidden="true">{item.candidateName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span><strong>{item.candidateName}</strong></span></Link>
@@ -116,7 +116,7 @@ export function DashboardPage() {
     </section>
 
     <section className="dashboard-panel" aria-labelledby="recent-candidates-heading">
-      <div className="dashboard-section-heading"><div><span className="dashboard-kicker">CANDIDATE WORKSPACE</span><h2 id="recent-candidates-heading">Recently added candidates</h2></div><Link className="dashboard-text-link" to="/dashboard/candidates">Manage candidates <span aria-hidden="true">→</span></Link></div>
+      <div className="dashboard-section-heading"><div><span className="dashboard-kicker">CANDIDATE HOME</span><h2 id="recent-candidates-heading">Recently added candidates</h2></div><Link className="dashboard-text-link" to="/dashboard/candidates">Manage candidates <span aria-hidden="true">→</span></Link></div>
       {candidatesLoading ? <p className="dashboard-state" role="status">Loading candidates…</p> : candidatesError ? <div className="dashboard-state" role="alert"><p>{candidatesError}</p><button className="dashboard-secondary-button" type="button" onClick={reload}>Try again</button></div> : items.length ? <div className="dashboard-candidate-list">{items.map((candidate) => {
         const linked = [
           candidate.githubUsername ? { platform: 'github' as const, name: 'GitHub' } : null,
