@@ -13,7 +13,7 @@ import {
   type RecruiterFilter,
 } from './recruiter-application-presentation';
 import { RecruiterApplicationsList } from './RecruiterApplicationsList';
-import { AdminRecruiterDetailsPanel } from './AdminRecruiterDetailsPanel';
+import { AdminRecruiterDetailsModal } from './AdminRecruiterDetailsModal';
 import './admin-recruiters-page.css';
 
 type RecruiterDecision = { row: RecruiterApplication; decision: 'approved' | 'rejected' };
@@ -39,6 +39,7 @@ export function AdminRecruitersPage() {
   const [logoutError, setLogoutError] = useState('');
   const decisionDialog = useRef<HTMLDialogElement>(null);
   const detailsRequest = useRef(0);
+  const detailsTrigger = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -88,6 +89,7 @@ export function AdminRecruitersPage() {
     setSelectedRecruiter(null);
     setRecruiterDetails(null);
     setDetailsError('');
+    window.requestAnimationFrame(() => detailsTrigger.current?.focus());
   }
 
   useEffect(() => { void load(); }, [load]);
@@ -149,11 +151,11 @@ export function AdminRecruitersPage() {
         <span className="admin-role-badge">Project administrator</span>
       </div>
 
-      <section className="admin-summary" aria-label="Recruiter application counts" aria-busy={busy}>
+      <section className="admin-summary" aria-label={busy && !hasLoaded ? "Loading recruiter application counts" : "Recruiter application counts"} aria-busy={busy && !hasLoaded}>
         {(['pending', 'approved', 'rejected'] as const).map((status, index) => <article className={'admin-summary-card status-' + status} key={status} style={{ '--admin-card-index': index } as CSSProperties}>
           <span className="admin-summary-icon" aria-hidden="true">{status === 'pending' ? '◷' : status === 'approved' ? '✓' : '×'}</span>
           <span className="admin-summary-label">{status === 'pending' ? 'Pending recruiters' : status === 'approved' ? 'Approved recruiters' : 'Rejected recruiters'}</span>
-          <strong>{hasLoaded ? <AnimatedMetric value={counts[status]}/> : '—'}</strong>
+          <strong>{hasLoaded ? <AnimatedMetric value={counts[status]}/> : busy ? <span className="admin-summary-value-skeleton" aria-hidden="true"/> : '—'}</strong>
         </article>)}
       </section>
 
@@ -170,11 +172,12 @@ export function AdminRecruitersPage() {
         </div>
         {notice && <p className="form-feedback" role="status">{notice}</p>}
         {logoutError && <p className="form-feedback form-feedback-error" role="alert">{logoutError}</p>}
-        <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} searchQuery={search} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onViewDetails={(row) => void loadDetails(row)} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
+        <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} searchQuery={search} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onViewDetails={(row) => { detailsTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; void loadDetails(row); }} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
       </section>
 
-      {selectedRecruiter && <AdminRecruiterDetailsPanel
+      {selectedRecruiter && <AdminRecruiterDetailsModal
         name={selectedRecruiter.display_name || selectedRecruiter.email || 'Recruiter'}
+        recruiterId={selectedRecruiter.user_id}
         state={detailsState}
         details={recruiterDetails}
         error={detailsError}
