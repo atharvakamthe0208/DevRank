@@ -58,6 +58,41 @@ describe('active v4 evaluation report', () => {
     expect(report.categories.find(({ categoryId }) => categoryId === 'technical_skills')).not.toHaveProperty('score');
   });
 
+  it('scores complete zero-language repository coverage as zero but leaves incomplete coverage unscored', () => {
+    const complete = buildProposedEvaluationReport([
+      evidence({ evidenceType: 'repository_snapshot', source: 'github', categoryId: 'technical_skills', normalizedValue: {
+        publicRepositoryCount: 2, repositoriesTruncated: false, repositories: [{ primaryLanguage: null }, { primaryLanguage: null }],
+      } }),
+    ]).categories.find(({ categoryId }) => categoryId === 'technical_skills')!;
+    expect(complete).toMatchObject({ status: 'scored', score: 0, metrics: { distinctRepositoryLanguages: 0 } });
+    expect(complete.metrics).not.toHaveProperty('languagesObserved');
+
+    const incomplete = buildProposedEvaluationReport([
+      evidence({ evidenceType: 'repository_snapshot', source: 'github', categoryId: 'technical_skills', normalizedValue: {
+        publicRepositoryCount: 2, repositoriesTruncated: true, repositories: [{ primaryLanguage: null }],
+      } }),
+    ]).categories.find(({ categoryId }) => categoryId === 'technical_skills')!;
+    expect(incomplete.status).toBe('partial');
+    expect(incomplete).not.toHaveProperty('score');
+  });
+
+  it('applies DSA zero only when the profile and snapshot are explicitly absent', () => {
+    const withoutProfile = buildProposedEvaluationReport([], { leetcodeUsernameConfigured: false, leetcodeSnapshotPresent: false })
+      .categories.find(({ categoryId }) => categoryId === 'problem_solving_dsa')!;
+    expect(withoutProfile).toMatchObject({ status: 'scored', score: 0, metrics: { scoringBasis: expect.stringContaining('Optional LeetCode profile not provided') } });
+
+    const configuredWithoutSnapshot = buildProposedEvaluationReport([], { leetcodeUsernameConfigured: true, leetcodeSnapshotPresent: false })
+      .categories.find(({ categoryId }) => categoryId === 'problem_solving_dsa')!;
+    expect(configuredWithoutSnapshot.status).toBe('unavailable');
+    expect(configuredWithoutSnapshot).not.toHaveProperty('score');
+    expect(configuredWithoutSnapshot.metrics.dataStatus).toContain('no saved statistics snapshot');
+
+    const invalidSavedSnapshot = buildProposedEvaluationReport([], { leetcodeUsernameConfigured: false, leetcodeSnapshotPresent: true })
+      .categories.find(({ categoryId }) => categoryId === 'problem_solving_dsa')!;
+    expect(invalidSavedSnapshot.status).toBe('unavailable');
+    expect(invalidSavedSnapshot).not.toHaveProperty('score');
+  });
+
   it('uses the exact capped LeetCode v4 index for 100 easy, 92 medium, and 16 hard', () => {
     const dsa = buildProposedEvaluationReport([
       evidence({ evidenceType: 'solved_statistics', source: 'leetcode', categoryId: 'problem_solving_dsa', normalizedValue: {

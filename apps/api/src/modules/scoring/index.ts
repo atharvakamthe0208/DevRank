@@ -9,6 +9,7 @@ import {
   type CandidateInput,
   type EvaluationResponse,
   type RoleWeightConfiguration,
+  type ScoringCategory,
 } from '@devrank/contracts';
 
 const roleWeightsUrl = new URL('../../../../../config/role-weights.json', import.meta.url);
@@ -19,6 +20,13 @@ export class ScoringValidationError extends Error {
     super(message);
     this.name = 'ScoringValidationError';
   }
+}
+
+export interface ScoringPolicyOptions {
+  /** Categories whose absent optional source has an explicitly defined zero policy. */
+  zeroScoreCategories?: readonly ('problem_solving_dsa')[];
+  /** Clear explanations for genuinely unavailable categories with known source state. */
+  missingEvidenceExplanations?: Partial<Record<ScoringCategory, string>>;
 }
 
 /** Load and validate the one shared role-weight configuration. */
@@ -53,6 +61,7 @@ export function scoreCandidate(
   input: unknown,
   configuration: unknown = loadRoleWeightConfiguration(),
   requestedVersion?: string,
+  policy: ScoringPolicyOptions = {},
 ): EvaluationResponse {
   const candidateResult = candidateInputSchema.safeParse(input);
   if (!candidateResult.success) {
@@ -80,19 +89,31 @@ export function scoreCandidate(
     throw new ScoringValidationError('Evidence IDs must be unique within a candidate evaluation.');
   }
 
+  const explicitZeroCategories = new Set(policy.zeroScoreCategories ?? []);
   const categoryScores = scoringCategories.map((category) => {
     const categoryEvidence = candidate.evidence.filter((item) => item.categoryId === category.id);
     const scoredEvidence = categoryEvidence.filter((item) => item.availability === 'available' && item.normalizedValue !== undefined);
 
     if (scoredEvidence.length === 0) {
+      if (category.id === 'problem_solving_dsa' && explicitZeroCategories.has(category.id)) {
+        return {
+          categoryId: category.id,
+          displayName: category.displayName,
+          score: 0,
+          status: 'scored' as const,
+          scoreBasis: 'optional_missing_zero' as const,
+          evidenceRefs: [],
+          explanation: 'No LeetCode username or saved profile was provided. The active optional-evidence policy assigns this DSA index a zero; no supporting activity or evidence is inferred.',
+        };
+      }
       return {
         categoryId: category.id,
         displayName: category.displayName,
         status: 'insufficient_evidence' as const,
         evidenceRefs: [],
-        explanation: categoryEvidence.length === 0
+        explanation: policy.missingEvidenceExplanations?.[category.id] ?? (categoryEvidence.length === 0
           ? 'No evidence was supplied; no category score is assigned.'
-          : 'No available evidence had a normalized score; no category score is assigned.',
+          : 'No available evidence had a normalized score; no category score is assigned.'),
       };
     }
 
@@ -127,8 +148,8 @@ export function scoreCandidate(
     recommendations: complete ? [] : ['Collect valid normalized evidence for each missing category before calculating an overall score.'],
     missingEvidence,
     calculationExplanation: complete
-      ? 'Each category score is the arithmetic mean of its available normalized evidence, rounded to two decimal places. Overall score is the weighted sum of the six category scores divided by 100, rounded to two decimal places.'
-      : 'Category scores are reported where normalized evidence is available. Overall score is omitted until all six categories have evidence.',
+      ? 'Each category score is the arithmetic mean of its available normalized evidence, rounded to two decimal places. Where the active policy defines it, an absent optional LeetCode profile contributes a DSA zero without an evidence reference. Overall score is the weighted sum of the six category scores divided by 100, rounded to two decimal places.'
+      : 'Category scores are reported where normalized evidence is available. An active optional-missing policy may score the absent LeetCode profile as DSA zero; the overall score remains omitted until all required categories are scoreable.',
     evaluationStatus: complete ? 'completed' : 'insufficient_evidence',
     aiExplanation: {
       summary: 'No AI-generated explanation was produced by deterministic scoring.',

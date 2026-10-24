@@ -40,12 +40,12 @@ describe('official GitHub REST adapter', () => {
     expect(() => normalizeGitHubUsername('-bad')).toThrow('valid GitHub username');
   });
 
-  it('retrieves a profile and public repository metadata using bounded pagination', async () => {
+  it('retrieves every linked repository page and aggregates complete language evidence', async () => {
     const firstPage = Array.from({ length: 50 }, (_, index) => ({ ...repo, id: index + 1 }));
     const paginatedUser = { ...user, public_repos: 51 };
     const fetcher = vi.fn< typeof fetch >()
       .mockResolvedValueOnce(response(paginatedUser))
-      .mockResolvedValueOnce(response(firstPage))
+      .mockResolvedValueOnce(response(firstPage, 200, { Link: '<https://api.github.com/users/octocat/repos?type=owner&sort=updated&per_page=100&page=2>; rel="next"' }))
       .mockResolvedValueOnce(response([repo]));
     const adapter = createTestGitHubAdapter(fetcher, 'test-token');
 
@@ -57,6 +57,10 @@ describe('official GitHub REST adapter', () => {
       following: 10,
       repositoriesReturned: 51,
       repositoriesTruncated: false,
+      languageSummary: {
+        totalEligibleRepositories: 51, repositoriesAnalyzed: 51, observedLanguages: ['TypeScript'],
+        repositoriesMissingLanguage: 0, coverageStatus: 'complete',
+      },
     });
     expect(profile.repositories[0]).toMatchObject({
       fullName: 'octocat/hello-world', stars: 12, forks: 3, primaryLanguage: 'TypeScript',
@@ -64,6 +68,7 @@ describe('official GitHub REST adapter', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(new URL(String(fetcher.mock.calls[1][0])).searchParams.get('page')).toBe('1');
     expect(new URL(String(fetcher.mock.calls[2][0])).searchParams.get('page')).toBe('2');
+    expect(new URL(String(fetcher.mock.calls[1][0])).searchParams.get('per_page')).toBe('100');
     expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({ Authorization: 'Bearer test-token' });
   });
 
@@ -217,18 +222,56 @@ describe('official GitHub REST adapter', () => {
     await expect(timeout.getProfile('octocat')).rejects.toMatchObject({ statusCode: 504, code: 'GITHUB_TIMEOUT' });
   });
 
-  it('rejects malformed or incomplete provider data and reports partial repositories', async () => {
+  it('rejects malformed profile data and preserves an invalid repository page as unavailable language evidence', async () => {
     const partialProfile = createTestGitHubAdapter(vi.fn<typeof fetch>().mockResolvedValue(response({ ...user, following: undefined })));
     await expect(partialProfile.getProfile('octocat')).rejects.toMatchObject({ code: 'GITHUB_INVALID_RESPONSE' });
 
     const malformedRepos = createTestGitHubAdapter(vi.fn<typeof fetch>()
       .mockResolvedValueOnce(response({ ...user, public_repos: 80 }))
       .mockResolvedValueOnce(response([{ ...repo, stargazers_count: 'many' }])));
-    await expect(malformedRepos.getProfile('octocat')).rejects.toMatchObject({ code: 'GITHUB_INVALID_RESPONSE' });
+    await expect(malformedRepos.getProfile('octocat')).resolves.toMatchObject({
+      repositoriesReturned: 0, repositoriesTruncated: true,
+      languageSummary: { coverageStatus: 'unavailable', retrievalIssue: 'invalid_response' },
+    });
 
     const partial = createTestGitHubAdapter(vi.fn<typeof fetch>()
       .mockResolvedValueOnce(response({ ...user, public_repos: 80 }))
       .mockResolvedValueOnce(response([repo])));
     await expect(partial.getProfile('octocat')).resolves.toMatchObject({ repositoriesReturned: 1, repositoriesTruncated: true });
+  });
+
+  it('marks a later-page provider failure partial and does not lose already retrieved repository evidence', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ ...user, public_repos: 2 }))
+      .mockResolvedValueOnce(response([repo], 200, { Link: '<https://api.github.com/users/octocat/repos?type=owner&sort=updated&per_page=100&page=2>; rel="next"' }))
+      .mockResolvedValueOnce(response({ message: 'rate limited' }, 403, { 'x-ratelimit-remaining': '0' }));
+    const profile = await createTestGitHubAdapter(fetcher).getProfile('octocat');
+    expect(profile.repositoriesReturned).toBe(1);
+    expect(profile.languageSummary).toMatchObject({
+      totalEligibleRepositories: 2, repositoriesAnalyzed: 1, observedLanguages: ['TypeScript'],
+      coverageStatus: 'partial', retrievalIssue: 'provider_rate_limited',
+    });
+  });
+
+  it('does not treat a missing primaryLanguage field as a confirmed no-language repository', async () => {
+    const { language: _language, ...missingLanguageRepo } = repo;
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ ...user, public_repos: 1 }))
+      .mockResolvedValueOnce(response([missingLanguageRepo]));
+    const profile = await createTestGitHubAdapter(fetcher).getProfile('octocat');
+    expect(profile.repositories[0]).not.toHaveProperty('primaryLanguage');
+    expect(profile.languageSummary).toMatchObject({
+      repositoriesAnalyzed: 1, repositoriesMissingLanguage: 1, coverageStatus: 'partial',
+    });
+  });
+
+  it('distinguishes a confirmed empty repository profile from missing repository evidence', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ ...user, public_repos: 0 }))
+      .mockResolvedValueOnce(response([]));
+    const profile = await createTestGitHubAdapter(fetcher).getProfile('octocat');
+    expect(profile.languageSummary).toMatchObject({
+      totalEligibleRepositories: 0, repositoriesAnalyzed: 0, observedLanguages: [], coverageStatus: 'complete',
+    });
   });
 });

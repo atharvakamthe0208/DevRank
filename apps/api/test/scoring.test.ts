@@ -82,16 +82,16 @@ describe('deterministic candidate scoring', () => {
   });
 
   it('records the supported scoring version and the matching configuration on every result', () => {
-    const config = loadRoleWeightConfiguration('4.0.0');
-    expect(SUPPORTED_SCORING_VERSIONS).toEqual(['4.0.0']);
-    expect(config.scoringVersion).toBe('4.0.0');
+    const config = loadRoleWeightConfiguration('4.0.1');
+    expect(SUPPORTED_SCORING_VERSIONS).toEqual(['4.0.1']);
+    expect(config.scoringVersion).toBe('4.0.1');
     expect(config.roles).toEqual({
       software_developer: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
       ai_ml_engineer: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
       data_analyst: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
     });
-    expect(scoreCandidate(candidate(), config, '4.0.0').scoringVersion).toBe(config.scoringVersion);
-    expect(scoreCandidate(candidate(4), config, '4.0.0').scoringVersion).toBe('4.0.0');
+    expect(scoreCandidate(candidate(), config, '4.0.1').scoringVersion).toBe(config.scoringVersion);
+    expect(scoreCandidate(candidate(4), config, '4.0.1').scoringVersion).toBe('4.0.1');
   });
 
   it('rejects unsupported versions and never applies the current formula under a different identifier', () => {
@@ -139,6 +139,31 @@ describe('deterministic candidate scoring', () => {
     expect(allMissing.overallScore).toBeUndefined();
     expect(allMissing.categoryScores.every(({ status, score }) => status === 'insufficient_evidence' && score === undefined)).toBe(true);
     expect(allMissing.missingEvidence).toHaveLength(6);
+  });
+
+  it('allows only the explicit missing-optional DSA policy to score zero without inventing evidence', () => {
+    const oneMissingInput = candidate();
+    oneMissingInput.evidence = oneMissingInput.evidence.filter((item: Record<string, any>) => item.categoryId !== 'problem_solving_dsa');
+    const output = scoreCandidate(oneMissingInput, sharedWeights, undefined, { zeroScoreCategories: ['problem_solving_dsa'] });
+    const dsa = output.categoryScores.find(({ categoryId }) => categoryId === 'problem_solving_dsa')!;
+    expect(dsa).toMatchObject({ score: 0, status: 'scored', scoreBasis: 'optional_missing_zero', evidenceRefs: [] });
+    expect(output.evaluationStatus).toBe('completed');
+    expect(output.missingEvidence).toEqual([]);
+    expect(output.overallScore).toBeGreaterThan(0);
+    expect(output.evidence.some(({ categoryId }) => categoryId === 'problem_solving_dsa')).toBe(false);
+    expect(evaluationResponseSchema.safeParse(output).success).toBe(true);
+    expect(evaluationResponseSchema.safeParse({
+      ...output,
+      categoryScores: output.categoryScores.map((item) => item.categoryId === 'problem_solving_dsa' ? { ...item, score: 1 } : item),
+    }).success).toBe(false);
+  });
+
+  it('keeps an evaluation with no meaningful evidence insufficient even if policy assigns the optional DSA zero', () => {
+    const output = scoreCandidate(candidate(4), sharedWeights, undefined, { zeroScoreCategories: ['problem_solving_dsa'] });
+    expect(output.evaluationStatus).toBe('insufficient_evidence');
+    expect(output).not.toHaveProperty('overallScore');
+    expect(output.missingEvidence).toHaveLength(5);
+    expect(output.categoryScores.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).toMatchObject({ score: 0, status: 'scored', evidenceRefs: [] });
   });
 
   it('keeps available raw evidence without a normalized value unscored', () => {
@@ -191,7 +216,7 @@ describe('deterministic candidate scoring', () => {
 
   it('accepts minimum and maximum valid weight values and validates them before scoring', () => {
     const extremeWeights = {
-      schemaVersion: '4.0.0', scoringVersion: '4.0.0', status: 'active',
+      schemaVersion: '4.0.0', scoringVersion: '4.0.1', status: 'active',
       roles: {
         software_developer: { project_portfolio: 100, technical_skills: 0, development_activity: 0, collaboration: 0, current_year_contributions: 0, problem_solving_dsa: 0 },
         ai_ml_engineer: { project_portfolio: 0, technical_skills: 0, development_activity: 0, collaboration: 0, current_year_contributions: 0, problem_solving_dsa: 100 },
@@ -250,7 +275,7 @@ describe('deterministic candidate scoring', () => {
     const output = scoreCandidate(input);
     expect(evaluationResponseSchema.safeParse(output).success).toBe(true);
     expect(output.schemaVersion).toBe('4.0.0');
-    expect(output.scoringVersion).toBe('4.0.0');
+    expect(output.scoringVersion).toBe('4.0.1');
     expect(output.categoryScores.map(({ categoryId }) => categoryId)).toEqual(scoringCategories.map(({ id }) => id));
     expect(output.categoryScores.flatMap(({ categoryId, evidenceRefs }) => evidenceRefs.map((evidenceId) => [categoryId, evidenceId])))
       .toEqual(scoringCategories.flatMap(({ id }) => input.evidence.filter((item: Record<string, any>) => item.categoryId === id).map(({ evidenceId }: Record<string, any>) => [id, evidenceId])));
