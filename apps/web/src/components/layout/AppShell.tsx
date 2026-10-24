@@ -8,11 +8,10 @@ import './workspace-breadcrumbs.css';
 
 const navItems = [
   { to: '/dashboard', label: 'Overview', icon: '⌂' },
-  { to: '/profile', label: 'My Profile', icon: '◉' },
   { to: '/dashboard/candidates', label: 'Candidates', icon: '♙' },
-  { to: '/screening', label: 'Resume Screening', icon: '▧' },
   { to: '/evaluations', label: 'Evaluations', icon: '◉' },
   { to: '/dashboard/reports', label: 'Insights', icon: '▤' },
+  { to: '/screening', label: 'Resume Screening', icon: '▧' },
 ];
 
 export function AppShell() {
@@ -39,11 +38,11 @@ export function AppShell() {
           })}
         </nav>
         <div className="sidebar-bottom">
-          <div className="user-mini"><div className="avatar avatar-user">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</div><div className="user-copy"><strong>{profile?.display_name || 'Recruiter'}</strong><span>Recruiter</span></div><button type="button" className="logout-button" onClick={() => { setSignOutError(''); void signOut().catch(() => setSignOutError('Could not sign out. Check your connection and try again.')); }}>Log out</button></div>
+          <div className="user-mini"><NavLink to="/profile" aria-label={'View profile for ' + (profile?.display_name || 'Recruiter')} className={({ isActive }) => 'user-profile-link' + (isActive ? ' active' : '')}><div className="avatar avatar-user" aria-hidden="true">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</div><span className="user-copy"><strong>{profile?.display_name || 'Recruiter'}</strong><span>Recruiter</span></span></NavLink><button type="button" className="logout-button" onClick={() => { setSignOutError(''); void signOut().catch(() => setSignOutError('Could not sign out. Check your connection and try again.')); }}>Log out</button></div>
         </div>
       </aside>
       <div className="main-column">
-        <header className="topbar"><div className="mobile-brand"><img className="mobile-brand-img" src={devrankMark} alt=""/> devrank<span className="brand-period">.</span></div><nav className="breadcrumb" aria-label="Breadcrumb"><ol className="breadcrumb-list">{breadcrumbs.map((crumb, index) => <li key={`${crumb.label}-${index}`}>{index > 0 && <span className="crumb-slash" aria-hidden="true">/</span>}{crumb.to ? <Link to={crumb.to} state={crumb.label === 'Candidates' ? candidateListState : undefined}>{crumb.label}</Link> : <span aria-current="page">{crumb.label}</span>}</li>)}</ol></nav><div className="topbar-actions"><span className="data-chip"><i /> Recruiter workspace</span><button className="logout-button mobile-logout" type="button" onClick={() => { void signOut().catch(() => setSignOutError('Could not sign out. Try again.')); }}>Log out</button><div className="avatar avatar-user top-avatar">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</div></div></header>
+        <header className="topbar"><div className="mobile-brand"><img className="mobile-brand-img" src={devrankMark} alt=""/> devrank<span className="brand-period">.</span></div><nav className="breadcrumb" aria-label="Breadcrumb"><ol className="breadcrumb-list">{breadcrumbs.map((crumb, index) => <li key={`${crumb.label}-${index}`}>{index > 0 && <span className="crumb-slash" aria-hidden="true">/</span>}{crumb.to ? <Link to={crumb.to} state={crumb.label === 'Candidates' ? candidateListState : undefined}>{crumb.label}</Link> : <span aria-current="page">{crumb.label}</span>}</li>)}</ol></nav><div className="topbar-actions"><span className="data-chip"><i /> Recruiter workspace</span><button className="logout-button mobile-logout" type="button" onClick={() => { void signOut().catch(() => setSignOutError('Could not sign out. Try again.')); }}>Log out</button><NavLink to="/profile" aria-label={'View profile for ' + (profile?.display_name || 'Recruiter')} className={({ isActive }) => 'avatar avatar-user top-avatar profile-avatar-link' + (isActive ? ' active' : '')}><span aria-hidden="true">{(profile?.display_name ?? 'R').split(/\s+/).map((part) => part[0]).slice(0,2).join('').toUpperCase()}</span></NavLink></div></header>
         <main className="page-content">{signOutError && <p className="form-feedback form-feedback-error" role="alert">{signOutError}</p>}<WorkspaceBreadcrumbContext.Provider value={setBreadcrumbLabels}><Outlet /></WorkspaceBreadcrumbContext.Provider></main>
       </div>
     </div>
