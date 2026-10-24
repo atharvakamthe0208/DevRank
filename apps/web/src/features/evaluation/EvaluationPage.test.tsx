@@ -183,17 +183,25 @@ describe('evaluation run result', () => {
   it('keeps the AI explanation separate from the saved report and avoids repeating category results', () => {
     const response = completedAnalysis();
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisReportView, { response, candidateName: 'Candidate Example' })));
+    expect(html).toContain('AI Candidate Insights');
+    expect(html).toContain('Key strengths, development areas, and recommended next steps.');
     expect(html).toContain('SAVED EVALUATION');
     expect(html).toContain('78 / 100');
     expect(html).not.toContain('Category results');
     expect(html).toContain('View six category results');
-    expect(html).toContain('AI SUMMARY');
+    expect(html).toContain('Executive Summary');
     expect(html).toContain('Role relevance');
+    expect(html).toContain('Strengths');
+    expect(html).toContain('Areas to Improve');
+    expect(html).toContain('Recommended Actions');
     expect(html).toContain('Strength 1 grounded in saved evidence.');
+    expect(html).toContain('Strength 3 grounded in saved evidence.');
+    expect(html).not.toContain('Strength 4 grounded in saved evidence.');
     expect(html).toContain('The history is incomplete.');
     expect(html).toContain('AI text below is explanatory only. It does not calculate or change scores.');
     expect(html).toContain('Supporting references (1)');
-    expect(html).not.toContain('<details class="ai-report-observation" open');
+    expect(html).not.toContain('About this AI explanation');
+    expect(html).not.toContain('<details class="ai-report-observation"');
   });
 
   it('keeps the saved deterministic result visible when the on-demand AI explanation fails', () => {
