@@ -28,7 +28,9 @@ describe('AppShell route breadcrumbs', () => {
     expect(list).toContain('aria-current="page">Candidates</span>');
 
     const create = renderAt('/candidates/new');
-    expect(create).toContain('href="/dashboard" data-discover="true">Workspace</a>');
+    expect(create).toContain('href="/dashboard" data-discover="true">Home</a>');
+    expect(create).toContain('class="workspace-label">HOME</div>');
+    expect(create).toContain('Recruiter home');
     expect(create).toContain('href="/dashboard/candidates" data-discover="true">Candidates</a>');
     expect(create).toContain('aria-current="page">Add Candidate</span>');
   });
