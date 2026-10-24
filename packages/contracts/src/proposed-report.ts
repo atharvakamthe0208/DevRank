@@ -1,5 +1,6 @@
 import { finalRubric, finalRubricId, proposedRubricId, type ProposedRubricCategory } from './proposed-rubric.js';
 import { platformEvaluationEvidenceSchema, type PlatformEvaluationEvidence } from './platform-data.js';
+import { githubLanguageSummarySchema, summarizeGitHubLanguages } from './github-language-summary.js';
 import { z } from 'zod';
 
 export type FinalReportValue = string | number | boolean;
@@ -78,7 +79,12 @@ export function parseProposedPlatformEvidence(value: unknown): PlatformEvaluatio
 }
 
 const target = { project_portfolio: 10, technical_skills: 5, development_activity: 250, collaboration: 50, problem_solving_dsa: 300 } as const;
-const activeRubricNotice = 'Active rubric v4 evidence indexes are deterministic measures of source volume and breadth, not calibrated measures of engineering competence, code quality, or hiring suitability. Missing or partial evidence is not zero. Results should not be compared when snapshot dates or evidence coverage differ. The DSA index caps at 300 difficulty-weighted solved problems; this threshold needs future calibration.';
+const activeRubricNotice = 'Active rubric v4 evidence indexes are deterministic measures of source volume and breadth, not calibrated measures of engineering competence, code quality, or hiring suitability. Missing or partial evidence remains unscored except that an absent optional LeetCode profile has a policy-defined DSA zero. Results should not be compared when snapshot dates or evidence coverage differ. The DSA index caps at 300 difficulty-weighted solved problems; this threshold needs future calibration.';
+
+export interface FinalEvaluationReportContext {
+  leetcodeUsernameConfigured?: boolean;
+  leetcodeSnapshotPresent?: boolean;
+}
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
@@ -102,7 +108,7 @@ function sumNumericKeys(value: unknown, keys: string[]): { total: number; comple
  * Deterministic active-v4 normalizations. These indexes summarize source evidence volume/breadth,
  * not competence. A complete weighted score is withheld unless every category is scoreable.
  */
-export function buildFinalEvaluationReport(evidence: PlatformEvaluationEvidence[]): FinalEvaluationReport {
+export function buildFinalEvaluationReport(evidence: PlatformEvaluationEvidence[], context: FinalEvaluationReportContext = {}): FinalEvaluationReport {
   const mapped = (id: ProposedRubricCategory) => evidence.filter((item) => item.categoryMappings.some((mapping) =>
     (mapping.rubricId === finalRubricId || mapping.rubricId === proposedRubricId) && mapping.categoryId === id));
   const firstValue = (id: ProposedRubricCategory, type: PlatformEvaluationEvidence['evidenceType']) => mapped(id).find((item) => item.evidenceType === type);
@@ -128,22 +134,28 @@ export function buildFinalEvaluationReport(evidence: PlatformEvaluationEvidence[
     } else if (category.id === 'technical_skills') {
       const repo = firstValue(category.id, 'repository_snapshot');
       const repos = Array.isArray(repo?.normalizedValue.repositories) ? repo.normalizedValue.repositories : [];
-      const languages = [...new Set(repos.flatMap((item) => {
-        const language = record(item)?.primaryLanguage;
-        return typeof language === 'string' && language.trim() ? [language.trim()] : [];
-      }))].sort((a, b) => a.localeCompare(b));
-      if (languages.length > 0) {
-        row.metrics.distinctRepositoryLanguages = languages.length;
-        row.metrics.languagesObserved = languages.join(', ');
-        if (repo?.availability === 'available'
-          && repo.normalizedValue.repositoriesTruncated !== true
-          && finiteCount(repo.normalizedValue.publicRepositoryCount) !== undefined
-          && finiteCount(repo.normalizedValue.publicRepositoryCount)! <= repos.length) {
-          row.score = Math.round(Math.min(100, languages.length / target.technical_skills * 100) * 100) / 100;
+      const total = finiteCount(repo?.normalizedValue.publicRepositoryCount) ?? repos.length;
+      const parsedSummary = githubLanguageSummarySchema.safeParse(repo?.normalizedValue.languageSummary);
+      const summary = parsedSummary.success ? parsedSummary.data : summarizeGitHubLanguages(
+        repos.map((item) => record(item) ?? {}),
+        total,
+        repo?.normalizedValue.repositoriesTruncated !== true && total <= repos.length,
+      );
+      if (repo !== undefined) {
+        row.metrics.repositoriesAnalyzed = summary.repositoriesAnalyzed;
+        row.metrics.totalEligibleRepositories = summary.totalEligibleRepositories;
+        row.metrics.repositoriesMissingLanguage = summary.repositoriesMissingLanguage;
+        row.metrics.languageCoverageStatus = repo.availability === 'available' ? summary.coverageStatus : 'unavailable';
+        row.metrics.distinctRepositoryLanguages = summary.observedLanguages.length;
+        if (summary.observedLanguages.length > 0) row.metrics.languagesObserved = summary.observedLanguages.join(', ');
+        if (summary.retrievalIssue) row.metrics.languageRetrievalIssue = summary.retrievalIssue;
+        const completeRepositoryLanguageCoverage = repo.availability === 'available' && summary.coverageStatus === 'complete';
+        if (completeRepositoryLanguageCoverage) {
+          row.score = Math.round(Math.min(100, summary.observedLanguages.length / target.technical_skills * 100) * 100) / 100;
           row.status = 'scored';
-        } else row.status = 'partial';
+        } else if (summary.repositoriesAnalyzed > 0 || summary.retrievalIssue) row.status = 'partial';
       }
-      row.formula = `distinct observed repository languages / ${target.technical_skills}, capped at 100; language breadth proxy only.`;
+      row.formula = `distinct observed repository languages across the complete eligible repository set / ${target.technical_skills}, capped at 100; language breadth proxy only.`;
     } else if (category.id === 'development_activity') {
       const activity = firstValue(category.id, 'development_activity');
       const commits = finiteCount(activity?.normalizedValue.totalCommitContributions);
@@ -235,6 +247,15 @@ export function buildFinalEvaluationReport(evidence: PlatformEvaluationEvidence[
         if (malformedTotal) row.metrics.totalCountStatus = 'Malformed total count; value omitted';
         if (solved?.availability === 'partial' || ((hasDifficultyBreakdown || malformedTotal) && solved?.availability === 'available')) row.status = 'partial';
         else if (contest?.availability === 'available') row.status = 'partial';
+        if (solved === undefined && context.leetcodeUsernameConfigured === false && context.leetcodeSnapshotPresent === false) {
+          row.score = 0;
+          row.status = 'scored';
+          row.metrics.scoringBasis = 'Optional LeetCode profile not provided; DSA index assigned zero by active policy';
+        } else if (context.leetcodeUsernameConfigured && !context.leetcodeSnapshotPresent) {
+          row.metrics.dataStatus = 'A LeetCode username is configured, but no saved statistics snapshot is available. No zero is inferred.';
+        } else if (context.leetcodeSnapshotPresent && solved === undefined) {
+          row.metrics.dataStatus = 'A saved LeetCode snapshot has no usable solved statistics. No zero is inferred.';
+        }
       }
       if (contest?.availability === 'available') {
         const contestStats = record(contest.normalizedValue.statistics) ?? {};

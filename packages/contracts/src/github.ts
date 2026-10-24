@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { githubLanguageSummarySchema } from './github-language-summary.js';
 
 export const githubProfileQuerySchema = z.object({
   profile: z.string().trim().min(1).max(255),
@@ -13,7 +14,7 @@ export const githubRepositorySchema = z.object({
   description: z.string().nullable(),
   stargazers_count: z.number().int().nonnegative(),
   forks_count: z.number().int().nonnegative(),
-  language: z.string().nullable(),
+  language: z.string().nullable().optional(),
   updated_at: z.string().datetime(),
 });
 
@@ -99,11 +100,12 @@ export const githubProfileResponseSchema = z.object({
     description: z.string().nullable(),
     stars: z.number().int().nonnegative(),
     forks: z.number().int().nonnegative(),
-    primaryLanguage: z.string().nullable(),
+    primaryLanguage: z.string().nullable().optional(),
     updatedAt: z.string().datetime(),
   })),
   repositoriesReturned: z.number().int().nonnegative(),
   repositoriesTruncated: z.boolean(),
+  languageSummary: githubLanguageSummarySchema.optional(),
   insights: githubInsightsSchema.optional(),
 }).strict();
 

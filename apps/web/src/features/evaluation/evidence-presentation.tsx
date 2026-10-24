@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import type { CategoryScore, Evidence, PlatformEvaluationEvidence } from '@devrank/contracts';
+import type { CategoryScore, Evidence, FinalReportCategory, PlatformEvaluationEvidence } from '@devrank/contracts';
 
 const fieldLabels: Record<string, string> = {
   activeCommitDays: 'Active commit days', activeCommitWeeks: 'Active commit weeks',
@@ -29,7 +29,30 @@ export function readableProvenance(value: string): string {
   return labels[value] ?? readableEvidenceLabel(value);
 }
 
-export function categoryEvidenceStatus(score: CategoryScore, evidence: Evidence[], snapshots: PlatformEvaluationEvidence[] = []): string {
+export function categoryEvidenceStatus(score: CategoryScore, evidence: Evidence[], snapshots: PlatformEvaluationEvidence[] = [], reportCategory?: FinalReportCategory): string {
+  if (score.scoreBasis === 'optional_missing_zero') return 'LeetCode profile not provided · policy-defined zero';
+  if (score.categoryId === 'technical_skills' && reportCategory) {
+    const coverage = reportCategory.metrics.languageCoverageStatus;
+    if (coverage === 'complete' || coverage === 'partial' || coverage === 'unavailable') {
+      const analyzed = reportCategory.metrics.repositoriesAnalyzed;
+      const total = reportCategory.metrics.totalEligibleRepositories;
+      const languages = reportCategory.metrics.languagesObserved;
+      const missingFields = reportCategory.metrics.repositoriesMissingLanguage;
+      const issue = reportCategory.metrics.languageRetrievalIssue;
+      const countText = typeof analyzed === 'number' && typeof total === 'number' ? `${analyzed} of ${total} repositories analyzed` : 'repository coverage count unavailable';
+      const languageText = typeof languages === 'string' ? ` · Languages observed: ${languages}` : '';
+      const missingText = typeof missingFields === 'number' && missingFields > 0 ? ` · ${missingFields} repositories did not include language metadata` : '';
+      const issueText = issue === 'provider_rate_limited' ? ' · GitHub rate limit interrupted repository retrieval'
+        : issue === 'provider_timeout' ? ' · GitHub timed out during repository retrieval'
+          : issue === 'provider_unavailable' ? ' · GitHub could not be reached during repository retrieval'
+            : issue === 'invalid_response' ? ' · GitHub returned incomplete repository data'
+              : issue === 'provider_error' ? ' · Repository retrieval ended with a provider error' : '';
+      if (coverage === 'complete') return `Complete language coverage · ${countText}${languageText}`;
+      if (coverage === 'unavailable') return `GitHub language data unavailable · ${countText} · no score assigned`;
+      return `Partial language coverage · ${countText}${languageText}${missingText}${issueText} · no score assigned until coverage is complete`;
+    }
+  }
+  if (score.status !== 'scored' && typeof reportCategory?.metrics.dataStatus === 'string') return reportCategory.metrics.dataStatus;
   if (score.status !== 'scored' || score.score === undefined) return 'Insufficient evidence · no score assigned';
   const referencedEvidence = evidence.filter(({ evidenceId }) => score.evidenceRefs.includes(evidenceId));
   const relatedSnapshots = snapshots.filter(({ categoryMappings }) => categoryMappings.some(({ categoryId, relation }) => categoryId === score.categoryId && relation === 'supporting'));
