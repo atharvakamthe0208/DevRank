@@ -17,7 +17,7 @@ const upload = multer({
     destination: (request, _file, callback) => callback(null, (request as UploadRequest).screeningTempDir!),
     filename: (_request, _file, callback) => callback(null, randomUUID()),
   }),
-  limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILES, fields: 2, parts: MAX_FILES + 2 },
+  limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILES, fields: 3, parts: MAX_FILES + 3 },
   // Let the controller mark an unsupported file failed without rejecting valid
   // files included in the same bounded multipart upload.
   fileFilter: (_request, _file, callback) => callback(null, true),

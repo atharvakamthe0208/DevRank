@@ -62,6 +62,7 @@ export const preliminaryEvaluationSchema = z.object({
 export const screeningCreateSchema = z.object({
   jobTitle: z.string().trim().min(1).max(200),
   jobDescription: z.string().trim().min(50).max(30000),
+  candidateIds: z.array(z.string().uuid()).min(1).max(20).optional(),
 }).strict();
 export const screeningSubmissionResponseSchema = z.object({
   sessionId: z.string().uuid(),

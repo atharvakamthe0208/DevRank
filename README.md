@@ -24,6 +24,7 @@ scripts/              Repository automation
 
 See [docs/setup.md](docs/setup.md) for setup and [docs/team-workflow.md](docs/team-workflow.md) for ownership and collaboration.
 For production frontend configuration and the current demo limitations, see [Day 8 deployment and demo](docs/day8-frontend-deployment-demo.md).
+For Google Forms CSV candidate import, optional Google Drive OAuth, and resume screening, see [CSV import and Drive setup](docs/csv-import.md). Google Drive access requires server-side OAuth configuration and the documented Supabase migration before it is available.
 
 ## Prerequisites
 

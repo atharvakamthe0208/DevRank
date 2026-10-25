@@ -36,10 +36,15 @@ const envSchema = z.object({
   GITHUB_TOKEN: optionalSecret,
   // Use a separate public-only token without the optional read:user scope.
   GITHUB_PUBLIC_CONTRIBUTIONS_TOKEN: optionalSecret,
-  LEETCODE_API_BASE_URL: optionalUrl.default('http://localhost:3001'),
+  LEETCODE_API_BASE_URL: optionalUrl.default('https://alfa-leetcode-api.onrender.com'),
   GROQ_API_KEY: optionalSecret,
   GROQ_MODEL: z.string().trim().min(1).max(100).default('openai/gpt-oss-120b'),
   AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(12000),
+  GOOGLE_DRIVE_CLIENT_ID: optionalSecret,
+  GOOGLE_DRIVE_CLIENT_SECRET: optionalSecret,
+  GOOGLE_DRIVE_REDIRECT_URI: optionalUrl,
+  GOOGLE_DRIVE_STATE_SECRET: optionalSecret,
+  GOOGLE_DRIVE_TOKEN_ENCRYPTION_KEY: optionalSecret,
 });
 
 export type ApiEnvironment = z.infer<typeof envSchema>;

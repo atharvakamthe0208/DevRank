@@ -4,7 +4,7 @@ import { env } from '../config/env.js';
 import { HttpError } from '../middleware/http-error.js';
 
 const usernamePattern = /^[A-Za-z0-9_.-]{1,100}$/;
-const requestTimeoutMs = 8_000;
+const requestTimeoutMs = 30_000;
 
 const count = z.number().int().nonnegative().nullable().optional();
 const decimal = z.number().finite().nonnegative().nullable().optional();

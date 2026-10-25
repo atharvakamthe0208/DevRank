@@ -72,4 +72,18 @@ describe('save and sync LeetCode profile workflow', () => {
     expect(failure).toMatchObject({ stage: 'sync', savedCandidate });
     expect(request).toHaveBeenCalledTimes(2);
   });
+
+  it('retries the sync workflow and returns the provider result when a later attempt succeeds', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(savedCandidate)
+      .mockRejectedValueOnce(new Error('provider unavailable'))
+      .mockResolvedValueOnce(savedCandidate)
+      .mockResolvedValueOnce(syncResult);
+
+    await expect(saveAndSyncLeetCodeProfile(candidateId, 'example', 'test-token', request))
+      .rejects.toMatchObject({ stage: 'sync', savedCandidate });
+    await expect(saveAndSyncLeetCodeProfile(candidateId, 'example', 'test-token', request))
+      .resolves.toMatchObject({ candidate: savedCandidate, handle: 'example', result: syncResult });
+    expect(request).toHaveBeenCalledTimes(4);
+  });
 });
