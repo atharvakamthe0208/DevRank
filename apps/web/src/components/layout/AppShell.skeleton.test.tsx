@@ -19,8 +19,17 @@ describe('workspace navigation loading', () => {
       )),
     ));
     expect(html).toContain('Main navigation');
-    expect(html).toContain('My Profile');
+    expect(html).not.toContain('My Profile');
+    expect(html).toContain('Overview');
+    expect(html).toContain('Candidates');
+    expect(html).toContain('Resume Screening');
+    expect(html).toContain('Evaluations');
+    expect(html).toContain('Insights');
     expect(html).toContain('is-dashboard');
     expect(html).toContain('aria-busy="true"');
+    const navLabels = ['Overview', 'Candidates', 'Evaluations', 'Insights', 'Resume Screening'];
+    const navPositions = navLabels.map((label) => html.indexOf('<span class="nav-label">' + label + '</span>'));
+    expect(navPositions.every((position) => position >= 0)).toBe(true);
+    expect(navPositions).toEqual([...navPositions].sort((left, right) => left - right));
   });
 });

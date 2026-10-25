@@ -11,6 +11,7 @@ export * from './evaluation-response.js';
 export * from './evidence.js';
 export * from './github.js';
 export * from './google-drive.js';
+export * from './github-language-summary.js';
 export * from './platform-data.js';
 export * from './proposed-rubric.js';
 export * from './proposed-report.js';

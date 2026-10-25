@@ -1,6 +1,6 @@
 {
   "schemaVersion": "4.0.0",
-  "scoringVersion": "4.0.0",
+  "scoringVersion": "4.0.1",
   "status": "active",
   "roles": {
     "software_developer": { "project_portfolio": 20, "technical_skills": 20, "development_activity": 15, "collaboration": 10, "current_year_contributions": 10, "problem_solving_dsa": 25 },

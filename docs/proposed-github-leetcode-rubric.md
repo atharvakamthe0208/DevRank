@@ -1,6 +1,6 @@
 # Active GitHub + LeetCode rubric (v4)
 
-This rubric is active for new evaluations under schema/scoring version `4.0.0`, following explicit product direction. The earlier contract identifier `github_leetcode_proposal_v1` remains accepted only as historical evidence-mapping metadata. The active rubric identifier is `github_leetcode_v4`. Weights are fixed in `config/role-weights.json`; old owner-defined profiles are not translated automatically. Historical evaluation snapshots retain their original scoring versions and are read-only.
+This rubric is active for new evaluations under schema version `4.0.0` and scoring version `4.0.1`, following explicit product direction. The earlier contract identifier `github_leetcode_proposal_v1` remains accepted only as historical evidence-mapping metadata. The active rubric identifier is `github_leetcode_v4`. Weights are fixed in `config/role-weights.json`; old owner-defined profiles are not translated automatically. Historical evaluation snapshots retain their original scoring versions and are read-only.
 
 ## Categories and weights
 
@@ -32,7 +32,7 @@ The current year is selected in UTC. The calendar window is January 1 `00:00:00.
 
 ## Final deterministic indexes
 
-The complete formulas, evidence requirements, missing-data behavior, weighted-total rule, and the DSA cap are documented in [active scoring rules](scoring-rules.md) and [the final report specification](proposed-rubric-report.md). These indexes describe source evidence volume/breadth; they are not calibrated measures of engineering competence, code quality, identity, or hiring suitability. Incomplete category evidence remains unscored and blocks the overall weighted result. Snapshot dates and evidence coverage should be considered before comparing results.
+The complete formulas, evidence requirements, missing-data behavior, weighted-total rule, and the DSA cap are documented in [active scoring rules](scoring-rules.md) and [the final report specification](proposed-rubric-report.md). These indexes describe source evidence volume/breadth; they are not calibrated measures of engineering competence, code quality, identity, or hiring suitability. Incomplete required category evidence remains unscored and blocks the overall weighted result. A candidate with no LeetCode username and no saved LeetCode snapshot receives an explicitly marked policy-defined DSA zero. Snapshot dates and evidence coverage should be considered before comparing results.
 
 The DSA formula uses easy=1, medium=2, hard=3 and caps at 300 weighted solved problems (index 100). The cap is uncalibrated and requires future review. If only total solved is returned, the total is used as a labeled fallback; contest values are context only.
 
@@ -40,4 +40,4 @@ The DSA formula uses easy=1, medium=2, hard=3 and caps at 300 weighted solved pr
 
 Each evaluation stores its own immutable GitHub/LeetCode evidence snapshot. Report rendering uses only that saved snapshot; a later platform sync cannot rewrite a saved evaluation. Candidate-reported LeetCode data remains separately identified as `candidate_provided`; `alfa_leetcode_api` provider data is preferred for the DSA index when available. Failed syncs do not replace previously saved evidence. The current database schema stores these values in existing JSON snapshot fields, so this activation does not add a migration.
 
-New evaluations persist version `4.0.0`. Historical v1/v2/v3 categories and scores are shown unchanged. Existing custom role profiles with old category keys require their owner to explicitly reconfigure all six v4 weights before creating a new evaluation. No automatic profile conversion or weight inference occurs. Production readiness is still blocked on the separate live catalog/migration-ledger reconciliation, backup/restore verification, and approved deployment plan.
+New evaluations persist scoring version `4.0.1`. Historical v4.0.0 and v1/v2/v3 categories and scores are shown unchanged. Existing custom role profiles with old category keys require their owner to explicitly reconfigure all six v4 weights before creating a new evaluation. No automatic profile conversion or weight inference occurs. Production readiness is still blocked on the separate live catalog/migration-ledger reconciliation, backup/restore verification, and approved deployment plan.

@@ -37,6 +37,8 @@ describe('AdminRecruiterDetailsPanel', () => {
     const html = renderToStaticMarkup(createElement(AdminRecruiterDetailsPanel, { name: 'Taylor Recruiter', state: 'loading', details: null, error: '', ...handlers }));
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain('role="status"');
+    expect(html).toContain('class="admin-detail-loading-content"');
+    expect(html).toContain('class="admin-skeleton admin-detail-skeleton-value"');
   });
 
   it('exposes a retry action on failure', () => {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const schemaVersion = '4.0.0' as const;
-export const scoringVersion = '4.0.0' as const;
+export const scoringVersion = '4.0.1' as const;
 export const scoringVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/, 'Scoring version must use semantic version format (major.minor.patch).');
 export const scoringCategories = [
   { id: 'project_portfolio', displayName: 'Project Portfolio', description: 'GitHub public repository count proxy; does not measure quality.' },
@@ -35,11 +35,17 @@ export const categoryScoreSchema = z.object({
   score: scoreSchema.optional(),
   confidence: confidenceSchema.optional(),
   status: z.enum(['scored', 'insufficient_evidence']),
+  /** Explicit policy marker for a scored zero with no evidence reference. */
+  scoreBasis: z.enum(['optional_missing_zero']).optional(),
   evidenceRefs: z.array(z.string().min(1)),
   explanation: z.string().min(1),
 }).superRefine((value, context) => {
   if (value.status === 'scored' && value.score === undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['score'], message: 'A scored category requires a score.' });
   if (value.status === 'insufficient_evidence' && value.score !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['score'], message: 'Do not assign a score when evidence is insufficient.' });
+  if (value.scoreBasis === 'optional_missing_zero'
+    && (value.categoryId !== 'problem_solving_dsa' || value.score !== 0 || value.status !== 'scored' || value.evidenceRefs.length !== 0)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['scoreBasis'], message: 'Only an evidence-free DSA zero may use the optional-missing policy.' });
+  }
 });
 export type RoleWeights = z.infer<typeof roleWeightsSchema>;
 export type CategoryScore = z.infer<typeof categoryScoreSchema>;

@@ -24,6 +24,45 @@ const legacyResult = legacyEvaluationResponseV1Schema.parse({
 });
 const legacyResultSnapshot = JSON.stringify(legacyResult);
 
+function githubEvidenceRows() {
+  return [{
+    id: 'github-complete-row', source: 'github', availability: 'available',
+    created_at: '2026-10-20T12:00:00.000Z', observed_at: '2026-10-20T12:00:00.000Z',
+    raw_evidence: { username: 'example', profileUrl: 'https://github.com/example' },
+    normalized_evidence: {
+      publicRepositoryCount: 3, repositoriesTruncated: false,
+      repositories: [
+        { name: 'one', primaryLanguage: 'TypeScript', stars: 0, forks: 0 },
+        { name: 'two', primaryLanguage: 'Python', stars: 0, forks: 0 },
+        { name: 'three', primaryLanguage: null, stars: 0, forks: 0 },
+      ],
+      insights: {
+        currentYearContributions: { status: 'available', year: 2026, timezone: 'UTC', totalContributions: 0, observedWeeks: 20, activeWeeks: 0, activeWeekCoveragePercent: 0, observedThrough: '2026-10-20T12:00:00.000Z' },
+        developmentActivity: { status: 'available', totalCommitContributions: 5, activeCommitDays: 2, activeCommitWeeks: 1, repositoriesWithCommitContributions: 1 },
+        collaboration: { status: 'available', pullRequestsOpened: 0, issuesOpened: 0, reviewsSubmitted: 0 },
+      },
+    },
+  }];
+}
+
+function repositoryWithSnapshots(leetcodeUsername: string | null, platformRows: Array<Record<string, unknown>>) {
+  let inserted: Record<string, unknown> | undefined;
+  const from = vi.fn((table: string) => {
+    const query: Record<string, any> = {};
+    for (const method of ['select', 'eq', 'is']) query[method] = vi.fn(() => query);
+    query.maybeSingle = vi.fn(async () => ({ data: { id: candidateId, full_name: 'Taylor Example', leetcode_username: leetcodeUsername }, error: null }));
+    query.order = vi.fn(async () => ({ data: platformRows, error: null }));
+    query.insert = vi.fn((value: Record<string, unknown>) => { inserted = value; return query; });
+    query.single = vi.fn(async () => ({ data: {
+      id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: 'software_developer',
+      status: inserted?.status, created_at: '2026-10-20T13:00:00.000Z', evaluation_result: inserted?.evaluation_result,
+    }, error: null }));
+    return query;
+  });
+  const client = { from } as unknown as SupabaseClient;
+  return { repository: createEvaluationRepository(() => client), from, getInserted: () => inserted };
+}
+
 describe('evaluation persistence repository', () => {
   it('reports unexpected processing failures as sanitized application errors, not database outages', async () => {
     const sensitiveDetail = 'candidate-private-value-do-not-log';
@@ -151,7 +190,7 @@ describe('evaluation persistence repository', () => {
       role_profile_id: null,
       target_role: 'software_developer',
       status: 'insufficient_evidence',
-      scoring_version: '4.0.0',
+      scoring_version: '4.0.1',
       evidence_snapshot: created.evaluation.evidence,
       role_weights_snapshot: created.role.weights,
       evaluation_result: created.evaluation,
@@ -232,5 +271,136 @@ describe('evaluation persistence repository', () => {
       practical_assessment_performance: 16.67, learning_adaptability: 11.11,
     });
     expect(from).not.toHaveBeenCalledWith('platform_evidence');
+  });
+
+  it('scores absent optional LeetCode as zero with GitHub evidence, but leaves a configured unsynced profile unscored', async () => {
+    const withoutLeetCode = repositoryWithSnapshots(null, githubEvidenceRows());
+    const completed = await withoutLeetCode.repository.run(auth, { candidateId, roleId: 'software_developer' });
+    expect(completed.status).toBe('completed');
+    expect(completed.evaluation.scoringVersion).toBe('4.0.1');
+    expect(completed.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'technical_skills')).toMatchObject({ status: 'scored', score: 40 });
+    expect(completed.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'current_year_contributions')).toMatchObject({ status: 'scored', score: 0 });
+    expect(completed.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).toMatchObject({
+      status: 'scored', score: 0, scoreBasis: 'optional_missing_zero', evidenceRefs: [],
+    });
+    expect(completed.evaluation.evidence.some(({ categoryId }) => categoryId === 'problem_solving_dsa')).toBe(false);
+    expect(completed.evaluation.finalReport?.categories.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).toMatchObject({
+      status: 'scored', score: 0, metrics: { scoringBasis: expect.stringContaining('Optional LeetCode profile not provided') },
+    });
+    expect(withoutLeetCode.getInserted()).toMatchObject({ status: 'completed', overall_score: completed.evaluation.overallScore });
+    const expectedOverall = Number(completed.evaluation.categoryScores.reduce((sum, category) => sum + (category.score ?? 0) * completed.role.weights[category.categoryId] / 100, 0).toFixed(2));
+    expect(completed.evaluation.overallScore).toBe(expectedOverall);
+
+    const configuredNoSnapshot = repositoryWithSnapshots('candidate-handle', githubEvidenceRows());
+    const incomplete = await configuredNoSnapshot.repository.run(auth, { candidateId, roleId: 'software_developer' });
+    expect(incomplete.status).toBe('insufficient_evidence');
+    expect(incomplete.evaluation).not.toHaveProperty('overallScore');
+    expect(incomplete.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).toMatchObject({
+      status: 'insufficient_evidence', explanation: expect.stringContaining('no saved statistics snapshot'),
+    });
+    expect(incomplete.evaluation.finalReport?.categories.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).toMatchObject({ status: 'unavailable' });
+  });
+
+  it('does not turn an unavailable saved LeetCode response into the missing-profile zero', async () => {
+    const leetcodeUnavailable = {
+      id: 'leetcode-unavailable-row', source: 'leetcode', availability: 'unavailable',
+      created_at: '2026-10-20T12:30:00.000Z', observed_at: '2026-10-20T12:30:00.000Z',
+      raw_evidence: { provenance: 'alfa_leetcode_api', handle: 'candidate-handle' },
+      normalized_evidence: { platform: 'leetcode', provenance: 'alfa_leetcode_api', statistics: {} },
+    };
+    const repository = repositoryWithSnapshots('candidate-handle', [...githubEvidenceRows(), leetcodeUnavailable]);
+    const result = await repository.repository.run(auth, { candidateId, roleId: 'software_developer' });
+    expect(result.status).toBe('insufficient_evidence');
+    expect(result.evaluation).not.toHaveProperty('overallScore');
+    expect(result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).toMatchObject({
+      status: 'insufficient_evidence', explanation: expect.stringContaining('saved LeetCode snapshot has no usable solved statistics'),
+    });
+    expect(result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'problem_solving_dsa')).not.toHaveProperty('scoreBasis');
+  });
+
+  it('scores a complete GitHub repository snapshot with no observed languages as a technical-skills zero', async () => {
+    const rows = githubEvidenceRows();
+    const normalized = rows[0]!.normalized_evidence as { repositories: Array<Record<string, unknown>> };
+    normalized.repositories = normalized.repositories.map((repository) => ({ ...repository, primaryLanguage: null }));
+    const repository = repositoryWithSnapshots(null, rows);
+    const result = await repository.repository.run(auth, { candidateId, roleId: 'software_developer' });
+    const technicalSkills = result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'technical_skills')!;
+    expect(technicalSkills).toMatchObject({ status: 'scored', score: 0, evidenceRefs: ['v4-index:technical_skills'] });
+    expect(result.evaluation.overallScore).toBeDefined();
+    expect(result.evaluation.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ categoryId: 'technical_skills', normalizedValue: 0, availability: 'available' }),
+    ]));
+  });
+
+  it('scores full language evidence from all saved repositories even when report details are condensed to ten', async () => {
+    const rows = githubEvidenceRows();
+    const normalized = rows[0]!.normalized_evidence as Record<string, any>;
+    normalized.publicRepositoryCount = 15;
+    normalized.repositoriesTruncated = false;
+    normalized.repositories = Array.from({ length: 15 }, (_, index) => ({
+      name: `repo-${index + 1}`, primaryLanguage: index % 2 ? 'Python' : 'TypeScript',
+    }));
+    normalized.languageSummary = {
+      totalEligibleRepositories: 15, repositoriesAnalyzed: 15,
+      observedLanguages: ['Python', 'TypeScript'], repositoriesMissingLanguage: 0, coverageStatus: 'complete',
+    };
+    const result = await repositoryWithSnapshots(null, rows).repository.run(auth, { candidateId, roleId: 'software_developer' });
+    const technical = result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'technical_skills')!;
+    const technicalReport = result.evaluation.finalReport?.categories.find(({ categoryId }) => categoryId === 'technical_skills')!;
+    const repoEvidence = result.evaluation.platformEvidence?.find(({ evidenceType }) => evidenceType === 'repository_snapshot')!;
+    expect(technical).toMatchObject({ status: 'scored', score: 40 });
+    expect(technicalReport.metrics).toMatchObject({
+      repositoriesAnalyzed: 15, totalEligibleRepositories: 15, languagesObserved: 'Python, TypeScript', languageCoverageStatus: 'complete',
+    });
+    expect(repoEvidence.normalizedValue.repositories).toHaveLength(10);
+    expect(repoEvidence.normalizedValue.languageSummary).toMatchObject({ repositoriesAnalyzed: 15, coverageStatus: 'complete' });
+  });
+
+  it('retains partial language counts and explains why Technical Skills remains unscored', async () => {
+    const rows = githubEvidenceRows();
+    const normalized = rows[0]!.normalized_evidence as Record<string, any>;
+    normalized.publicRepositoryCount = 18;
+    normalized.repositoriesTruncated = true;
+    normalized.repositories = Array.from({ length: 15 }, (_, index) => ({
+      name: `repo-${index + 1}`, primaryLanguage: index % 2 ? 'Python' : 'TypeScript',
+    }));
+    const result = await repositoryWithSnapshots(null, rows).repository.run(auth, { candidateId, roleId: 'software_developer' });
+    const technical = result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'technical_skills')!;
+    const technicalReport = result.evaluation.finalReport?.categories.find(({ categoryId }) => categoryId === 'technical_skills')!;
+    expect(technical).toMatchObject({ status: 'insufficient_evidence' });
+    expect(technical.score).toBeUndefined();
+    expect(technical.explanation).toContain('15 of 18 eligible repositories were analyzed');
+    expect(technicalReport.metrics).toMatchObject({
+      repositoriesAnalyzed: 15, totalEligibleRepositories: 18, languageCoverageStatus: 'partial',
+    });
+    expect(result.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'project_portfolio')?.status).toBe('scored');
+  });
+
+  it('retains the stored 4.0.0 result unchanged when reading historical evaluations', async () => {
+    const oldResult = {
+      schemaVersion: '4.0.0', scoringVersion: '4.0.0', candidateId, targetRole: 'software_developer',
+      categoryScores: ['project_portfolio', 'technical_skills', 'development_activity', 'collaboration', 'current_year_contributions', 'problem_solving_dsa'].map((categoryId) => ({
+        categoryId, displayName: categoryId, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'Stored v4.0.0 result.',
+      })),
+      roleWeightsUsed: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
+      evidence: [], strengths: [], skillGaps: [], recommendations: [],
+      missingEvidence: ['project_portfolio', 'technical_skills', 'development_activity', 'collaboration', 'current_year_contributions', 'problem_solving_dsa'],
+      calculationExplanation: 'Stored v4.0.0 result.', evaluationStatus: 'insufficient_evidence',
+      aiExplanation: { summary: 'No AI.', strengths: [], skillGaps: [], recommendations: [] },
+      decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
+    };
+    const from = vi.fn((table: string) => {
+      const query: Record<string, any> = {};
+      for (const method of ['select', 'eq', 'is']) query[method] = vi.fn(() => query);
+      query.maybeSingle = vi.fn(async () => table === 'candidates'
+        ? { data: { id: candidateId, full_name: 'Taylor Example', leetcode_username: null }, error: null }
+        : { data: { id: evaluationId, candidate_id: candidateId, role_profile_id: null, target_role: 'software_developer', status: 'insufficient_evidence', created_at: '2026-10-19T00:00:00.000Z', evaluation_result: oldResult }, error: null });
+      return query;
+    });
+    const client = { from } as unknown as SupabaseClient;
+    const repository = createEvaluationRepository(() => client);
+    const saved = await repository.get(auth, evaluationId);
+    expect(saved).toMatchObject({ status: 'insufficient_evidence', result: { scoringVersion: '4.0.0', calculationExplanation: 'Stored v4.0.0 result.' } });
+    expect(saved.result).toEqual(oldResult);
   });
 });

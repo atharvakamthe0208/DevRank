@@ -18,6 +18,8 @@ import {
   roleIdSchema,
   roleWeightsSchema,
   roleProfileListResponseSchema,
+  githubLanguageSummarySchema,
+  summarizeGitHubLanguages,
   type EvaluationRequest,
   type RoleProfileOption,
   type EvaluationRole,
@@ -27,7 +29,7 @@ import {
 } from '@devrank/contracts';
 import { getSupabaseClient } from '../config/supabase.js';
 import { HttpError } from '../middleware/http-error.js';
-import { loadRoleWeightConfiguration, scoreCandidate } from '../modules/scoring/index.js';
+import { loadRoleWeightConfiguration, scoreCandidate, type ScoringPolicyOptions } from '../modules/scoring/index.js';
 import type { AuthContext } from '../types/auth.js';
 
 export interface EvaluationRepository {
@@ -44,6 +46,7 @@ const roleNames: Record<EvaluationRole['id'], string> = {
   ai_ml_engineer: 'AI/ML Engineer',
   data_analyst: 'Data Analyst',
 };
+const previousScoringVersions = ['4.0.0'];
 const unavailable = () => new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to process the evaluation right now');
 
 type EvaluationOperation = 'candidate_lookup' | 'role_profile_lookup' | 'evidence_read' | 'evaluation_insert' | 'evaluation_read' | 'evaluation_processing';
@@ -167,6 +170,31 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
         name: repo.name, description: repo.description, primaryLanguage: repo.primaryLanguage,
         stars: repo.stars, forks: repo.forks, updatedAt: repo.updatedAt,
       }));
+      const reportedSummary = githubLanguageSummarySchema.safeParse(normalized.languageSummary);
+      const totalEligibleRepositories = typeof normalized.publicRepositoryCount === 'number'
+        && Number.isSafeInteger(normalized.publicRepositoryCount) && normalized.publicRepositoryCount >= 0
+        ? normalized.publicRepositoryCount : repos.length;
+      const computedSummary = summarizeGitHubLanguages(
+        repos,
+        totalEligibleRepositories,
+        normalized.repositoriesTruncated !== true && totalEligibleRepositories <= repos.length,
+        reportedSummary.success ? reportedSummary.data.retrievalIssue : undefined,
+      );
+      const reportedSummaryMatchesSnapshot = reportedSummary.success
+        && reportedSummary.data.repositoriesAnalyzed === computedSummary.repositoriesAnalyzed
+        && reportedSummary.data.totalEligibleRepositories === computedSummary.totalEligibleRepositories
+        && reportedSummary.data.repositoriesMissingLanguage === computedSummary.repositoriesMissingLanguage
+        && reportedSummary.data.observedLanguages.join('\u0000') === computedSummary.observedLanguages.join('\u0000');
+      const languageSummary = reportedSummaryMatchesSnapshot
+        && reportedSummary.data.coverageStatus !== 'complete'
+        && computedSummary.coverageStatus === 'complete'
+        ? { ...computedSummary, coverageStatus: 'partial' as const, retrievalIssue: reportedSummary.data.retrievalIssue }
+        : reportedSummaryMatchesSnapshot && reportedSummary.data.coverageStatus === 'complete'
+          && computedSummary.coverageStatus === 'complete' ? reportedSummary.data : computedSummary;
+      const effectiveLanguageSummary = available ? languageSummary : {
+        ...languageSummary,
+        coverageStatus: 'unavailable' as const,
+      };
       output.push(platformEvaluationEvidenceSchema.parse({
         evidenceId: `${String(row.id)}:github`, candidateId, source: 'github', evidenceType: 'repository_snapshot',
         availability: available ? 'available' : 'unavailable', observedAt,
@@ -175,20 +203,21 @@ function makePlatformEvidence(candidateId: string, rows: Array<Record<string, un
           followers: normalized.followers, following: normalized.following,
           repositoriesTruncated: normalized.repositoriesTruncated === true
             || (typeof normalized.publicRepositoryCount === 'number' && normalized.publicRepositoryCount > repositories.length),
+          languageSummary: effectiveLanguageSummary,
           repositories,
         }, verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
         limitations: [
           'Public profile data does not verify candidate identity.',
           'Stars, forks, followers, and repository count are context only and are not scoring inputs.',
-          'Only the ten most recently updated repositories are included in evaluation context; this snapshot alone does not establish development activity or collaboration.',
+          'The report shows at most ten repository details; Technical Skills language coverage is aggregated from the saved language summary across the full retrieved repository set. This snapshot alone does not establish development activity or collaboration.',
           'Snapshot age has no approved freshness threshold.',
         ],
         categoryMappings: [
-          ...(repositories.length ? [
+          ...(typeof normalized.publicRepositoryCount === 'number' && Number.isFinite(normalized.publicRepositoryCount) && normalized.publicRepositoryCount >= 0 ? [
             { categoryId: 'project_portfolio', relation: 'supporting' },
             { rubricId: finalRubricId, categoryId: 'project_portfolio', relation: 'supporting' },
           ] : []),
-          ...(repositories.some((repo) => typeof repo.primaryLanguage === 'string') ? [
+          ...(Array.isArray(normalized.repositories) || normalized.languageSummary !== undefined ? [
             { categoryId: 'technical_skills', relation: 'supporting' },
             { rubricId: finalRubricId, categoryId: 'technical_skills', relation: 'supporting' },
           ] : []),
@@ -323,7 +352,9 @@ function readPersistedEvaluation(row: Record<string, unknown>) {
     targetRole: row.target_role, status: row.status, createdAt: row.created_at, result: row.evaluation_result,
   };
   const current = persistedEvaluationSchema.safeParse(value);
-  if (current.success && (!current.data.result.scoringVersion || current.data.result.scoringVersion === currentScoringVersion)) return current.data;
+  if (current.success && (!current.data.result.scoringVersion
+    || current.data.result.scoringVersion === currentScoringVersion
+    || previousScoringVersions.includes(current.data.result.scoringVersion))) return current.data;
 
   const previousV3Result = previousEvaluationResponseV3Schema.safeParse(row.evaluation_result);
   if (previousV3Result.success) {
@@ -376,7 +407,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
   async function persist(
     client: ReturnType<typeof getSupabaseClient>,
     auth: AuthContext,
-    candidate: { id: string },
+    candidate: { id: string; leetcode_username?: string | null },
     roleProfileId: string | null,
     targetRole: EvaluationRole['id'],
     weights: unknown,
@@ -392,13 +423,18 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
     if (evidenceError) databaseFailure(evidenceError, 'evidence_read', 'supabase_response');
     if (!rows) throw unavailable();
 
-    // The approved v4 indexes are derived only from saved platform snapshots. Missing or partial signals stay unscored.
+    // The approved v4 indexes use saved snapshots; only the explicit absent-profile DSA policy may score without one.
     markStage('evidence_normalization');
     const configuredScoring = loadRoleWeightConfiguration();
     const configuration = { ...configuredScoring, roles: { [targetRole]: checkedWeights.data } };
     const platformEvidence = makePlatformEvidence(candidate.id, rows as Array<Record<string, unknown>>);
     markStage('report_build');
-    const report = buildFinalEvaluationReport(parseProposedPlatformEvidence(platformEvidence));
+    const leetcodeSnapshotPresent = rows.some((row) => row.source === 'leetcode');
+    const leetcodeUsernameConfigured = typeof candidate.leetcode_username === 'string' && candidate.leetcode_username.trim().length > 0;
+    const report = buildFinalEvaluationReport(parseProposedPlatformEvidence(platformEvidence), {
+      leetcodeUsernameConfigured,
+      leetcodeSnapshotPresent,
+    });
     const scoringEvidence = report.categories.flatMap((category) => {
       if (category.score === undefined) return [];
       const snapshots = platformEvidence.filter((snapshot) => snapshot.categoryMappings.some((mapping) =>
@@ -423,17 +459,42 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
       }];
     });
     markStage('scoring');
-    const evaluation = scoreCandidate({ candidateId: candidate.id, targetRole, evidence: scoringEvidence }, configuration, currentScoringVersion);
+    const dsaReportCategory = report.categories.find(({ categoryId }) => categoryId === 'problem_solving_dsa');
+    const technicalReportCategory = report.categories.find(({ categoryId }) => categoryId === 'technical_skills');
+    const missingEvidenceExplanations: NonNullable<ScoringPolicyOptions['missingEvidenceExplanations']> = {};
+    if (dsaReportCategory?.metrics.dataStatus && typeof dsaReportCategory.metrics.dataStatus === 'string') {
+      missingEvidenceExplanations.problem_solving_dsa = dsaReportCategory.metrics.dataStatus;
+    }
+    if (technicalReportCategory?.status === 'unavailable') {
+      missingEvidenceExplanations.technical_skills = 'GitHub repository language data is unavailable for this evaluation. No Technical Skills score is assigned.';
+    } else if (technicalReportCategory?.status === 'partial') {
+      const analyzed = technicalReportCategory.metrics.repositoriesAnalyzed;
+      const total = technicalReportCategory.metrics.totalEligibleRepositories;
+      const count = typeof analyzed === 'number' && typeof total === 'number' ? `${analyzed} of ${total} eligible repositories were analyzed` : 'repository coverage is incomplete';
+      const issue = technicalReportCategory.metrics.languageRetrievalIssue;
+      const reason = issue === 'provider_rate_limited' ? ' GitHub rate-limited the remaining repository requests.'
+        : issue === 'provider_timeout' ? ' GitHub timed out while retrieving repositories.'
+          : issue === 'provider_unavailable' ? ' GitHub became unavailable while retrieving repositories.'
+            : issue === 'invalid_response' ? ' GitHub returned incomplete repository data.'
+              : issue === 'provider_error' ? ' Repository retrieval ended with a provider error.' : '';
+      missingEvidenceExplanations.technical_skills = `GitHub language evidence is partial: ${count}.${reason} No Technical Skills score is assigned until language coverage is complete.`;
+    }
+    const policy: ScoringPolicyOptions = {
+      zeroScoreCategories: dsaReportCategory?.metrics.scoringBasis === 'Optional LeetCode profile not provided; DSA index assigned zero by active policy'
+        ? ['problem_solving_dsa' as const] : [],
+      missingEvidenceExplanations,
+    };
+    const evaluation = scoreCandidate({ candidateId: candidate.id, targetRole, evidence: scoringEvidence }, configuration, currentScoringVersion, policy);
     markStage('response_validation');
     const result = evaluationResponseSchema.parse({
       ...evaluation,
       platformEvidence,
       finalReport: report,
       calculationExplanation: report.overallScore === undefined
-        ? `Each available category uses its deterministic v4 source-specific formula. Missing or partial source data is not scored as zero. Overall score is withheld until all six category indexes are available. ${report.notice}`
-        : `Each category uses its deterministic v4 source-specific formula. The overall score is the weighted sum using the saved v4 role weights. These indexes describe evidence volume or breadth, not engineering quality or hiring suitability. ${report.notice}`,
+        ? `Each available category uses its deterministic v4 source-specific formula. Missing or partial required source data remains unscored; when no LeetCode username and no LeetCode snapshot are present, the optional DSA category receives its policy-defined zero. Overall score is withheld until all six category indexes are available. ${report.notice}`
+        : `Each category uses its deterministic v4 source-specific formula. An absent optional LeetCode profile receives a DSA index of zero under the active policy; this does not infer activity. The overall score is the weighted sum using the saved v4 role weights. These indexes describe evidence volume or breadth, not engineering quality or hiring suitability. ${report.notice}`,
       recommendations: report.overallScore === undefined
-        ? ['Complete the missing GitHub and LeetCode syncs with attributable, usable source data before an overall score can be calculated.']
+        ? [`Collect complete evidence for ${report.categories.filter(({ score }) => score === undefined).map(({ displayName }) => displayName).join(', ')} before an overall score can be calculated.`]
         : [],
     });
     markStage('evaluation_insert');
@@ -464,7 +525,7 @@ export function createEvaluationRepository(getClient = getSupabaseClient): Evalu
   }
 
   async function ownedCandidate(client: ReturnType<typeof getSupabaseClient>, auth: AuthContext, candidateId: string) {
-    const { data, error } = await databaseOperation('candidate_lookup', () => client.from('candidates').select('id,full_name')
+    const { data, error } = await databaseOperation('candidate_lookup', () => client.from('candidates').select('id,full_name,leetcode_username')
       .eq('id', candidateId).eq('owner_id', auth.userId).is('archived_at', null).maybeSingle());
     if (error) databaseFailure(error, 'candidate_lookup', 'supabase_response');
     if (!data) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');

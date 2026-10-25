@@ -46,7 +46,7 @@ describe('evaluation result view', () => {
     expect(html).toContain('class="evaluation-report-grid"');
     expect(html).toContain('About scoring');
     expect(html).toContain('Weighted score calculated from all six categories.');
-    expect(html).toContain('Each category uses its saved role weight and supporting evidence. Missing evidence remains unscored.');
+    expect(html).toContain('Required evidence gaps remain unscored; absent optional LeetCode profiles use the defined DSA zero policy.');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).toContain('View evidence (1)');
@@ -73,6 +73,23 @@ describe('evaluation result view', () => {
     expect(dsaCard).toContain('Not scored');
     expect(dsaCard).not.toContain('<progress');
     expect(html).not.toContain('OVERALL SCORE</span><strong class="evaluation-overall-score">0');
+  });
+
+  it('shows a policy-defined missing LeetCode value as zero without fabricating supporting evidence', () => {
+    const saved = evaluation(true);
+    const categories = saved.result.categoryScores.map((item) => item.categoryId === 'problem_solving_dsa'
+      ? { ...item, score: 0, scoreBasis: 'optional_missing_zero' as const, evidenceRefs: [], explanation: 'No LeetCode username or saved profile was provided. The active optional-evidence policy assigns this DSA index a zero; no supporting activity or evidence is inferred.' }
+      : item);
+    const evidence = saved.result.evidence.filter(({ categoryId }) => categoryId !== 'problem_solving_dsa');
+    const overallScore = Number(categories.reduce((sum, item) => sum + (item.score ?? 0) * weights[item.categoryId as keyof typeof weights] / 100, 0).toFixed(2));
+    const result = evaluationResponseSchema.parse({ ...saved.result, categoryScores: categories, evidence, overallScore });
+    const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, status: 'completed', result } }));
+    const dsaCard = html.match(/<article class="evaluation-category-card"[^>]*data-category="problem_solving_dsa"[\s\S]*?<\/article>/)?.[0];
+    expect(dsaCard).toContain('aria-label="0" aria-live="off">0</span><small>/100</small>');
+    expect(dsaCard).toContain('LeetCode profile not provided · policy-defined zero');
+    expect(dsaCard).not.toContain('supporting item');
+    expect(dsaCard).not.toContain('View evidence');
+    expect(html).toContain(`aria-label="Overall score ${overallScore} out of 100"`);
   });
 
   it('labels proposal-only platform context without adding categories or scores', () => {

@@ -44,7 +44,7 @@ export const evaluationResponseSchema = z.object({
   const ids = new Set(result.evidence.map(({ evidenceId }) => evidenceId));
   for (const [index, category] of result.categoryScores.entries()) {
     if (category.evidenceRefs.some((id) => !ids.has(id))) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryScores', index, 'evidenceRefs'], message: 'Evidence references must point to evidence included in this response.' });
-    if (category.status === 'scored' && category.evidenceRefs.length === 0) context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryScores', index, 'evidenceRefs'], message: 'A scored category must reference supporting evidence.' });
+    if (category.status === 'scored' && category.evidenceRefs.length === 0 && category.scoreBasis !== 'optional_missing_zero') context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryScores', index, 'evidenceRefs'], message: 'A scored category must reference supporting evidence unless an explicit optional-missing zero policy applies.' });
     if (category.evidenceRefs.some((id) => result.evidence.find((item) => item.evidenceId === id)?.categoryId !== category.categoryId)) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoryScores', index, 'evidenceRefs'], message: 'Evidence references must match the score category.' });
     }

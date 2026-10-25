@@ -3,9 +3,9 @@ import { workspaceBreadcrumbs } from './workspace-breadcrumbs';
 
 describe('workspace breadcrumbs', () => {
   it.each([
-    ['/dashboard', ['Workspace', 'Overview']], ['/dashboard/candidates', ['Workspace', 'Candidates']],
-    ['/candidates/new', ['Workspace', 'Candidates', 'Add Candidate']], ['/screening', ['Workspace', 'Resume Screening']],
-    ['/evaluations', ['Workspace', 'Evaluations']], ['/profile', ['Workspace', 'My Profile']], ['/dashboard/reports', ['Workspace', 'Insights']],
+    ['/dashboard', ['Home', 'Overview']], ['/dashboard/candidates', ['Home', 'Candidates']],
+    ['/candidates/new', ['Home', 'Candidates', 'Add Candidate']], ['/screening', ['Home', 'Resume Screening']],
+    ['/evaluations', ['Home', 'Evaluations']], ['/profile', ['Home', 'My Profile']], ['/dashboard/reports', ['Home', 'Insights']],
   ])('builds the logical hierarchy for %s', (path, labels) => {
     expect(workspaceBreadcrumbs(path).map(({ label }) => label)).toEqual(labels);
   });
@@ -17,7 +17,7 @@ describe('workspace breadcrumbs', () => {
 
   it('uses a data-aware evaluation label and keeps analysis under the evaluation ancestor', () => {
     expect(workspaceBreadcrumbs('/evaluations/eval-1/analysis', { evaluationName: 'Ada Lovelace · Frontend Engineer' }).map(({ label }) => label))
-      .toEqual(['Workspace', 'Evaluations', 'Ada Lovelace · Frontend Engineer', 'AI Analysis']);
+      .toEqual(['Home', 'Evaluations', 'Ada Lovelace · Frontend Engineer', 'AI Analysis']);
   });
 
   it('makes ancestors navigable and leaves the current item without a destination', () => {

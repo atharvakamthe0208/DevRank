@@ -1,9 +1,9 @@
 export type WorkspaceBreadcrumb = { label: string; to?: string };
 
 export function workspaceBreadcrumbs(pathname: string, labels: { candidateName?: string; evaluationName?: string; candidateListPath?: string } = {}): WorkspaceBreadcrumb[] {
-  const root: WorkspaceBreadcrumb = { label: 'Workspace', to: '/dashboard' };
+  const root: WorkspaceBreadcrumb = { label: 'Home', to: '/dashboard' };
   const current = (label: string): WorkspaceBreadcrumb => ({ label });
-  if (pathname === '/dashboard') return [{ label: 'Workspace' }, current('Overview')];
+  if (pathname === '/dashboard') return [{ label: 'Home' }, current('Overview')];
   if (pathname === '/profile') return [root, current('My Profile')];
   if (pathname === '/dashboard/candidates') return [root, current('Candidates')];
   const candidateList = { label: 'Candidates', to: typeof labels.candidateListPath === 'string' && /^\/dashboard\/candidates(?:\?.*)?$/.test(labels.candidateListPath) ? labels.candidateListPath : '/dashboard/candidates' };
@@ -28,5 +28,5 @@ export function workspaceBreadcrumbs(pathname: string, labels: { candidateName?:
     if (evaluation[2]) return [root, parent, { label: evaluationLabel, to: `/evaluations/${evaluation[1]}` }, current('AI Analysis')];
     return [root, parent, current(evaluationLabel)];
   }
-  return [root, current('Workspace')];
+  return [root, current('Home')];
 }

@@ -7,6 +7,7 @@ type Props = {
   error: string;
   onRetry: () => void;
   onClose: () => void;
+  showHeader?: boolean;
 };
 
 function shown(value: string | null): string {
@@ -25,17 +26,35 @@ const activityLabels: Record<AdminRecruiterDetails['recentActivity'][number]['ty
   recruiter_rejected: 'Recruiter rejected',
 };
 
-export function AdminRecruiterDetailsPanel({ name, state, details, error, onRetry, onClose }: Props) {
-  return <section className="admin-detail-panel" aria-labelledby="admin-recruiter-detail-heading" aria-busy={state === 'loading'}>
-    <header className="admin-detail-heading">
+export function AdminRecruiterDetailsPanel({ name, state, details, error, onRetry, onClose, showHeader = true }: Props) {
+  return <section className="admin-detail-panel" aria-labelledby={showHeader ? 'admin-recruiter-detail-heading' : undefined} aria-label={showHeader ? undefined : 'Recruiter account and activity details'} aria-busy={state === 'loading'}>
+    {showHeader && <header className="admin-detail-heading">
       <div>
         <div className="eyebrow"><span className="eyebrow-line"/> RECRUITER DETAILS</div>
         <h2 id="admin-recruiter-detail-heading">{name}</h2>
       </div>
       <button className="secondary-button" type="button" onClick={onClose}>Close details</button>
-    </header>
+    </header>}
 
-    {state === 'loading' && <p className="admin-detail-state" role="status">Loading recruiter profile and activity…</p>}
+    {state === 'loading' && <div className="admin-detail-loading" role="status">
+      <span className="sr-only">Loading recruiter profile and activity…</span>
+      <div className="admin-detail-loading-content" aria-hidden="true">
+        <div className="admin-detail-columns">
+          {[0, 1].map((section) => <section key={section}>
+            <span className="admin-skeleton admin-detail-skeleton-heading"/>
+            <div className="admin-detail-fields">{Array.from({ length: section === 0 ? 6 : 5 }, (_, index) => <div key={index}><span className="admin-skeleton admin-detail-skeleton-label"/><span className="admin-skeleton admin-detail-skeleton-value"/></div>)}</div>
+          </section>)}
+        </div>
+        <section className="admin-detail-stat-section">
+          <span className="admin-skeleton admin-detail-skeleton-heading"/>
+          <div className="admin-detail-stats">{Array.from({ length: 8 }, (_, index) => <article key={index}><span className="admin-skeleton admin-detail-skeleton-label"/><span className="admin-skeleton admin-detail-skeleton-value"/></article>)}</div>
+        </section>
+        <section className="admin-detail-activity">
+          <span className="admin-skeleton admin-detail-skeleton-heading"/>
+          <div className="admin-detail-skeleton-activity">{Array.from({ length: 3 }, (_, index) => <div key={index}><span className="admin-skeleton admin-detail-skeleton-value"/><span className="admin-skeleton admin-skeleton-date"/></div>)}</div>
+        </section>
+      </div>
+    </div>}
     {state === 'error' && <div className="admin-load-error" role="alert"><p>{error || 'Recruiter details could not be loaded.'}</p><button className="secondary-button" type="button" onClick={onRetry}>Try again</button></div>}
     {state === 'ready' && details && <>
       <div className="admin-detail-columns">

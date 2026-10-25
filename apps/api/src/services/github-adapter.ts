@@ -1,7 +1,9 @@
 import {
   githubProfileResponseSchema,
   githubRepositorySchema,
+  summarizeGitHubLanguages,
   type GitHubProfileResponse,
+  type GitHubLanguageRetrievalIssue,
 } from '@devrank/contracts';
 import { z } from 'zod';
 import { env } from '../config/env.js';
@@ -9,8 +11,7 @@ import { HttpError } from '../middleware/http-error.js';
 import { currentUtcCalendarRange, normalizeGitHubInsights } from './github-contribution-normalizer.js';
 
 const githubUsernamePattern = /^(?!-)(?!.*--)[A-Za-z0-9-]{1,39}(?<!-)$/;
-const maxRepositoryPages = 2;
-const repositoryPageSize = 50;
+const repositoryPageSize = 100;
 const requestTimeoutMs = 8_000;
 const contributionQuery = `query CandidateContributionEvidence($login: String!, $from: DateTime!, $to: DateTime!) {
   user(login: $login) {
@@ -63,7 +64,7 @@ export function createGitHubAdapter(
   token: string | undefined = env.GITHUB_TOKEN,
   contributionToken: string | undefined = env.GITHUB_PUBLIC_CONTRIBUTIONS_TOKEN,
 ) {
-  async function getJson(url: URL): Promise<unknown> {
+  async function getJson(url: URL): Promise<{ data: unknown; link: string | null }> {
     let response: Response;
     try {
       response = await fetcher(url, {
@@ -99,7 +100,7 @@ export function createGitHubAdapter(
     }
 
     try {
-      return await response.json() as unknown;
+      return { data: await response.json() as unknown, link: response.headers.get('link') };
     } catch {
       throw new HttpError(502, 'GITHUB_INVALID_RESPONSE', 'GitHub returned an unreadable response');
     }
@@ -145,22 +146,42 @@ export function createGitHubAdapter(
       const username = normalizeGitHubUsername(profile);
       const apiRoot = 'https://api.github.com';
       const insightsPromise = getContributionInsights(username);
-      const rawProfile = await getJson(new URL(`${apiRoot}/users/${encodeURIComponent(username)}`));
-      const profileResult = githubUserSchema.safeParse(rawProfile);
+      const profileResponse = await getJson(new URL(`${apiRoot}/users/${encodeURIComponent(username)}`));
+      const profileResult = githubUserSchema.safeParse(profileResponse.data);
       if (!profileResult.success) throw new HttpError(502, 'GITHUB_INVALID_RESPONSE', 'GitHub returned incomplete profile data');
       const user = profileResult.data;
 
       const repositories = [] as GitHubProfileResponse['repositories'];
-      for (let page = 1; page <= maxRepositoryPages; page += 1) {
-        const repositoryUrl = new URL(`${apiRoot}/users/${encodeURIComponent(username)}/repos`);
-        repositoryUrl.searchParams.set('type', 'owner');
-        repositoryUrl.searchParams.set('sort', 'updated');
-        repositoryUrl.searchParams.set('per_page', String(repositoryPageSize));
-        repositoryUrl.searchParams.set('page', String(page));
-        const rawRepositories = await getJson(repositoryUrl);
-        if (!Array.isArray(rawRepositories)) throw new HttpError(502, 'GITHUB_INVALID_RESPONSE', 'GitHub returned invalid repository data');
-        const parsed = zodRepositoryList.safeParse(rawRepositories);
-        if (!parsed.success) throw new HttpError(502, 'GITHUB_INVALID_RESPONSE', 'GitHub returned incomplete repository data');
+      let repositoryUrl = new URL(`${apiRoot}/users/${encodeURIComponent(username)}/repos`);
+      repositoryUrl.searchParams.set('type', 'owner');
+      repositoryUrl.searchParams.set('sort', 'updated');
+      repositoryUrl.searchParams.set('per_page', String(repositoryPageSize));
+      repositoryUrl.searchParams.set('page', '1');
+      let paginationComplete = false;
+      let repositoryRetrievalIssue: GitHubLanguageRetrievalIssue | undefined;
+      const visitedPages = new Set<string>();
+      while (true) {
+        if (visitedPages.has(repositoryUrl.href)) {
+          repositoryRetrievalIssue = 'invalid_response';
+          break;
+        }
+        visitedPages.add(repositoryUrl.href);
+        let repositoryResponse: { data: unknown; link: string | null };
+        try {
+          repositoryResponse = await getJson(repositoryUrl);
+        } catch (error) {
+          repositoryRetrievalIssue = languageRetrievalIssue(error);
+          break;
+        }
+        if (!Array.isArray(repositoryResponse.data)) {
+          repositoryRetrievalIssue = 'invalid_response';
+          break;
+        }
+        const parsed = zodRepositoryList.safeParse(repositoryResponse.data);
+        if (!parsed.success) {
+          repositoryRetrievalIssue = 'invalid_response';
+          break;
+        }
         repositories.push(...parsed.data.filter((repository) => !repository.private).map((repository) => ({
           id: repository.id,
           name: repository.name,
@@ -169,13 +190,23 @@ export function createGitHubAdapter(
           description: repository.description,
           stars: repository.stargazers_count,
           forks: repository.forks_count,
-          primaryLanguage: repository.language,
+          ...(repository.language === undefined ? {} : { primaryLanguage: repository.language }),
           updatedAt: repository.updated_at,
         })));
-        if (parsed.data.length < repositoryPageSize) break;
+        const nextPage = nextGitHubPage(repositoryResponse.link, repositoryUrl, username);
+        if (nextPage === 'invalid') {
+          repositoryRetrievalIssue = 'invalid_response';
+          break;
+        }
+        if (!nextPage) {
+          paginationComplete = true;
+          break;
+        }
+        repositoryUrl = nextPage;
       }
 
-      const truncated = user.public_repos > repositories.length;
+      const languageSummary = summarizeGitHubLanguages(repositories, user.public_repos, paginationComplete, repositoryRetrievalIssue);
+      const truncated = !paginationComplete || user.public_repos > repositories.length;
       const insights = await insightsPromise;
       return githubProfileResponseSchema.parse({
         username: user.login,
@@ -186,10 +217,40 @@ export function createGitHubAdapter(
         repositories,
         repositoriesReturned: repositories.length,
         repositoriesTruncated: truncated,
+        languageSummary,
         insights,
       });
     },
   };
+}
+
+function nextGitHubPage(link: string | null, current: URL, username: string): URL | 'invalid' | undefined {
+  if (!link) return undefined;
+  const next = link.split(',').map((item) => item.trim()).find((item) => /;\s*rel="?next"?/i.test(item));
+  if (!next) return undefined;
+  const match = next.match(/^<([^>]+)>/);
+  if (!match?.[1]) return 'invalid';
+  try {
+    const url = new URL(match[1]);
+    if (url.origin !== 'https://api.github.com'
+      || url.pathname !== `/users/${encodeURIComponent(username)}/repos`
+      || url.searchParams.get('per_page') !== String(repositoryPageSize)
+      || !url.searchParams.get('page')
+      || url.href === current.href) return 'invalid';
+    return url;
+  } catch {
+    return 'invalid';
+  }
+}
+
+function languageRetrievalIssue(error: unknown): GitHubLanguageRetrievalIssue {
+  if (error instanceof HttpError) {
+    if (error.code === 'GITHUB_RATE_LIMITED') return 'provider_rate_limited';
+    if (error.code === 'GITHUB_TIMEOUT') return 'provider_timeout';
+    if (error.code === 'GITHUB_UNAVAILABLE') return 'provider_unavailable';
+    if (error.code === 'GITHUB_INVALID_RESPONSE') return 'invalid_response';
+  }
+  return 'provider_error';
 }
 
 async function hasRateLimitMessage(response: Response): Promise<boolean> {

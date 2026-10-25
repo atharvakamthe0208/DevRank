@@ -101,6 +101,7 @@ describe('candidate platform evidence repository', () => {
     const profile = {
       username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 8,
       followers: 10, following: 5, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
+      languageSummary: { totalEligibleRepositories: 8, repositoriesAnalyzed: 0, observedLanguages: [], repositoriesMissingLanguage: 0, coverageStatus: 'partial' as const },
     };
     const { client, candidateQuery, evidenceQuery } = createClient(
       { data: { id: candidateId }, error: null },
