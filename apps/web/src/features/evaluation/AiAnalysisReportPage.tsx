@@ -10,7 +10,7 @@ import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { useWorkspaceBreadcrumbLabels } from '../../components/layout/WorkspaceBreadcrumbContext';
 import './ai-analysis-report.css';
 
-type CandidateSummary = { id: string; name: string };
+type CandidateSummary = { id: string; name: string; email?: string };
 type PageState = { status: 'loading' } | { status: 'error'; message: string } | {
   status: 'saved'; evaluation: PersistedEvaluationRead; candidate: CandidateSummary;
   response?: AiAnalysisResponse; analysisStatus: 'loading' | 'ready' | 'error' | 'unavailable'; analysisMessage?: string; analysisRetryAt?: number;
@@ -49,22 +49,22 @@ export function AiAnalysisReportPage() {
       if (!candidate) throw new Error('Candidate details could not be verified.');
       const current = persistedEvaluationSchema.safeParse(evaluation);
       if (!current.success) {
-        setState({ status: 'saved', evaluation, candidate: { id: candidate.id, name: candidate.name }, analysisStatus: 'unavailable', analysisMessage: 'AI explanations are unavailable for this historical scoring version. View the original saved result below.' });
+        setState({ status: 'saved', evaluation, candidate: { id: candidate.id, name: candidate.name, email: candidate.email }, analysisStatus: 'unavailable', analysisMessage: 'AI explanations are unavailable for this historical scoring version. View the original saved result below.' });
         return;
       }
       if (initialResponse) {
-        setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name }, response: initialResponse, analysisStatus: 'ready' });
+        setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name, email: candidate.email }, response: initialResponse, analysisStatus: 'ready' });
         return;
       }
-      setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name }, analysisStatus: 'loading' });
+      setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name, email: candidate.email }, analysisStatus: 'loading' });
       try {
         const response = aiAnalysisResponseSchema.parse(await apiRequest<unknown>(`/evaluations/${evaluationId}/ai-analysis`, { method: 'POST', body: JSON.stringify({}), signal }, session.access_token));
         if (signal?.aborted) return;
         if (response.evaluation.id !== evaluationId) throw new Error('The analysis response did not match this evaluation.');
-        setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name }, response, analysisStatus: 'ready' });
+        setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name, email: candidate.email }, response, analysisStatus: 'ready' });
       } catch (error) {
         if (signal?.aborted) return;
-        setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name }, analysisStatus: 'error', analysisMessage: messageFor(error), analysisRetryAt: error instanceof ApiRequestError && error.retryAfterSeconds ? Date.now() + error.retryAfterSeconds * 1000 : undefined });
+        setState({ status: 'saved', evaluation: current.data, candidate: { id: candidate.id, name: candidate.name, email: candidate.email }, analysisStatus: 'error', analysisMessage: messageFor(error), analysisRetryAt: error instanceof ApiRequestError && error.retryAfterSeconds ? Date.now() + error.retryAfterSeconds * 1000 : undefined });
       }
     } catch (error) {
       if (signal?.aborted) return;
@@ -99,7 +99,7 @@ export function AiAnalysisReportPage() {
   if (!currentEvaluation.success && state.evaluation.result.schemaVersion === '4.0.0') return <main className="ai-report-page"><Link className="ai-report-back" to={`/evaluations/${evaluationId}`}>← Back to saved evaluation</Link><header className="ai-report-header"><div><span className="dashboard-kicker">EVALUATION STATUS</span><h1>{state.candidate.name}</h1><p>{state.evaluation.targetRole.replaceAll('_', ' ')} · Saved {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(state.evaluation.createdAt))}</p></div><span className="ai-report-status report-incomplete">{state.evaluation.status.replaceAll('_', ' ')}</span></header><section className="ai-report-empty" role="status"><h2>Evaluation result unavailable</h2><p>This saved evaluation is {state.evaluation.status.replaceAll('_', ' ')} and has no completed score report.</p><Link className="dashboard-text-link" to={`/evaluations/${evaluationId}`}>Open evaluation status</Link></section></main>;
   if (!currentEvaluation.success) return <main className="ai-report-page"><Link className="ai-report-back" to={`/evaluations/${evaluationId}`}>← Back to saved evaluation</Link><header className="ai-report-header"><div><span className="dashboard-kicker">HISTORICAL EVALUATION</span><h1>{state.candidate.name}</h1><p>{state.evaluation.targetRole.replaceAll('_', ' ')} · Saved {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(state.evaluation.createdAt))}</p></div><span className={`ai-report-status${state.evaluation.status === 'completed' ? ' report-complete' : ' report-incomplete'}`}>{state.evaluation.status.replaceAll('_', ' ')}</span></header><section className="ai-report-score-panel" aria-label="Historical saved evaluation"><div><span className="dashboard-kicker">ORIGINAL SAVED RESULT · {state.evaluation.result.scoringVersion ?? state.evaluation.result.schemaVersion}</span><strong>{state.evaluation.result.overallScore === undefined ? 'Score not calculated' : `${state.evaluation.result.overallScore} / 100`}</strong><small>Historical values are shown in their original scoring format.</small></div></section><section className="ai-report-empty" role="status"><h2>AI explanation unavailable</h2><p>{state.analysisMessage}</p><Link className="dashboard-text-link" to={`/evaluations/${evaluationId}`}>Open original evaluation and category results</Link></section></main>;
 
-  return <AiAnalysisReportView response={state.response} evaluation={currentEvaluation.data} candidateName={state.candidate.name} analysisLoading={state.analysisStatus === 'loading'} analysisError={state.analysisStatus === 'error' ? state.analysisMessage : undefined} analysisRetryAt={state.analysisRetryAt} onRetry={() => void retryAnalysis()}/>;
+  return <AiAnalysisReportView response={state.response} evaluation={currentEvaluation.data} candidateName={state.candidate.name} candidateEmail={state.candidate.email} analysisLoading={state.analysisStatus === 'loading'} analysisError={state.analysisStatus === 'error' ? state.analysisMessage : undefined} analysisRetryAt={state.analysisRetryAt} onRetry={() => void retryAnalysis()}/>;
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -107,8 +107,12 @@ function truncateText(text: string, maxLength: number): string {
   return `${text.slice(0, maxLength).trimEnd()}…`;
 }
 
-export function AiAnalysisReportView({ response, evaluation: evaluationProp, candidateName, analysisLoading = false, analysisError, analysisRetryAt, onRetry }: {
-  response?: AiAnalysisResponse; evaluation?: PersistedEvaluation; candidateName: string; analysisLoading?: boolean; analysisError?: string; analysisRetryAt?: number; onRetry?: () => void;
+function formatRoleLabel(role: string): string {
+  return role.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+export function AiAnalysisReportView({ response, evaluation: evaluationProp, candidateName, candidateEmail, analysisLoading = false, analysisError, analysisRetryAt, onRetry }: {
+  response?: AiAnalysisResponse; evaluation?: PersistedEvaluation; candidateName: string; candidateEmail?: string; analysisLoading?: boolean; analysisError?: string; analysisRetryAt?: number; onRetry?: () => void;
 }) {
   const evaluation = response?.evaluation ?? evaluationProp;
   if (!evaluation) return null;
@@ -131,55 +135,43 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
 
   return (
     <main className="ai-report-page">
-      <div className="ai-report-nav-strip">
-        <Link className="ai-report-back" to={`/evaluations/${evaluation.id}`}>
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-          <span>Back to saved evaluation</span>
-        </Link>
-      </div>
-
-      <header className="ai-report-header">
-        <div className="ai-report-header-titles">
-          <h1>AI Candidate Insights</h1>
-          <p className="ai-report-subtitle">Key strengths, development areas, and recommended next steps.</p>
-          <div className="ai-report-candidate-meta">
-            <strong>{candidateName}</strong>
-            <span aria-hidden="true">•</span>
-            <span>{evaluation.targetRole.replaceAll('_', ' ')}</span>
-            <span aria-hidden="true">•</span>
-            <span>Evaluated on {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(evaluation.createdAt))}</span>
-          </div>
+      <header className="ai-report-page-header">
+        <div>
+          <Link className="ai-report-back" to={`/evaluations/${evaluation.id}`}>← Back to evaluation</Link>
+          <h1>AI Candidate Analysis</h1>
+          <p>A detailed analysis of the candidate&apos;s strengths, development areas, and recommendations.</p>
         </div>
-        <div className="ai-report-header-badge-wrap">
-          <span className={`ai-report-status-badge ${evaluation.status === 'completed' ? 'is-completed' : 'is-incomplete'}`}>
-            <span className="status-dot" aria-hidden="true" />
-            {evaluation.status === 'completed' ? 'Completed' : 'Insufficient evidence'}
-          </span>
-        </div>
+        {!emptyMessage && (
+          <AiAnalysisRetryButton
+            className="ai-report-primary-action"
+            onRetry={onRetry}
+            pending={analysisLoading}
+            retryAt={analysisRetryAt}
+            idleLabel={analysisError ? 'Try again' : analysis ? 'Regenerate analysis' : 'Generate analysis'}
+          />
+        )}
       </header>
 
-      {/* Saved deterministic score banner */}
-      <section className="ai-report-score-panel" aria-label="Saved deterministic evaluation score">
-        <div className="ai-report-score-left">
-          <span className="ai-report-kicker">SAVED EVALUATION · {result.scoringVersion ?? result.schemaVersion}</span>
-          <strong className="ai-report-score-value">
-            {result.overallScore === undefined ? 'Score not calculated' : `${result.overallScore} / 100`}
-          </strong>
-          <small className="ai-report-score-subtext">
-            {result.overallScore === undefined
-              ? 'Insufficient evidence; no overall score was calculated.'
-              : 'Deterministic score from the saved evaluation.'}
-          </small>
+      <section className="ai-report-candidate-summary" aria-label="Candidate and evaluation summary">
+        <div className="ai-report-candidate-details">
+          <h2>{candidateName}</h2>
+          <p className="ai-report-role-line">{formatRoleLabel(evaluation.targetRole)}</p>
+          <div className="ai-report-candidate-meta">
+            {candidateEmail && <span>{candidateEmail}</span>}
+            {candidateEmail && <span aria-hidden="true">·</span>}
+            <span>Evaluated {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(evaluation.createdAt))}</span>
+          </div>
         </div>
-        <div className="ai-report-score-right">
-          <p className="ai-report-score-note">
-            AI text below is explanatory only. It does not calculate or change scores.
-          </p>
-          <Link className="ai-report-action-link" to={`/evaluations/${evaluation.id}`}>
-            View six category results <span aria-hidden="true">→</span>
-          </Link>
+        <div className="ai-report-candidate-result">
+          <span className={`ai-report-status-badge ${evaluation.status === 'completed' ? 'is-completed' : 'is-incomplete'}`}>
+            <span className="status-dot" aria-hidden="true" />
+            {evaluation.status === 'completed' ? 'Completed' : evaluation.status.replaceAll('_', ' ')}
+          </span>
+          <div className="ai-report-candidate-score">
+            <span>Overall score</span>
+            <strong>{result.overallScore === undefined ? '—' : `${result.overallScore} / 100`}</strong>
+            {result.overallScore === undefined && <small>No overall score calculated</small>}
+          </div>
         </div>
       </section>
 
@@ -194,12 +186,6 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
             <strong>Insight generation unavailable</strong>
             <p>{analysisError} The saved evaluation above is unchanged.</p>
           </div>
-          <AiAnalysisRetryButton
-            className="ai-report-retry-btn"
-            onRetry={onRetry}
-            pending={analysisLoading}
-            retryAt={analysisRetryAt}
-          />
         </section>
       ) : emptyMessage || !analysis ? (
         <section className="ai-report-empty" role="status">
@@ -209,10 +195,9 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
         </section>
       ) : (
         <>
-          {/* Executive Summary Card */}
           <section className="ai-report-card ai-report-executive-card" aria-labelledby="exec-summary-title">
             <div className="ai-report-card-header">
-              <div className="ai-report-icon-tile icon-tile-navy" aria-hidden="true">
+              <div className="ai-report-icon-tile icon-tile-blue" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                   <polyline points="14 2 14 8 20 8" />
@@ -222,20 +207,12 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
                 </svg>
               </div>
               <div>
-                <span className="ai-report-kicker">AI SUMMARY</span>
                 <h2 id="exec-summary-title">Executive Summary</h2>
               </div>
             </div>
 
             <p className="ai-report-summary-text">{analysis.summary}</p>
 
-            {analysis.roleRelevance && (
-              <div className="ai-report-role-relevance">
-                <strong>Role relevance:</strong> {analysis.roleRelevance}
-              </div>
-            )}
-
-            {/* Up to 3 compact insight chips */}
             <div className="ai-report-chips-row">
               {analysis.strengths[0] && (
                 <span className="ai-report-chip chip-strength">
@@ -249,28 +226,14 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
                   Development focus: {truncateText(analysis.weaknesses[0].text, 48)}
                 </span>
               )}
-              <span className="ai-report-chip chip-neutral">
-                Target role: {evaluation.targetRole.replaceAll('_', ' ')}
-              </span>
             </div>
-
-            {/* Single compact optional "View sources" disclosure */}
-            {uniqueSourceDescriptions.length > 0 && (
-              <details className="ai-report-sources-disclosure">
-                <summary>
-                  <span>Supporting references ({uniqueSourceDescriptions.length})</span>
-                  <span className="disclosure-arrow" aria-hidden="true">→</span>
-                </summary>
-                <ul>
-                  {uniqueSourceDescriptions.map((desc, i) => (
-                    <li key={i}>{desc}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
           </section>
 
-          {/* Three-Column Insight Cards Grid */}
+          <section aria-labelledby="detailed-insights-title">
+            <div className="ai-report-section-heading">
+              <h2 id="detailed-insights-title">Detailed insights</h2>
+              <p>Evidence-grounded observations and practical next steps.</p>
+            </div>
           <div className="ai-report-insights-grid">
             {/* Card 1: Strengths */}
             <article className="ai-report-card ai-insight-card card-strengths">
@@ -282,8 +245,8 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
                   </svg>
                 </div>
                 <div>
-                  <h3 className="ai-insight-card-title">Strengths</h3>
-                  <span className="ai-insight-card-subtitle">Evidence-backed capabilities</span>
+                  <h3 className="ai-insight-card-title">Key Strengths</h3>
+                  <span className="ai-insight-card-subtitle">Observed in the available evidence</span>
                 </div>
               </div>
               <ul className="ai-insight-items-list">
@@ -336,12 +299,12 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
                   </svg>
                 </div>
                 <div>
-                  <h3 className="ai-insight-card-title">Recommended Actions</h3>
-                  <span className="ai-insight-card-subtitle">Next interview & evaluation steps</span>
+                  <h3 className="ai-insight-card-title">Recommended Next Steps</h3>
+                  <span className="ai-insight-card-subtitle">Practical ways to explore the evidence</span>
                 </div>
               </div>
               <ul className="ai-insight-items-list">
-                {analysis.recommendations.slice(0, 3).map((item, idx) => (
+                {analysis.recommendations.slice(0, 4).map((item, idx) => (
                   <li key={idx} className="ai-insight-item">
                     <span className="item-bullet bullet-blue" aria-hidden="true">→</span>
                     <p>{item.text}</p>
@@ -353,6 +316,23 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
               </ul>
             </article>
           </div>
+          </section>
+
+          {analysis.roleRelevance && (
+            <section className="ai-report-context-grid" aria-label="Role context">
+              <article className="ai-report-context-card">
+                <h2>Role Relevance</h2>
+                <p>{analysis.roleRelevance}</p>
+              </article>
+            </section>
+          )}
+
+          {uniqueSourceDescriptions.length > 0 && (
+            <details className="ai-report-sources-disclosure">
+              <summary>View sources</summary>
+              <ul>{uniqueSourceDescriptions.map((description, index) => <li key={index}>{description}</li>)}</ul>
+            </details>
+          )}
         </>
       )}
     </main>
