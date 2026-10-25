@@ -11,6 +11,7 @@ import { githubRouter } from './routes/github.js';
 import { evaluationsRouter } from './routes/evaluations.js';
 import { insightsRouter } from './routes/insights.js';
 import { screeningsRouter } from './routes/screenings.js';
+import { googleDriveRouter } from './routes/google-drive.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -32,6 +33,7 @@ app.use('/api/candidates', candidatesRouter);
 app.use('/api/evaluations', evaluationsRouter);
 app.use('/api', insightsRouter);
 app.use('/api/screenings', screeningsRouter);
+app.use('/api/google-drive', googleDriveRouter);
 app.use('/api/github', githubRouter);
 // Keep the original scaffold health path available while clients move to /api/health.
 app.get('/health', healthController);

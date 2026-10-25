@@ -10,7 +10,7 @@ describe('API environment configuration', () => {
       API_HOST: '0.0.0.0',
       NODE_ENV: 'development',
       WEB_ORIGIN: 'http://localhost:5173',
-      LEETCODE_API_BASE_URL: 'http://localhost:3001',
+      LEETCODE_API_BASE_URL: 'https://alfa-leetcode-api.onrender.com',
       GROQ_MODEL: 'openai/gpt-oss-120b',
       AI_TIMEOUT_MS: 12000,
     });

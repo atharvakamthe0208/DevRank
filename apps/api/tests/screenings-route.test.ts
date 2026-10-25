@@ -55,5 +55,16 @@ describe('resume screening upload route', () => {
       files: [expect.objectContaining({ mimetype: 'text/plain', originalname: 'resume.txt' })],
     }), expect.anything(), expect.anything());
   });
+
+  it('accepts an explicit owner-validated candidate mapping for automatic import screening', async () => {
+    const form = new FormData();
+    form.set('jobTitle', 'Backend Engineer');
+    form.set('jobDescription', 'Build backend systems and collaborate with the team on production services.');
+    form.set('candidateIds', JSON.stringify(['e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2']));
+    form.append('resumes', new Blob(['%PDF-1.7 candidate resume'], { type: 'application/pdf' }), 'candidate.pdf');
+    const response = await fetch(`${origin}/api/screenings`, { method: 'POST', headers: { Authorization: 'Bearer accepted' }, body: form });
+    expect(response.status).toBe(201);
+    expect(submit).toHaveBeenLastCalledWith(expect.objectContaining({ body: expect.objectContaining({ candidateIds: '["e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2"]' }) }), expect.anything(), expect.anything());
+  });
 });
 

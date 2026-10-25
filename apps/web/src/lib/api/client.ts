@@ -24,34 +24,40 @@ export class ApiNetworkError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
-  if (!baseUrl) {
-    throw new ApiRequestError('Set VITE_API_BASE_URL to the deployed HTTPS API before building the production frontend.', 0);
-  }
-  let response: Response;
+function requestUrl(path: string) {
+  if (!baseUrl) throw new ApiRequestError('Set VITE_API_BASE_URL to the deployed HTTPS API before building the production frontend.', 0);
+  return `${baseUrl}${path}`;
+}
+
+async function checkedFetch(path: string, init: RequestInit | undefined, accessToken: string | undefined) {
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   try {
-    const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
-    response = await fetch(`${baseUrl}${path}`, {
+    return await fetch(requestUrl(path), {
       ...init,
       headers: { ...(!isFormData ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
     });
   } catch (cause) {
     throw new ApiNetworkError(undefined, { cause });
   }
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => undefined);
-    const parsedError = apiErrorSchema.safeParse(body);
-    const error = parsedError.success ? parsedError.data.error : undefined;
-    const retryAfterHeader = response.headers.get('retry-after');
-    const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? Number(retryAfterHeader) : undefined;
-    throw new ApiRequestError(
-      error?.message ?? `API request failed (${response.status})`,
-      response.status,
-      error?.code,
-      error?.details,
-      retryAfterSeconds,
-    );
-  }
+}
+
+async function throwApiError(response: Response): Promise<never> {
+  const body: unknown = await response.json().catch(() => undefined);
+  const parsedError = apiErrorSchema.safeParse(body);
+  const error = parsedError.success ? parsedError.data.error : undefined;
+  const retryAfterHeader = response.headers.get('retry-after');
+  const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? Number(retryAfterHeader) : undefined;
+  throw new ApiRequestError(error?.message ?? `API request failed (${response.status})`, response.status, error?.code, error?.details, retryAfterSeconds);
+}
+
+export async function apiRequest<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
+  const response = await checkedFetch(path, init, accessToken);
+  if (!response.ok) await throwApiError(response);
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+/** Public API base for popup OAuth redirects; contains no credentials. */
+export function apiAbsoluteUrl(path: string): string {
+  return requestUrl(path);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { csvHeaderLabel, createCsvMapping, getCandidateImportAttempt, mapCsvRows, openCsvFilePicker, parseCsvText, readCandidateCsvFile, takeSelectedCsvFile } from './candidate-csv-import';
+import { classifyResumeReference, createDriveScreeningIdempotencyKey, csvHeaderLabel, createCsvMapping, extractDriveFileId, findResumeReferenceColumns, getCandidateImportAttempt, isGoogleFormsResponseCsv, mapCsvRows, openCsvFilePicker, parseCsvText, readCandidateCsvFile, takeSelectedCsvFile } from './candidate-csv-import';
 
 function csvFile(name: string, value: string): File {
   const blob = new Blob([value]);
@@ -55,6 +55,78 @@ describe('CSV file picker handoff', () => {
 });
 
 describe('candidate CSV import parsing and mapping', () => {
+  it('maps Google Forms response columns and ignores the timestamp', () => {
+    const parsed = parseCsvText([
+      'Timestamp,Full Name,Gmail Address,Resume PDF Upload,GitHub Username or Profile URL,LeetCode Username or Profile URL',
+      '2026/10/24 10:00:00 AM,Taylor Stone,taylor@gmail.com,https://drive.google.com/open?id=abcdefghijk,https://github.com/taylor,https://leetcode.com/u/taylor/',
+    ].join('\n'));
+    const mapping = createCsvMapping(parsed.headers);
+    const rows = mapCsvRows(parsed.rows, mapping, {}, isGoogleFormsResponseCsv(parsed.headers));
+
+    expect(isGoogleFormsResponseCsv(parsed.headers)).toBe(true);
+    expect(mapping).toEqual({ name: 1, email: 2, githubUsername: 4, leetcodeUsername: 5 });
+    expect(rows[0]).toMatchObject({
+      candidate: { name: 'Taylor Stone', email: 'taylor@gmail.com', githubUsername: 'taylor', leetcodeUsername: 'taylor' },
+      errors: [],
+    });
+    expect(findResumeReferenceColumns(parsed.headers)).toEqual([3]);
+    expect(classifyResumeReference(parsed.rows[0].values[3])).toBe('drive_link_unverified');
+  });
+
+  it('reports missing required Google Form candidate fields without breaking legacy optional fields', () => {
+    const formsCsv = parseCsvText([
+      'Timestamp,Full Name,Gmail Address,Resume PDF Upload,GitHub Username or Profile URL,LeetCode Username or Profile URL',
+      '2026/10/24,, ,https://drive.google.com/file/d/abcdefghijk/view,,',
+    ].join('\n'));
+    const formsMapping = createCsvMapping(formsCsv.headers);
+    const formsRow = mapCsvRows(formsCsv.rows, formsMapping, {}, true)[0];
+    expect(formsRow.errors).toEqual(expect.arrayContaining([
+      'Candidate name is required.',
+      'Gmail Address is required in Google Forms responses.',
+      'GitHub Username or Profile URL is required in Google Forms responses.',
+      'LeetCode Username or Profile URL is required in Google Forms responses.',
+    ]));
+
+    const legacy = parseCsvText('Name,Email\nTaylor,');
+    expect(mapCsvRows(legacy.rows, createCsvMapping(legacy.headers))[0]).toMatchObject({ candidate: { name: 'Taylor' }, errors: [] });
+  });
+
+  it('treats Drive URLs as unverified references and flags invalid or missing links for separate PDF upload', () => {
+    expect(classifyResumeReference('https://drive.google.com/file/d/abcdefghijk/view?usp=sharing')).toBe('drive_link_unverified');
+    expect(classifyResumeReference('https://drive.google.com/open?id=abcdefghijk')).toBe('drive_link_unverified');
+    expect(classifyResumeReference('https://drive.google.com/file/d/not-found/view')).toBe('drive_link_unverified');
+    expect(classifyResumeReference('https://example.com/resume.pdf')).toBe('unrecognized_link');
+    expect(classifyResumeReference('not a URL')).toBe('unrecognized_link');
+    expect(classifyResumeReference('')).toBe('missing');
+    expect(findResumeReferenceColumns(['Timestamp', 'Resume PDF Upload'])).toEqual([1]);
+    expect(findResumeReferenceColumns(['Resume Link', 'Resume URL'])).toEqual([0, 1]);
+  });
+
+  it('extracts only supported Drive file IDs and creates stable screening retry keys', async () => {
+    expect(extractDriveFileId('https://drive.google.com/open?id=1Abcdefghijk_123')).toBe('1Abcdefghijk_123');
+    expect(extractDriveFileId('https://drive.google.com/file/d/1Abcdefghijk_123/view')).toBe('1Abcdefghijk_123');
+    expect(extractDriveFileId('https://evil.example/open?id=1Abcdefghijk_123')).toBeNull();
+    expect(extractDriveFileId('https://drive.google.com/file/d/short/view')).toBeNull();
+    const a = await createDriveScreeningIdempotencyKey('candidate-1', 'file-1', 'Engineer', 'A'.repeat(60));
+    const b = await createDriveScreeningIdempotencyKey('candidate-1', 'file-1', ' Engineer ', `A${'A'.repeat(59)}`);
+    const c = await createDriveScreeningIdempotencyKey('candidate-2', 'file-1', 'Engineer', 'A'.repeat(60));
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
+
+  it('supports Google Forms field variations and retains the existing DevRank CSV mapping', () => {
+    const googleStyle = parseCsvText('Candidate Name,Email Address,GitHub Username,LeetCode Profile URL\nTaylor,taylor@example.com,taylor,taylor-lc');
+    expect(mapCsvRows(googleStyle.rows, createCsvMapping(googleStyle.headers))[0].candidate).toEqual({
+      name: 'Taylor', email: 'taylor@example.com', githubUsername: 'taylor', leetcodeUsername: 'taylor-lc',
+    });
+
+    const existing = parseCsvText('Candidate Name,Email,GitHub,LeetCode\nAri Stone,ari@example.com,aristone,ari-lc');
+    expect(mapCsvRows(existing.rows, createCsvMapping(existing.headers))[0].candidate).toEqual({
+      name: 'Ari Stone', email: 'ari@example.com', githubUsername: 'aristone', leetcodeUsername: 'ari-lc',
+    });
+  });
+
   it('parses quoted commas, escaped quotes, Unicode, and LF/CRLF records', () => {
     const parsed = parseCsvText('Full Name,Email,GitHub,LeetCode\r\n"Kamthe, Atharva",athar@example.com,https://github.com/atharva,https://leetcode.com/u/atharva/\r\n"Miyuki ""Miu"" 雪",miu@example.com,miu,miu-lc');
     expect(parsed.error).toBeUndefined();

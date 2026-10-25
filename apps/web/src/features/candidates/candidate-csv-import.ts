@@ -74,10 +74,14 @@ export async function getCandidateImportAttempt(
 
 const aliases: Record<CsvField, Set<string>> = {
   name: new Set(['name', 'fullname', 'candidatename', 'candidate', 'applicantname']),
-  email: new Set(['email', 'emailaddress', 'candidateemail', 'applicantemail']),
-  githubUsername: new Set(['github', 'githubusername', 'githubhandle', 'githubprofile', 'githubprofileurl']),
-  leetcodeUsername: new Set(['leetcode', 'leetcodeusername', 'leetcodehandle', 'leetcodeprofile', 'leetcodeprofileurl']),
+  email: new Set(['email', 'emailaddress', 'gmail', 'gmailaddress', 'candidateemail', 'applicantemail']),
+  githubUsername: new Set(['github', 'githubusername', 'githubhandle', 'githubprofile', 'githubprofileurl', 'githubusernameorprofileurl']),
+  leetcodeUsername: new Set(['leetcode', 'leetcodeusername', 'leetcodehandle', 'leetcodeprofile', 'leetcodeprofileurl', 'leetcodeusernameorprofileurl']),
 };
+
+const resumeReferenceAliases = new Set([
+  'resumepdfupload', 'resumeupload', 'resumeuploadlink', 'resumefile', 'resumefilelink', 'resumelink', 'resumeurl',
+]);
 
 function headerKey(value: string) { return value.toLocaleLowerCase().replace(/[^a-z0-9]/g, ''); }
 
@@ -88,6 +92,72 @@ export function createCsvMapping(headers: string[]): CsvMapping {
     mapping[field] = matches.length === 1 ? matches[0] : null;
   }
   return mapping;
+}
+
+export function findResumeReferenceColumns(headers: string[]): number[] {
+  return headers.flatMap((header, index) => resumeReferenceAliases.has(headerKey(header)) ? [index] : []);
+}
+
+export type ResumeReferenceStatus = 'missing' | 'drive_link_unverified' | 'unrecognized_link';
+
+/** Classifies a Drive URL without requesting it or assuming the current user can access it. */
+export function classifyResumeReference(value: string): ResumeReferenceStatus {
+  const trimmed = value.trim();
+  if (!trimmed) return 'missing';
+
+  try {
+    const url = new URL(trimmed);
+    const host = url.hostname.toLowerCase();
+    const allowedHost = host === 'drive.google.com' || host === 'docs.google.com';
+    if (url.protocol !== 'https:' || !allowedHost || url.username || url.password) return 'unrecognized_link';
+
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+    const pathFileId = pathSegments.some((segment, index) =>
+      ['d', 'file'].includes(segment.toLowerCase()) && /^[A-Za-z0-9_-]{5,}$/.test(pathSegments[index + 1] ?? ''),
+    );
+    const queryFileId = /^[A-Za-z0-9_-]{5,}$/.test(url.searchParams.get('id') ?? '');
+    return pathFileId || queryFileId ? 'drive_link_unverified' : 'unrecognized_link';
+  } catch {
+    return 'unrecognized_link';
+  }
+}
+
+/** Extracts a Drive file ID from known HTTPS links without making any network request. */
+export function extractDriveFileId(reference: string): string | null {
+  try {
+    const url = new URL(reference.trim());
+    if (url.protocol !== 'https:' || !['drive.google.com', 'docs.google.com'].includes(url.hostname.toLowerCase())
+      || url.username || url.password || url.port) return null;
+    const segments = url.pathname.split('/').filter(Boolean);
+    const markerIndex = segments.findIndex((segment, index) => segment === 'd'
+      && ['file', 'document', 'spreadsheets', 'presentation', 'forms'].includes(segments[index - 1] ?? ''));
+    const pathId = markerIndex >= 0 ? segments[markerIndex + 1] : null;
+    const ids = url.searchParams.getAll('id');
+    const queryId = ['/', '/open', '/uc'].includes(url.pathname) && ids.length === 1 ? ids[0] : null;
+    const id = pathId ?? queryId;
+    return id && /^[A-Za-z0-9_-]{10,200}$/.test(id) ? id : null;
+  } catch { return null; }
+}
+
+/** Stable UUIDv5-shaped key for safe replay of a candidate's same Drive resume/job request. */
+export async function createDriveScreeningIdempotencyKey(candidateId: string, fileId: string, jobTitle: string, jobDescription: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${candidateId}\u0000${fileId}\u0000${jobTitle.trim()}\u0000${jobDescription.trim()}`));
+  const bytes = new Uint8Array(digest).slice(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function isGoogleFormsResponseCsv(headers: string[]): boolean {
+  const normalized = new Set(headers.map(headerKey));
+  const hasName = normalized.has('fullname');
+  const mapping = createCsvMapping(headers);
+  const hasEmail = mapping.email !== null;
+  const hasGitHub = mapping.githubUsername !== null;
+  const hasLeetCode = mapping.leetcodeUsername !== null;
+  const hasResumeUpload = headers.some((header) => resumeReferenceAliases.has(headerKey(header)));
+  return hasName && hasEmail && hasGitHub && hasLeetCode && hasResumeUpload;
 }
 
 export function parseCsvText(source: string): ParsedCsv {
@@ -190,7 +260,12 @@ function normalizeProfile(value: string, platform: 'github' | 'leetcode'): { use
   return { username };
 }
 
-export function mapCsvRows(rows: ParsedCsvRow[], mapping: CsvMapping, edits: Record<number, Partial<Record<CsvField, string>>> = {}): MappedCsvRow[] {
+export function mapCsvRows(
+  rows: ParsedCsvRow[],
+  mapping: CsvMapping,
+  edits: Record<number, Partial<Record<CsvField, string>>> = {},
+  requireGoogleFormsFields = false,
+): MappedCsvRow[] {
   const mapped = rows.map((row): MappedCsvRow => {
     const errors = row.parseError ? [row.parseError] : [];
     const sourceValue = (field: CsvField) => {
@@ -204,6 +279,9 @@ export function mapCsvRows(rows: ParsedCsvRow[], mapping: CsvMapping, edits: Rec
     const github = normalizeProfile(githubValue, 'github');
     const leetcode = normalizeProfile(leetcodeValue, 'leetcode');
     if (!name) errors.push('Candidate name is required.');
+    if (requireGoogleFormsFields && !email) errors.push('Gmail Address is required in Google Forms responses.');
+    if (requireGoogleFormsFields && !githubValue.trim()) errors.push('GitHub Username or Profile URL is required in Google Forms responses.');
+    if (requireGoogleFormsFields && !leetcodeValue.trim()) errors.push('LeetCode Username or Profile URL is required in Google Forms responses.');
     if (github.error) errors.push(github.error);
     if (leetcode.error) errors.push(leetcode.error);
     const input = {

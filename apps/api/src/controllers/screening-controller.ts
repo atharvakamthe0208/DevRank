@@ -110,15 +110,28 @@ export function createScreeningController(
     submit: asyncHandler(async (request, response) => {
       const auth = request.auth;
       if (!auth) throw new HttpError(401, 'UNAUTHENTICATED', 'Sign in before submitting resumes.');
-      const parsed = screeningCreateSchema.safeParse(request.body);
+      let body = request.body as Record<string, unknown>;
+      if (typeof body.candidateIds === 'string') {
+        try { body = { ...body, candidateIds: JSON.parse(body.candidateIds) as unknown }; }
+        catch { throw new HttpError(400, 'INVALID_SCREENING_CANDIDATES', 'The resume-to-candidate mapping is invalid.'); }
+      }
+      const parsed = screeningCreateSchema.safeParse(body);
       if (!parsed.success) throw new HttpError(400, 'INVALID_SCREENING_REQUEST', 'Enter a job title and a job description between 50 and 30,000 characters.');
       const files = inputFiles(request);
       if (!files.length) throw new HttpError(400, 'RESUMES_REQUIRED', 'Select at least one PDF or DOCX resume.');
       if (files.length > MAX_BATCH) throw new HttpError(400, 'TOO_MANY_RESUMES', `A screening session can include at most ${MAX_BATCH} resumes.`);
       if (files.some(({ size }) => !size || size > MAX_FILE_SIZE)) throw new HttpError(413, 'INVALID_RESUME_SIZE', 'Each resume must be between 1 byte and 10 MB.');
+      if (parsed.data.candidateIds && (parsed.data.candidateIds.length !== files.length || new Set(parsed.data.candidateIds).size !== parsed.data.candidateIds.length)) {
+        throw new HttpError(400, 'INVALID_SCREENING_CANDIDATES', 'Each uploaded resume must map to one distinct candidate.');
+      }
 
       const client = clientForToken(auth.accessToken);
       const queueClient = serviceClientFactory();
+      if (parsed.data.candidateIds) {
+        const ownedCandidates = await client.from('candidates').select('id').eq('owner_id', auth.userId).is('archived_at', null).in('id', parsed.data.candidateIds);
+        if (ownedCandidates.error) throw screeningDatabaseError('screening_candidate_lookup', ownedCandidates.error);
+        if ((ownedCandidates.data ?? []).length !== parsed.data.candidateIds.length) throw new HttpError(404, 'SCREENING_CANDIDATE_NOT_FOUND', 'One or more candidates do not belong to this recruiter.');
+      }
       const idempotencyKey = request.get('Idempotency-Key');
       if (!idempotencyKey || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
         throw new HttpError(400, 'SCREENING_IDEMPOTENCY_KEY_REQUIRED', 'Retry-safe resume submission requires an Idempotency-Key UUID.');
@@ -136,6 +149,12 @@ export function createScreeningController(
           resumes: (existingResumes.data ?? []).map((row) => ({ id: row.id, filename: row.original_filename, status: row.status })),
         }));
         return;
+      }
+
+      if (parsed.data.candidateIds) {
+        const linked = await client.from('resume_screenings').select('candidate_id').eq('owner_id', auth.userId).in('candidate_id', parsed.data.candidateIds);
+        if (linked.error) throw screeningDatabaseError('screening_candidate_link_lookup', linked.error);
+        if ((linked.data ?? []).length) throw new HttpError(409, 'CANDIDATE_RESUME_ALREADY_LINKED', 'One or more candidates already have a saved resume result. Review the candidate report before screening another resume.');
       }
 
       const fileHashes = new Set<string>();
@@ -174,7 +193,7 @@ export function createScreeningController(
       const results: Array<{ id: string; filename: string; status: 'queued' | 'failed' }> = [];
       const queued: Array<{ resume_id: string; owner_id: string; attempt: number }> = [];
 
-      for (const file of files) {
+      for (const [fileIndex, file] of files.entries()) {
         const id = randomUUID();
         const filename = safeFilename(file.originalname);
         const storagePath = `${auth.userId}/${sessionId}/${id}`;
@@ -191,7 +210,7 @@ export function createScreeningController(
           if (uploaded.error) throw new HttpError(503, 'PRIVATE_UPLOAD_FAILED', 'Private resume storage is unavailable. Confirm the private-resumes bucket and Storage RLS policy are installed.');
           storedFile = true;
           const inserted = await client.from('resume_screenings').insert({
-            id, session_id: sessionId, owner_id: auth.userId, storage_path: storagePath,
+            id, session_id: sessionId, owner_id: auth.userId, candidate_id: parsed.data.candidateIds?.[fileIndex] ?? null, storage_path: storagePath,
             original_filename: filename, mime_type: databaseMimeType, file_size: file.size, sha256: hash, status: 'queued',
           });
           if (inserted.error) {
@@ -206,7 +225,7 @@ export function createScreeningController(
           if (storedFile && !rowCreated) await client.storage.from('private-resumes').remove([storagePath]);
           if (!rowCreated) {
             const failedRow = await client.from('resume_screenings').insert({
-              id, session_id: sessionId, owner_id: auth.userId, storage_path: storagePath,
+              id, session_id: sessionId, owner_id: auth.userId, candidate_id: parsed.data.candidateIds?.[fileIndex] ?? null, storage_path: storagePath,
               original_filename: filename, mime_type: databaseMimeType, file_size: file.size, sha256: hash ?? null,
               status: 'failed', safe_error_code: failure.code, safe_error_message: failure.message, processed_at: new Date().toISOString(),
             });

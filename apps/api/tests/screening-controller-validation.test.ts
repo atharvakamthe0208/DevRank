@@ -45,5 +45,24 @@ describe('resume screening request validation', () => {
     expect(await getError({ auth: undefined } as Partial<Request>)).toMatchObject({ code: 'UNAUTHENTICATED', statusCode: 401 });
     expect(clientFactory).not.toHaveBeenCalled();
   });
+
+  it('rejects candidate mappings that do not match the uploaded resume count', async () => {
+    const files = [{ size: 120, mimetype: 'application/pdf' }];
+    expect(await getError({ files, body: { jobTitle: 'Engineer', jobDescription: 'A sufficiently descriptive role for engineering production services and teams.', candidateIds: '["e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2","c3a5f5f0-fd65-4c13-9378-5a4377dcd1e2"]' } } as Partial<Request>))
+      .toMatchObject({ code: 'INVALID_SCREENING_CANDIDATES', statusCode: 400 });
+  });
+
+  it('rejects screening associations to candidates outside the authenticated recruiter workspace', async () => {
+    const chain = { select: vi.fn(), eq: vi.fn(), is: vi.fn(), in: vi.fn() };
+    chain.select.mockReturnValue(chain); chain.eq.mockReturnValue(chain); chain.is.mockReturnValue(chain);
+    chain.in.mockResolvedValue({ data: [], error: null });
+    const ownerClient = { from: vi.fn(() => chain) };
+    const ownerClientFactory = vi.fn(() => ownerClient) as never;
+    const controller = createScreeningController(ownerClientFactory, processor);
+    const request = { auth: approved, body: { jobTitle: 'Engineer', jobDescription: 'A sufficiently descriptive role for engineering production services and teams.', candidateIds: ['e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2'] }, files: [{ size: 120, mimetype: 'application/pdf' }] } as unknown as Request;
+    const error = await new Promise<unknown>((resolve) => controller.submit(request, {} as Response, ((cause?: unknown) => resolve(cause)) as NextFunction));
+    expect(error).toMatchObject({ code: 'SCREENING_CANDIDATE_NOT_FOUND', statusCode: 404 });
+    expect(chain.in).toHaveBeenCalledWith('id', ['e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2']);
+  });
 });
 

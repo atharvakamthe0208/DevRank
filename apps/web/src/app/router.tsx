@@ -18,6 +18,7 @@ import { AiAnalysisReportPage } from '../features/evaluation/AiAnalysisReportPag
 import { AuthLoadingScreen } from '../features/auth/AuthLoadingScreen';
 import { RecruiterProfilePage } from '../features/profile/RecruiterProfilePage';
 import { UnifiedCandidateReportPage } from '../features/evaluations/UnifiedCandidateReportPage';
+import { GoogleDriveOAuthCallbackPage } from '../features/auth/GoogleDriveOAuthCallbackPage';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh, signOut } = useAuth();
@@ -138,6 +139,7 @@ export const router = createBrowserRouter([
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/auth/callback', element: <AuthCallbackPage /> },
+  { path: '/google-drive/callback', element: <GoogleDriveOAuthCallbackPage /> },
   { path: '/access-pending', element: <AccessPendingPage /> },
 
   {
