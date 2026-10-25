@@ -21,6 +21,7 @@ import { useUnsavedChangesBlocker } from '../../app/useUnsavedChangesBlocker';
 import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
 import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 import { formatEvidenceDate, readableProvenance } from './evidence-presentation';
+import { acquireEvaluationRun, ALL_CANDIDATES_ID, bulkEvaluationStatusLabel, bulkEvaluationSummary, candidateOptions, runBulkEvaluations, type BulkEvaluationItem, type BulkEvaluationSnapshot } from './bulk-evaluation';
 import './evaluation-page.css';
 import '../evaluations/evaluation.css';
 
@@ -60,6 +61,9 @@ export function EvaluationPage() {
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
   const [runError, setRunError] = useState('');
+  const [bulkConfirmation, setBulkConfirmation] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<BulkEvaluationSnapshot | null>(null);
+  const [bulkResults, setBulkResults] = useState<BulkEvaluationItem[]>([]);
   const [result, setResult] = useState<EvaluationRunResponse | null>(null);
   const [analysis, setAnalysis] = useState<AiAnalysisResponse | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -77,7 +81,7 @@ export function EvaluationPage() {
 
   function updateSelectionParams(candidate: string, role: string) {
     const next = new URLSearchParams(searchParams);
-    if (candidate) next.set('candidateId', candidate); else next.delete('candidateId');
+    if (candidate && candidate !== ALL_CANDIDATES_ID) next.set('candidateId', candidate); else next.delete('candidateId');
     if (role) next.set('roleId', role); else next.delete('roleId');
     setSearchParams(next, { replace: true, state: location.state });
   }
@@ -188,7 +192,7 @@ export function EvaluationPage() {
       setRunError('Your secure session expired. Sign in again to run an evaluation.');
       return;
     }
-    runningRef.current = true;
+    if (!acquireEvaluationRun(runningRef)) return;
     setRunning(true);
     try {
       const response = await apiRequest<unknown>('/evaluations', {
@@ -209,8 +213,56 @@ export function EvaluationPage() {
     }
   }
 
+  async function executeAllCandidates() {
+    if (runningRef.current) return;
+    const roleToRun = roleId;
+    const candidatesToRun = [...candidates];
+    if (!candidatesToRun.length) { setRunError('There are no eligible candidates in your workspace.'); return; }
+    if (!roleToRun || !roles.some(({ id }) => id === roleToRun)) { setRunError('Choose a supported role.'); return; }
+    if (!session?.access_token) { setRunError('Your secure session expired. Sign in again to run evaluations.'); return; }
+    if (!acquireEvaluationRun(runningRef)) return;
+    setRunning(true);
+    setBulkConfirmation(false);
+    setRunError('');
+    setResult(null);
+    setAnalysis(null);
+    setAnalysisError('');
+    setSelectionEdited(false);
+    const initial: BulkEvaluationSnapshot = {
+      completed: 0,
+      total: candidatesToRun.length,
+      results: candidatesToRun.map((candidate) => ({ candidateId: candidate.id, candidateName: candidate.name, state: 'pending' })),
+    };
+    setBulkProgress(initial);
+    setBulkResults(initial.results);
+    try {
+      const outcomes = await runBulkEvaluations(candidatesToRun, async (candidate) => {
+        const response = await apiRequest<unknown>('/evaluations', {
+          method: 'POST', body: JSON.stringify({ candidateId: candidate.id, roleId: roleToRun }),
+        }, session.access_token);
+        const parsed = evaluationRunResponseSchema.parse(response);
+        if (parsed.candidate.id !== candidate.id || parsed.role.id !== roleToRun) throw new Error('The evaluation response did not match the requested candidate and role.');
+        return parsed;
+      }, explainError, (snapshot) => {
+        setBulkProgress(snapshot);
+        setBulkResults(snapshot.results);
+      });
+      setBulkResults(outcomes);
+    } finally {
+      runningRef.current = false;
+      setRunning(false);
+    }
+  }
+
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (candidateId === ALL_CANDIDATES_ID) {
+      if (!roleId || !roles.some(({ id }) => id === roleId)) { setRunError('Choose a supported role.'); return; }
+      if (runningRef.current) return;
+      setRunError('');
+      setBulkConfirmation(true);
+      return;
+    }
     void executeEvaluation();
   }
 
@@ -246,7 +298,6 @@ export function EvaluationPage() {
             <div>
               <span className="eyebrow"><span className="eyebrow-line" /> CANDIDATE ASSESSMENT</span>
               <h1>Evaluation</h1>
-              <p className="page-subtitle">Evaluate saved GitHub and LeetCode evidence using the active six-category v4 rubric.</p>
             </div>
             <Link className="secondary-button evaluation-back-link" to={returnToCandidate ?? '/dashboard/candidates'} replace onClick={backToCandidate}>
               {returnToCandidate ? 'Back to candidate' : 'View candidates'}
@@ -269,7 +320,6 @@ export function EvaluationPage() {
                   <h2>Run final rubric evaluation</h2>
                   <p>Select a candidate and role. Scores use the candidate’s saved provider snapshots.</p>
                 </div>
-                <span className="evaluation-rule-tag">Active rubric · v4</span>
               </div>
               {candidates.length === 0 ? (
                 <div className="evaluation-empty">
@@ -291,11 +341,14 @@ export function EvaluationPage() {
                         updateSelectionParams(event.target.value, roleId);
                         setSelectionEdited(true);
                         setResult(null);
+                        setBulkConfirmation(false);
+                        setBulkProgress(null);
+                        setBulkResults([]);
                         setRunError('');
                       }}
                     >
                       <option value="">Choose a candidate</option>
-                      {candidates.map((c) => (
+                      {candidateOptions(candidates).map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
@@ -313,6 +366,9 @@ export function EvaluationPage() {
                         updateSelectionParams(candidateId, value);
                         setSelectionEdited(true);
                         setResult(null);
+                        setBulkConfirmation(false);
+                        setBulkProgress(null);
+                        setBulkResults([]);
                         setRunError('');
                       }}
                     >
@@ -341,11 +397,47 @@ export function EvaluationPage() {
                     <p>These are the selected role’s saved weights for the active scoring version.</p>
                   </details>
                   <button className="primary-button" type="submit" disabled={running || !candidateId || !roleId}>
-                    {running ? 'Running evaluation…' : 'Run Evaluation'}
+                    {running ? candidateId === ALL_CANDIDATES_ID ? 'Evaluating candidates…' : 'Running evaluation…' : candidateId === ALL_CANDIDATES_ID ? 'Run Evaluation for All' : 'Run Evaluation'}
                   </button>
                 </div>
               )}
-              {running && <p className="evaluation-progress" role="status">Verifying candidate access and calculating available evidence…</p>}
+              {bulkConfirmation && candidateId === ALL_CANDIDATES_ID && <section className="evaluation-bulk-confirm" aria-labelledby="evaluation-bulk-confirm-title">
+                <h3 id="evaluation-bulk-confirm-title">Evaluate all {candidates.length} candidates?</h3>
+                <p>DevRank will run the selected role’s active v4 evaluation for every candidate in your workspace, one at a time. Candidates with insufficient evidence keep that status; a failure will not stop the remaining evaluations.</p>
+                <div><button type="button" className="secondary-button" onClick={() => setBulkConfirmation(false)}>Cancel</button><button type="button" className="primary-button" disabled={running} onClick={() => void executeAllCandidates()}>Confirm and evaluate all</button></div>
+              </section>}
+              {running && candidateId !== ALL_CANDIDATES_ID && <p className="evaluation-progress" role="status">Verifying candidate access and calculating available evidence…</p>}
+              {bulkProgress && <section className="evaluation-bulk-results" aria-label="Bulk evaluation results" aria-live="polite">
+                <div className="evaluation-bulk-results-heading">
+                  <div>
+                    <h3>{bulkProgress.completed < bulkProgress.total ? `Evaluating ${Math.min(bulkProgress.completed + (bulkProgress.currentCandidateId ? 1 : 0), bulkProgress.total)} of ${bulkProgress.total} candidates` : 'Bulk evaluation finished'}</h3>
+                    <p>Each result reflects the saved evaluation status.</p>
+                  </div>
+                  <span className="evaluation-bulk-progress-count">{bulkProgress.completed} of {bulkProgress.total} processed</span>
+                </div>
+                {(() => {
+                  const summary = bulkEvaluationSummary(bulkResults);
+                  return <div className="evaluation-bulk-summary" aria-label="Evaluation summary">
+                    <div><span>Total candidates</span><strong>{bulkProgress.total}</strong></div>
+                    <div data-tone="success"><span>Completed evaluations</span><strong>{summary.completed}</strong></div>
+                    <div data-tone="danger"><span>Failed</span><strong>{summary.failed}</strong></div>
+                    <div data-tone="neutral"><span>Skipped</span><strong>{summary.skipped}</strong></div>
+                  </div>;
+                })()}
+                <ul>{bulkResults.map((item) => <li key={item.candidateId} data-state={item.state}>
+                  <div className="evaluation-bulk-candidate">
+                    <strong title={item.candidateName}>{item.candidateName}</strong>
+                    <span className="evaluation-bulk-status" data-state={item.state} data-evaluation-status={item.evaluationStatus}>
+                      {bulkEvaluationStatusLabel(item)}
+                    </span>
+                    {item.state === 'failed' && <p>{item.error ?? 'Evaluation failed.'}</p>}
+                  </div>
+                  <div className="evaluation-bulk-links">
+                    {item.evaluationId && <Link to={`/evaluations/${item.evaluationId}`}>View evaluation</Link>}
+                    <Link to={`/candidates/${item.candidateId}`}>View candidate</Link>
+                  </div>
+                </li>)}</ul>
+              </section>}
               {runError && <p className="form-feedback form-feedback-error" role="alert">{runError}</p>}
             </form>
           )}

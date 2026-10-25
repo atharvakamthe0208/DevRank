@@ -47,9 +47,13 @@ function githubEvidenceRows() {
 
 function repositoryWithSnapshots(leetcodeUsername: string | null, platformRows: Array<Record<string, unknown>>) {
   let inserted: Record<string, unknown> | undefined;
+  const candidateFilters: Array<{ method: string; value: unknown }> = [];
   const from = vi.fn((table: string) => {
     const query: Record<string, any> = {};
-    for (const method of ['select', 'eq', 'is']) query[method] = vi.fn(() => query);
+    for (const method of ['select', 'eq', 'is']) query[method] = vi.fn((field?: string, value?: unknown) => {
+      if (table === 'candidates' && method !== 'select') candidateFilters.push({ method: `${method}:${field}`, value });
+      return query;
+    });
     query.maybeSingle = vi.fn(async () => ({ data: { id: candidateId, full_name: 'Taylor Example', leetcode_username: leetcodeUsername }, error: null }));
     query.order = vi.fn(async () => ({ data: platformRows, error: null }));
     query.insert = vi.fn((value: Record<string, unknown>) => { inserted = value; return query; });
@@ -60,7 +64,7 @@ function repositoryWithSnapshots(leetcodeUsername: string | null, platformRows: 
     return query;
   });
   const client = { from } as unknown as SupabaseClient;
-  return { repository: createEvaluationRepository(() => client), from, getInserted: () => inserted };
+  return { repository: createEvaluationRepository(() => client), from, getInserted: () => inserted, candidateFilters };
 }
 
 describe('evaluation persistence repository', () => {
@@ -276,6 +280,9 @@ describe('evaluation persistence repository', () => {
   it('scores absent optional LeetCode as zero with GitHub evidence, but leaves a configured unsynced profile unscored', async () => {
     const withoutLeetCode = repositoryWithSnapshots(null, githubEvidenceRows());
     const completed = await withoutLeetCode.repository.run(auth, { candidateId, roleId: 'software_developer' });
+    expect(withoutLeetCode.candidateFilters).toContainEqual({ method: 'eq:owner_id', value: userId });
+    expect(withoutLeetCode.candidateFilters).toContainEqual({ method: 'eq:id', value: candidateId });
+    expect(withoutLeetCode.candidateFilters).toContainEqual({ method: 'is:archived_at', value: null });
     expect(completed.status).toBe('completed');
     expect(completed.evaluation.scoringVersion).toBe('4.0.1');
     expect(completed.evaluation.categoryScores.find(({ categoryId }) => categoryId === 'technical_skills')).toMatchObject({ status: 'scored', score: 40 });
