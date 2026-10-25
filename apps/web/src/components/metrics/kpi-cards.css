@@ -20,7 +20,7 @@
 }
 .workspace-kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #71809b; font-size: 11px; font-weight: 600; }
 .workspace-kpi-icon { width: 29px; height: 29px; display: grid; place-items: center; flex: none; border-radius: 9px; background: #eef1ff; color: #485de2; font-size: 14px; }
-.workspace-kpi-value { display: block; margin-top: 11px; color: #14213d; font: 650 25px/1.1 Manrope, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.workspace-kpi-value { display: block; margin-top: 11px; color: #14213d; font: 650 25px/1.1 var(--font-family-base); font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
 .animated-metric { font-variant-numeric: tabular-nums; }
 .workspace-kpi-card > small { display: block; min-height: 15px; margin-top: 6px; color: #8793a8; font-size: 10px; line-height: 1.45; }
 .workspace-kpi-visuals { display: flex; align-items: center; gap: 10px; margin-top: 9px; }

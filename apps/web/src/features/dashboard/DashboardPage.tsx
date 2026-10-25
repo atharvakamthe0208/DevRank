@@ -6,9 +6,17 @@ import { useAuth } from '../auth/AuthProvider';
 import { useCandidates } from '../candidates/useCandidates';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import { KpiCard } from '../../components/metrics/KpiCards';
+import { WorkspaceIcon } from '../../components/icons/WorkspaceIcon';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { ActiveDashboardReports } from '../insights/ProposedDashboardReports';
 import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
+
+export function DashboardWelcome({ firstName }: { firstName?: string }) {
+  return <section className="dashboard-hero">
+    <div><h1>{firstName ? `Welcome, ${firstName}` : 'Recruiter overview'}</h1><p className="page-subtitle">A clear view of your candidates and evaluation workload.</p></div>
+    <Link className="primary-button link-button" to="/candidates/new"><span aria-hidden="true">＋</span> Add candidate</Link>
+  </section>;
+}
 
 export function DashboardPage() {
   const { profile, session } = useAuth();
@@ -78,7 +86,6 @@ export function DashboardPage() {
   const loading = dashboardLoading;
   const error = dashboardError;
   const firstName = profile?.display_name?.split(/\s+/)[0];
-  const displayDate = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
   const recentScoreSummary = recentScoredEvaluationAverage(dashboard?.recentEvaluations ?? []);
   const recentAverageProgress = recentScoreSummary.average;
   const recentAverageProgressBar: { value: number; max: number; label: string } | undefined = typeof recentAverageProgress === 'number'
@@ -89,16 +96,13 @@ export function DashboardPage() {
   if (loading || candidatesLoading) return <div className="dashboard-page"><WorkspaceSkeleton variant="dashboard"/></div>;
 
   return <div className="dashboard-page">
-    <section className="dashboard-hero">
-      <div><div className="eyebrow"><span className="eyebrow-line" />{displayDate.toUpperCase()}</div><h1>{firstName ? `Welcome, ${firstName}` : 'Recruiter overview'}</h1><p className="page-subtitle">A clear view of your candidates and evaluation workload.</p></div>
-      <Link className="primary-button link-button" to="/candidates/new"><span aria-hidden="true">＋</span> Add candidate</Link>
-    </section>
+    <DashboardWelcome firstName={firstName}/>
 
     {!loading && dashboard && !error && <section className="workspace-kpi-grid" aria-label="Home metrics">
-      <KpiCard icon="♙" label="Total candidates" value={dashboard.candidateCount} detail="Recruiter home"/>
-      <KpiCard icon="▤" label="Evaluations" value={dashboard.evaluationCount} detail="All saved evaluation runs"/>
-      <KpiCard icon="✓" label="Completed" value={dashboard.statusCounts.completed ?? 0} detail="Completed evaluation runs" progress={dashboard.evaluationCount > 0 ? { value: dashboard.statusCounts.completed ?? 0, max: dashboard.evaluationCount, label: 'Completed evaluations out of all saved evaluations' } : undefined}/>
-      <KpiCard icon="◉" label="Recent average" value={recentAverageProgress} decimals={1} suffix=" / 100" detail={recentScoreSummary.count ? `Across ${recentScoreSummary.count} scored recent evaluations` : 'No scored evaluations yet'} progress={recentAverageProgressBar} trend={recentScoreTrend}/>
+      <KpiCard icon={<WorkspaceIcon name="candidates" size={17}/>} label="Total candidates" value={dashboard.candidateCount} detail="Recruiter home"/>
+      <KpiCard icon={<WorkspaceIcon name="evaluations" size={17}/>} label="Evaluations" value={dashboard.evaluationCount} detail="All saved evaluation runs"/>
+      <KpiCard icon={<WorkspaceIcon name="completed" size={17}/>} label="Completed" value={dashboard.statusCounts.completed ?? 0} detail="Completed evaluation runs" progress={dashboard.evaluationCount > 0 ? { value: dashboard.statusCounts.completed ?? 0, max: dashboard.evaluationCount, label: 'Completed evaluations out of all saved evaluations' } : undefined}/>
+      <KpiCard icon={<WorkspaceIcon name="average" size={17}/>} label="Recent average" value={recentAverageProgress} decimals={1} suffix=" / 100" detail={recentScoreSummary.count ? `Across ${recentScoreSummary.count} scored recent evaluations` : 'No scored evaluations yet'} progress={recentAverageProgressBar} trend={recentScoreTrend}/>
     </section>}
 
     <section className="dashboard-panel" aria-labelledby="recent-evaluations-heading">

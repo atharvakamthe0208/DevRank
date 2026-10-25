@@ -324,7 +324,6 @@ export function ResumeScreeningPage() {
     <div className="resume-screening-page">
       <header className="resume-screening-heading">
         <div>
-          <span className="eyebrow"><span className="eyebrow-line" /> RECRUITER HOME</span>
           <h1>Resume Screening</h1>
           <p>Create a job-specific screening session and review evidence-grounded results.</p>
         </div>
@@ -347,7 +346,6 @@ export function ResumeScreeningPage() {
                 <span className="screening-field-hint">{jobDescription.length.toLocaleString()} / 30,000 characters · minimum 50</span>
               </label>
             </div>
-            <aside className="screening-guidance-card" aria-label="Job description guidance"><span className="screening-guidance-icon" aria-hidden="true">✳</span><strong>Specific criteria help</strong><p>Include responsibilities, must-have skills, and relevant experience so the screening has clear job context.</p><span>Job-match scores are separate from developer evaluations.</span></aside>
           </div>
         </section>
 
@@ -365,7 +363,6 @@ export function ResumeScreeningPage() {
             <label className="secondary-button screening-browse-button" htmlFor="screening-resumes">Browse files</label>
             <small>Files are sent to the screening service when you start screening.</small>
           </div>
-          <aside className="screening-upload-tips"><strong>For best results</strong><ul><li>Use readable, unencrypted PDF or DOCX files.</li><li>Text-selectable documents are easier to process.</li><li>Check each filename before starting the session.</li></ul></aside>
           </div>
 
           {validationMessages.length > 0 && <ul className="screening-validation-list" role="alert">{validationMessages.map((message, index) => <li key={`${index}-${message}`}>{message}</li>)}</ul>}

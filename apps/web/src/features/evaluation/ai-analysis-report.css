@@ -22,7 +22,7 @@
 .ai-report-page-header h1 {
   margin: 10px 0 4px;
   color: #0f172a;
-  font: 750 clamp(24px, 3vw, 30px) Manrope, sans-serif;
+  font: 700 clamp(24px, 3vw, 30px) var(--font-family-base);
   letter-spacing: -0.6px;
 }
 .ai-report-page-header p {
@@ -65,7 +65,7 @@
 .ai-report-candidate-details { min-width: 0; }
 .ai-report-candidate-details h2 {
   margin: 0;
-  font: 700 19px Manrope, sans-serif;
+  font: 700 19px var(--font-family-base);
   letter-spacing: -.25px;
 }
 .ai-report-role-line { margin: 3px 0 6px; color: #475569; font-size: 14px; }
@@ -105,17 +105,17 @@
 .ai-report-status-badge .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .ai-report-candidate-score { display: grid; gap: 2px; text-align: right; }
 .ai-report-candidate-score span { color: #64748b; font-size: 11px; }
-.ai-report-candidate-score strong { color: #2563eb; font: 750 22px Manrope, sans-serif; white-space: nowrap; }
+.ai-report-candidate-score strong { color: #2563eb; font: 700 22px var(--font-family-base); white-space: nowrap; }
 .ai-report-candidate-score small { color: #92400e; font-size: 11px; }
 .ai-report-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-.ai-report-header h1 { margin: 0; font: 700 24px Manrope, sans-serif; }
+.ai-report-header h1 { margin: 0; font: 700 24px var(--font-family-base); }
 .ai-report-header p { margin: 5px 0 0; color: #64748b; font-size: 13px; }
 .ai-report-status { display: inline-flex; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 650; }
 .ai-report-status.report-complete { background: #ecfdf5; color: #065f46; }
 .ai-report-status.report-incomplete { background: #fffbeb; color: #92400e; }
 .ai-report-score-panel { padding: 18px 22px; border: 1px solid #dbe5f4; border-radius: 14px; background: #fff; }
 .ai-report-score-panel > div { display: grid; gap: 5px; }
-.ai-report-score-panel strong { color: #2563eb; font: 750 22px Manrope, sans-serif; }
+.ai-report-score-panel strong { color: #2563eb; font: 700 22px var(--font-family-base); }
 .ai-report-score-panel small { color: #64748b; font-size: 12px; }
 .ai-report-card { padding: 22px 24px; }
 .ai-report-executive-card { display: grid; gap: 14px; }
@@ -124,7 +124,7 @@
 .ai-report-context-card h2 {
   margin: 0;
   color: #0f172a;
-  font: 700 17px Manrope, sans-serif;
+  font: 700 17px var(--font-family-base);
 }
 .ai-report-icon-tile {
   display: grid;
@@ -166,7 +166,7 @@
 .chip-strength { border-color: #a7f3d0; background: #ecfdf5; color: #065f46; }
 .chip-growth { border-color: #fde68a; background: #fffbeb; color: #92400e; }
 .ai-report-section-heading { margin: 2px 0 12px; }
-.ai-report-section-heading h2 { margin: 0; font: 700 19px Manrope, sans-serif; }
+.ai-report-section-heading h2 { margin: 0; font: 700 19px var(--font-family-base); }
 .ai-report-section-heading p { margin: 4px 0 0; color: #64748b; font-size: 13px; }
 .ai-report-insights-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 .ai-insight-card { display: flex; min-width: 0; flex-direction: column; padding: 19px 20px; }
@@ -174,7 +174,7 @@
 .ai-insight-card.card-growth { border-top: 3px solid #d49b39; }
 .ai-insight-card.card-actions { border-top: 3px solid #2563eb; }
 .ai-insight-card .ai-report-card-header { margin-bottom: 13px; }
-.ai-insight-card-title { margin: 0; font: 700 15px Manrope, sans-serif; }
+.ai-insight-card-title { margin: 0; font: 700 15px var(--font-family-base); }
 .ai-insight-card-subtitle { display: block; margin-top: 3px; color: #64748b; font-size: 11px; }
 .ai-insight-items-list { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; }
 .ai-insight-item { display: flex; align-items: flex-start; gap: 9px; color: #334155; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
@@ -195,7 +195,7 @@
 .ai-report-state p,
 .ai-report-empty p { max-width: 560px; margin: 0; color: #64748b; font-size: 13px; line-height: 1.55; }
 .ai-report-state h1,
-.ai-report-empty h2 { margin: 0; font: 700 21px Manrope, sans-serif; }
+.ai-report-empty h2 { margin: 0; font: 700 21px var(--font-family-base); }
 .ai-report-spinner { width: 26px; height: 26px; border: 3px solid #dbe5f4; border-top-color: #2563eb; border-radius: 50%; animation: ai-spin .8s linear infinite; }
 @keyframes ai-spin { to { transform: rotate(360deg); } }
 .ai-report-ai-state { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid #fecaca; border-radius: 12px; background: #fef2f2; color: #7f1d1d; }
@@ -228,4 +228,16 @@
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
   }
+}
+
+/* Shared semantic type scale, tuned for recruiter-facing report reading. */
+.ai-report-page-header h1 { font-size: var(--type-page-heading); font-weight: 700; }
+.ai-report-card-header h2,.ai-report-section-heading h2 { font-size: var(--type-section-heading); }
+.ai-report-summary-text { font-size: var(--type-body); }
+.ai-insight-card-title { font-size: var(--type-card-heading); }
+.ai-insight-item { font-size: var(--type-supporting); }
+.ai-report-candidate-meta { font-size: var(--type-metadata); }
+@media (max-width: 680px) {
+  .ai-report-page-header h1 { font-size: clamp(28px, 7vw, 30px); }
+  .ai-report-card-header h2,.ai-report-section-heading h2 { font-size: clamp(21px, 5.5vw, 23px); }
 }

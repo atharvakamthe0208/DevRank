@@ -32,7 +32,7 @@
 }
 
 .candidate-delete-dialog::backdrop { background: #25272070; }
-.candidate-delete-dialog h2 { margin: 0; font: 600 18px Manrope, sans-serif; }
+.candidate-delete-dialog h2 { margin: 0; font: 600 18px var(--font-family-base); }
 .candidate-delete-dialog p { margin: 11px 0 20px; color: #73766d; font-size: 12px; line-height: 1.65; }
 .candidate-delete-dialog-actions { display: flex; justify-content: flex-end; gap: 9px; }
 .candidate-delete-dialog-actions button { min-height: 38px; padding: 0 14px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; }
@@ -40,21 +40,53 @@
 .candidate-delete-dialog-actions :is(button):focus-visible { outline: 3px solid #8db69a; outline-offset: 2px; }
 .candidate-delete-dialog .candidate-delete-button { min-height: 38px; padding: 0 14px; }
 
+/* Shared-token type scale for candidate list, add form, and profile surfaces. */
+.candidate-management-page .candidate-management-heading h1,
+.candidate-management-page .candidate-form-heading h1,
+.candidate-api-detail .profile-title-row h1 { font-size: var(--type-page-heading); font-weight: 700; line-height: 1.16; }
+.candidate-management-page .candidate-management-heading .page-subtitle,
+.candidate-management-page .candidate-form-heading .page-subtitle { font-size: var(--type-supporting); line-height: 1.55; }
+.candidate-management-page .candidate-management-panel-head h2,
+.candidate-api-detail .section-heading h2 { font-size: var(--type-section-heading); font-weight: 700; line-height: 1.25; }
+.candidate-management-table { font-size: var(--type-supporting); }
+.candidate-management-table th { font-size: var(--type-metadata); font-weight: 700; }
+.candidate-management-table td { font-size: var(--type-supporting); }
+.candidate-management-page .candidate-management-primary-actions > button { font-size: var(--type-control); }
+.candidate-management-page .candidate-form label { font-size: var(--type-control); }
+.candidate-management-page .candidate-form input,
+.candidate-management-page .candidate-form select { font-size: var(--type-control); }
+.candidate-api-detail .profile-meta { font-size: var(--type-metadata); }
+.candidate-api-detail .detail-section > p,
+.candidate-api-detail .candidate-detail-empty { font-size: var(--type-supporting); line-height: 1.55; }
+.candidate-api-detail .profile-links strong { font-size: var(--type-supporting); }
+.candidate-api-detail .profile-links small { font-size: var(--type-metadata); }
+.candidate-management-page .candidate-form-field > input { min-height: 42px; }
+.candidate-management-page .candidate-form-actions :is(button, a) { min-height: 42px; font-size: var(--type-control); }
+.candidate-management-page .candidate-management-table-wrap { scrollbar-width: thin; scrollbar-color: #aeb8ca #f2f4f8; overscroll-behavior-inline: contain; }
+.candidate-api-detail .detail-profile-card { gap: 18px; }
+.candidate-api-detail .candidate-profile-actions :is(a, button) { min-height: 40px; font-size: var(--type-control); }
+
 .older-evaluations { margin-top: 11px; border-top: 1px solid #f0f0ed; padding-top: 11px; }
 .older-evaluations > summary { width: fit-content; color: #477457; font-size: 10px; font-weight: 600; cursor: pointer; }
 .older-evaluations .evaluation-history-list { margin-top: 8px; }
 .latest-evaluation-list { border-bottom: 1px solid #f0f0ed; }
 
-.candidate-management-primary-actions { display: flex; align-items: center; gap: 9px; }
-.candidate-management-primary-actions > button { min-height: 39px; padding: 0 15px; border: 1px solid #e8e9e4; border-radius: 5px; color: #477457; background: #fff; font-size: 10px; font-weight: 600; cursor: pointer; }
-.candidate-management-primary-actions > button:hover { background: #f7faf7; }
-.candidate-management-primary-actions :is(button, a):focus-visible { outline: 3px solid #8db69a; outline-offset: 3px; }
+.candidate-management-panel-head { gap: 16px; }
+.candidate-management-primary-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.candidate-management-primary-actions > button { min-height: 40px; padding: 0 15px; border: 1px solid #d5deee; border-radius: 6px; color: #4058e8; background: #fff; font-size: var(--type-control); font-weight: 650; cursor: pointer; white-space: nowrap; }
+.candidate-management-primary-actions > button:hover:not(:disabled) { border-color: #b9c8ec; background: #f5f7ff; }
+.candidate-management-primary-actions > button:active:not(:disabled) { background: #eaf0ff; }
+.candidate-management-primary-actions > button:disabled { opacity: .6; cursor: wait; }
+.app-shell .candidate-management-primary-actions > .candidate-add-action { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #4058e8; border-radius: 6px; padding: 0 15px; color: #fff; background: #4058e8; box-shadow: 0 4px 11px #4058e820; font-size: var(--type-control); font-weight: 650; text-decoration: none; white-space: nowrap; }
+.app-shell .candidate-management-primary-actions > .candidate-add-action:hover { border-color: #334bd1; color: #fff; background: #334bd1; box-shadow: 0 7px 16px #4058e82b; }
+.app-shell .candidate-management-primary-actions > .candidate-add-action:active { border-color: #293fbe; background: #293fbe; }
+.candidate-management-primary-actions :is(button, a):focus-visible { outline: 3px solid #8190f2; outline-offset: 3px; }
 .candidate-import-file-picker { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; }
 
 .candidate-import-dialog { width: min(1120px, calc(100vw - 28px)); max-width: none; max-height: min(92vh, 940px); overflow: auto; border: 1px solid #e8e9e4; border-radius: 10px; padding: 22px; color: #34362f; background: #fff; box-shadow: 0 18px 55px #2527202b; }
 .candidate-import-dialog::backdrop { background: #25272070; }
 .candidate-import-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border-bottom: 1px solid #efefec; padding-bottom: 15px; }
-.candidate-import-heading h2 { margin: 0; font: 600 19px Manrope, sans-serif; }
+.candidate-import-heading h2 { margin: 0; font: 600 19px var(--font-family-base); }
 .candidate-import-heading p,.candidate-import-file p,.candidate-import-policy p,.candidate-import-confirm p,.candidate-import-results p { color: #73766d; font-size: 11px; line-height: 1.6; }
 .candidate-import-heading p { margin: 5px 0 0; }
 .candidate-import-close { width: 34px; height: 34px; border: 1px solid #e8e9e4; border-radius: 5px; background: #fff; color: #55574f; font-size: 22px; cursor: pointer; }
@@ -69,7 +101,7 @@
 .candidate-import-file-label,.candidate-import-mapping label { color: #55574f; font-size: 11px; font-weight: 600; }
 .candidate-import-file input { min-height: 39px; max-width: 100%; padding: 7px; border: 1px solid #e8e9e4; border-radius: 5px; font-size: 11px; }
 .candidate-import-file p { margin: 0; }
-.candidate-import-mapping h3,.candidate-import-preview h3,.candidate-import-confirm h3,.candidate-import-results h3 { margin: 0; font: 600 14px Manrope, sans-serif; }
+.candidate-import-mapping h3,.candidate-import-preview h3,.candidate-import-confirm h3,.candidate-import-results h3 { margin: 0; font: 600 14px var(--font-family-base); }
 .candidate-import-mapping-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin-top: 9px; }
 .candidate-import-mapping-grid label { display: grid; gap: 6px; }
 .candidate-import-mapping-grid select { min-width: 0; height: 38px; padding: 0 9px; border: 1px solid #e8e9e4; border-radius: 5px; background: white; color: #34362f; font-size: 11px; }
@@ -130,7 +162,9 @@
 @media (max-width: 700px) {
   .candidate-management-heading { align-items: flex-start; flex-wrap: wrap; }
   .candidate-management-heading > .primary-button { flex: none; }
-  .candidate-management-primary-actions { flex-wrap: wrap; }
+  .candidate-management-panel-head { align-items: flex-start; flex-wrap: wrap; }
+  .candidate-management-primary-actions { width: 100%; justify-content: flex-start; }
+  .candidate-management-primary-actions > :is(button, a) { min-height: 40px; }
   .candidate-management-panel { overflow: hidden; }
   .candidate-table-scroll-hint {
     position: static;

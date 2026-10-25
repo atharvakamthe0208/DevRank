@@ -27,6 +27,24 @@ import '../evaluations/evaluation.css';
 
 type PageState = 'loading' | 'ready' | 'error';
 
+export function EvaluationSetupHeader({ returnToCandidate, onBackToCandidate }: { returnToCandidate: string | null; onBackToCandidate: (event: MouseEvent<HTMLAnchorElement>) => void }) {
+  return <section className="evaluation-heading">
+    <h1>Evaluation</h1>
+    <Link className="secondary-button evaluation-back-link" to={returnToCandidate ?? '/dashboard/candidates'} replace onClick={onBackToCandidate}>
+      {returnToCandidate ? 'Back to candidate' : 'View candidates'}
+    </Link>
+  </section>;
+}
+
+export function EvaluationSetupCardHeading() {
+  return <div className="evaluation-panel-heading">
+    <div>
+      <h2>Evaluation</h2>
+      <p>Select a candidate and role. Scores use saved provider snapshots.</p>
+    </div>
+  </div>;
+}
+
 function explainError(error: unknown): string {
   if (error instanceof ApiRequestError) {
     if (error.status === 401) return 'Your session expired. Sign in again to run an evaluation.';
@@ -291,18 +309,10 @@ export function EvaluationPage() {
   }
 
   return (
-    <div className="evaluation-page">
+    <div className={`evaluation-page${result ? '' : ' evaluation-setup-page'}`}>
       {!result ? (
         <>
-          <section className="evaluation-heading">
-            <div>
-              <span className="eyebrow"><span className="eyebrow-line" /> CANDIDATE ASSESSMENT</span>
-              <h1>Evaluation</h1>
-            </div>
-            <Link className="secondary-button evaluation-back-link" to={returnToCandidate ?? '/dashboard/candidates'} replace onClick={backToCandidate}>
-              {returnToCandidate ? 'Back to candidate' : 'View candidates'}
-            </Link>
-          </section>
+          <EvaluationSetupHeader returnToCandidate={returnToCandidate} onBackToCandidate={backToCandidate}/>
           {pageState === 'loading' ? (
             <WorkspaceSkeleton variant="evaluations" />
           ) : pageState === 'error' ? (
@@ -315,12 +325,7 @@ export function EvaluationPage() {
             </section>
           ) : (
             <form className="evaluation-panel evaluation-form" onSubmit={handleFormSubmit}>
-              <div className="evaluation-panel-heading">
-                <div>
-                  <h2>Run final rubric evaluation</h2>
-                  <p>Select a candidate and role. Scores use the candidate’s saved provider snapshots.</p>
-                </div>
-              </div>
+              <EvaluationSetupCardHeading/>
               {candidates.length === 0 ? (
                 <div className="evaluation-empty">
                   <h3>No candidates available</h3>

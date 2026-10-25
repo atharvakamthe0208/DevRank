@@ -73,4 +73,19 @@ describe('candidate removal UI', () => {
     expect(html).toContain('>Import CSV</button>');
     expect(html).toContain('class="candidate-import-file-picker" type="file" accept=".csv,text/csv"');
   });
+
+  it('keeps the page heading simple and places list actions in the candidates card header', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+    const pageHeadingStart = html.indexOf('class="candidate-management-heading"');
+    const panelStart = html.indexOf('class="candidate-management-panel-head"');
+    const actionsStart = html.indexOf('class="candidate-management-primary-actions"');
+
+    expect(html).toContain('<h1>Candidates</h1>');
+    expect(html).not.toContain('RECRUITER HOME');
+    expect(pageHeadingStart).toBeGreaterThanOrEqual(0);
+    expect(panelStart).toBeGreaterThan(pageHeadingStart);
+    expect(actionsStart).toBeGreaterThan(panelStart);
+    expect(html).toContain('candidate-add-action');
+    expect(html).toContain('href="/candidates/new"');
+  });
 });
