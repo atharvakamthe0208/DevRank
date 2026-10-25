@@ -61,27 +61,36 @@ function completedAnalysis(): AiAnalysisResponse {
   return aiAnalysisResponseSchema.parse({ status: 'completed', evaluation, analysis: {
     summary: 'The saved evidence shows experience across the listed source categories.', summaryEvidenceReferences: ['evidence-project_portfolio'],
     strengths: [1, 2, 3, 4].map((n) => ({ text: `Strength ${n} grounded in saved evidence.`, evidenceReferences: ['evidence-project_portfolio'] })),
-    weaknesses: [{ text: 'The history is incomplete.', evidenceReferences: ['evidence-project_portfolio'] }],
+    weaknesses: [1, 2, 3].map((n) => ({ text: n === 1 ? 'The history is incomplete.' : `Improvement area ${n} grounded in saved evidence.`, evidenceReferences: ['evidence-project_portfolio'] })),
     roleRelevance: 'The evidence relates to the selected role.', roleRelevanceEvidenceReferences: ['evidence-project_portfolio'],
-    recommendations: [{ text: 'Review the cited source detail.', evidenceReferences: ['evidence-project_portfolio'] }],
+    recommendations: [1, 2, 3, 4].map((n) => ({ text: n === 1 ? 'Review the cited source detail.' : `Recommendation ${n} grounded in saved evidence.`, evidenceReferences: ['evidence-project_portfolio'] })),
   } });
+}
+
+function renderEvaluationRunResult(props: Parameters<typeof EvaluationRunResult>[0]) {
+  return renderToStaticMarkup(createElement(MemoryRouter, null, createElement(EvaluationRunResult, props)));
 }
 
 describe('evaluation run result', () => {
   it('shows the finalized v4 category result from the saved snapshot', () => {
-    const html = renderToStaticMarkup(createElement(EvaluationRunResult, {
+    const html = renderEvaluationRunResult({
       result: runResult(), analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined,
-    }));
+    });
 
-    expect(html).toContain('Evaluation report');
+    expect(html).toContain('aria-label="Evaluation report"');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     for (const category of scoringCategories) expect(html).toContain(category.displayName.replaceAll('&', '&amp;'));
     expect(html).toContain('100 / 100');
     expect(html).toContain('Overall score');
-    expect(html).toContain('Overall score withheld');
+    expect(html).toContain('Score withheld');
+    expect(html).toContain('An overall score is withheld because the available evidence is insufficient.');
+    expect(html).toContain('should support—not replace—interviews and work samples');
     expect(html).not.toContain('out of 100</small>');
     expect(html).toContain('View evidence');
     expect(html).toContain('Generate AI analysis');
+    expect(html).toContain('View full analysis');
+    expect(html).toContain('href="/evaluations/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/analysis"');
+    expect(html).toContain(`href="/candidates/${candidateId}"`);
     expect(html).toContain('evaluation-ai-primary-action');
     expect(html).not.toContain('Arithmetic mean of 1 available normalized evidence value(s), rounded to two decimal places');
     expect(html).not.toContain('Scoring notes and evidence limitations');
@@ -93,11 +102,11 @@ describe('evaluation run result', () => {
   });
 
   it('keeps final rubric categories unscored when the run has no saved platform evidence', () => {
-    const html = renderToStaticMarkup(createElement(EvaluationRunResult, {
+    const html = renderEvaluationRunResult({
       result: runResult(false), analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined,
-    }));
+    });
 
-    expect(html).toContain('Evaluation report');
+    expect(html).toContain('aria-label="Evaluation report"');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html).toContain('Not scored');
     expect(html).toContain('Unavailable');
@@ -122,18 +131,18 @@ describe('evaluation run result', () => {
         }],
       },
     });
-    const html = renderToStaticMarkup(createElement(EvaluationRunResult, {
+    const html = renderEvaluationRunResult({
       result,
       candidate: { id: candidateId, name: 'Candidate Example', email: 'person@example.com', githubUsername: 'candidate-gh', leetcodeUsername: 'candidate-lc', createdAt: '2026-10-17T10:00:00.000Z', updatedAt: '2026-10-17T10:00:00.000Z' },
       analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined,
-    }));
+    });
     expect(html).toContain('Candidate Example');
     expect(html).toContain('person@example.com');
     expect(html).toContain('GitHub @candidate-gh');
     expect(html).toContain('LeetCode @candidate-lc');
     expect(html).toContain('Evidence-backed');
-    expect(html).toContain('14 public repositories');
-    expect(html).toContain('2 detected languages');
+    expect(html).toContain('<strong>14</strong> public repositories');
+    expect(html).toContain('<strong>2</strong> detected languages');
   });
 
   it('labels partial technical evidence and preserves the actual coverage explanation without assigning a score', () => {
@@ -149,9 +158,9 @@ describe('evaluation run result', () => {
       },
     };
     const result = evaluationRunResponseSchema.parse({ ...base, evaluation });
-    const html = renderToStaticMarkup(createElement(EvaluationRunResult, {
+    const html = renderEvaluationRunResult({
       result, analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined,
-    }));
+    });
     expect(html).toContain('Partial evidence');
     expect(html).toContain('5 of 8 eligible repositories analyzed');
     expect(html).toContain('Python, TypeScript');
@@ -160,14 +169,15 @@ describe('evaluation run result', () => {
 
   it('shows a concise cited summary with a route to the detailed report', () => {
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisSummary, { response: completedAnalysis() })));
-    expect(html).toContain('Executive summary');
-    expect(html).toContain('Evidence-backed strengths');
-    expect(html).toContain('Evidence gaps');
+    expect(html).toContain('Executive Summary');
+    expect(html).toContain('Key Strengths');
+    expect(html).toContain('Areas to Improve');
+    expect(html).toContain('Recommended Next Steps');
     expect(html).toContain('Strength 3 grounded in saved evidence.');
     expect(html).not.toContain('Strength 4 grounded in saved evidence.');
-    expect(html).toContain('Read full AI report');
-    expect(html).toContain('/evaluations/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/analysis');
     expect(html).toContain('Supporting references (1)');
+    expect(html).not.toContain('Improvement area 3 grounded in saved evidence.');
+    expect(html).not.toContain('Recommendation 4 grounded in saved evidence.');
   });
 
   it('shows a neutral insufficient-evidence summary and keeps the full report link', () => {
@@ -180,28 +190,39 @@ describe('evaluation run result', () => {
     expect(html).not.toContain('0 / 100');
   });
 
-  it('keeps the AI explanation separate from the saved report and avoids repeating category results', () => {
+  it('renders the detailed AI report with candidate context and without repeated category or source details', () => {
     const response = completedAnalysis();
-    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisReportView, { response, candidateName: 'Candidate Example' })));
-    expect(html).toContain('AI Candidate Insights');
-    expect(html).toContain('Key strengths, development areas, and recommended next steps.');
-    expect(html).toContain('SAVED EVALUATION');
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisReportView, { response, candidateName: 'Candidate Example', candidateEmail: 'candidate@example.com' })));
+    expect(html).toContain('AI Candidate Analysis');
+    expect(html).toContain('A detailed analysis of the candidate&#x27;s strengths, development areas, and recommendations.');
+    expect(html).toContain('candidate@example.com');
+    expect(html).toContain('aria-label="Candidate and evaluation summary"');
     expect(html).toContain('78 / 100');
-    expect(html).not.toContain('Category results');
-    expect(html).toContain('View six category results');
+    expect(html).toContain('Overall score');
+    expect(html).toContain('Completed');
+    expect(html).not.toContain('View six category results');
     expect(html).toContain('Executive Summary');
-    expect(html).toContain('Role relevance');
-    expect(html).toContain('Strengths');
+    expect(html).toContain('Detailed insights');
+    expect(html).toContain('Key Strengths');
     expect(html).toContain('Areas to Improve');
-    expect(html).toContain('Recommended Actions');
+    expect(html).toContain('Recommended Next Steps');
     expect(html).toContain('Strength 1 grounded in saved evidence.');
     expect(html).toContain('Strength 3 grounded in saved evidence.');
     expect(html).not.toContain('Strength 4 grounded in saved evidence.');
     expect(html).toContain('The history is incomplete.');
-    expect(html).toContain('AI text below is explanatory only. It does not calculate or change scores.');
-    expect(html).toContain('Supporting references (1)');
+    expect(html).toContain('Recommendation 4 grounded in saved evidence.');
+    expect(html).toContain('Role Relevance');
+    expect(html).toContain('The evidence relates to the selected role.');
+    expect(html).not.toContain('Key Takeaways');
+    expect(html).toContain('View sources');
+    expect(html).not.toContain('Supporting references (');
+    expect(html).not.toContain('AI text below is explanatory only');
+    expect(html).not.toContain('AI SUMMARY');
     expect(html).not.toContain('About this AI explanation');
     expect(html).not.toContain('<details class="ai-report-observation"');
+    expect(html).toContain('Back to evaluation');
+    expect(html).toContain('Regenerate analysis');
+    expect(html).toContain('href="/evaluations/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"');
   });
 
   it('keeps the saved deterministic result visible when the on-demand AI explanation fails', () => {
@@ -211,8 +232,26 @@ describe('evaluation run result', () => {
     })));
     expect(html).toContain('78 / 100');
     expect(html).toContain('AI analysis is temporarily unavailable.');
-    expect(html).toContain('View six category results');
+    expect(html).toContain('Overall score');
     expect(html).toContain('Try again');
+  });
+
+  it('keeps unavailable evidence and the saved score clear without offering an ineligible generation action', () => {
+    const response = completedAnalysis();
+    const insufficient = aiAnalysisResponseSchema.parse({ status: 'insufficient_evidence', evaluation: response.evaluation, analysis: null });
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisReportView, { response: insufficient, candidateName: 'Candidate Example' })));
+    expect(html).toContain('78 / 100');
+    expect(html).toContain('AI explanation unavailable');
+    expect(html).toContain('sufficient verified evidence');
+    expect(html).not.toContain('Generate analysis');
+  });
+
+  it('keeps a single human-readable source disclosure and does not expose provider metadata', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisReportView, { response: completedAnalysis(), candidateName: 'Candidate Example' })));
+    expect((html.match(/<details class="ai-report-sources-disclosure"/g) ?? []).length).toBe(1);
+    expect(html).toContain('Saved Assessment');
+    expect(html).not.toContain('evidence-project_portfolio');
+    expect(html).not.toContain('alfa_leetcode_api');
   });
 });
 
