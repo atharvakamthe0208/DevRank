@@ -13,6 +13,7 @@ function createRouter(initialEntries: string[], initialIndex = initialEntries.le
     { path: '/candidates/new', element: createElement('p', null, 'New candidate') },
     { path: '/candidates/:id', element: createElement('p', null, 'Candidate details') },
     { path: '/dashboard', element: createElement('p', null, 'Overview') },
+    { path: '/evaluations', element: createElement('p', null, 'Evaluation page') },
     { path: '/profile', element: createElement('p', null, 'Profile destination') },
   ] }], { initialEntries, initialIndex });
 }
@@ -23,6 +24,20 @@ function renderRouter(router: ReturnType<typeof createRouter>) {
 function renderAt(path: string) { return renderRouter(createRouter([path])); }
 
 describe('AppShell route breadcrumbs', () => {
+  it('keeps the shared topbar visible on the Evaluation launch page', () => {
+    const evaluation = renderAt('/evaluations');
+    expect(evaluation).toContain('class="app-shell evaluation-page-shell"');
+    expect(evaluation).toContain('<header class="topbar">');
+    expect(evaluation).toContain('Home</a>');
+    expect(evaluation).toContain('aria-current="page">Evaluations</span>');
+    expect(evaluation).toContain('Recruiter workspace');
+    expect(evaluation).toContain('class="avatar avatar-user top-avatar profile-avatar-link"');
+
+    const dashboard = renderAt('/dashboard');
+    expect(dashboard).toContain('<header class="topbar">');
+    expect(dashboard).toContain('Recruiter workspace');
+  });
+
   it('renders the candidate list and creation hierarchy from direct URLs', () => {
     const list = renderAt('/dashboard/candidates');
     expect(list).toContain('aria-label="Breadcrumb"');

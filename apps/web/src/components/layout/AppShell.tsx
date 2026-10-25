@@ -27,7 +27,7 @@ export function AppShell() {
   const candidateListState = { candidateListSearch: typeof routeState?.candidateListReturn?.search === 'string' ? routeState.candidateListReturn.search : '', candidateListRestoreScroll: typeof routeState?.candidateListReturn?.scrollY === 'number' ? routeState.candidateListReturn.scrollY : undefined };
 
   return (
-    <div className={`app-shell${location.pathname === '/dashboard' || /^\/evaluations\/[^/]+\/analysis$/.test(location.pathname) ? ' refined-workspace' : ''}`}>
+    <div className={`app-shell${location.pathname === '/dashboard' || /^\/evaluations\/[^/]+\/analysis$/.test(location.pathname) ? ' refined-workspace' : ''}${location.pathname === '/evaluations' ? ' evaluation-page-shell' : ''}`}>
       <aside className="sidebar">
         <NavLink to="/dashboard" className="brand"><img className="brand-mark-img" src={devrankMark} alt=""/><span>devrank<span className="brand-period">.</span></span></NavLink>
         <div className="workspace-label">HOME</div>
