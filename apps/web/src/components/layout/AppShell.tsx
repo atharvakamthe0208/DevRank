@@ -30,7 +30,7 @@ export function AppShell() {
     <div className={`app-shell${location.pathname === '/dashboard' || /^\/evaluations\/[^/]+\/analysis$/.test(location.pathname) ? ' refined-workspace' : ''}`}>
       <aside className="sidebar">
         <NavLink to="/dashboard" className="brand"><img className="brand-mark-img" src={devrankMark} alt=""/><span>devrank<span className="brand-period">.</span></span></NavLink>
-        <div className="workspace-label">WORKSPACE</div>
+        <div className="workspace-label">HOME</div>
         <nav className="side-nav" aria-label="Main navigation">
           {navItems.map((item) => {
             const isCandidatePage = item.to === '/dashboard/candidates' && location.pathname.startsWith('/candidates/');

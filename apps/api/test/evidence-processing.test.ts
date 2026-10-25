@@ -168,7 +168,7 @@ describe('evidence validation, normalization, mapping, and scoring integration',
     for (const input of candidates) {
       const result = processCandidateEvidence(input);
       expect(result.rejectedEvidence).toEqual([]);
-      expect(result.evaluation.scoringVersion).toBe('4.0.0');
+      expect(result.evaluation.scoringVersion).toBe('4.0.1');
       expect(result.evaluation.evaluationStatus).toBe('insufficient_evidence');
       expect(result.evaluation.overallScore).toBeUndefined();
       expect(result.unmappedEvidence.length).toBeGreaterThan(0);

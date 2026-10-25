@@ -78,6 +78,7 @@
   --workspace-navy: #101a2d;
   --workspace-indigo: #5548e9;
   --workspace-blue: #2864f0;
+  --workspace-blue-hover: #2058db;
   --workspace-tint: #f3f5ff;
   --workspace-border: #e1e7f2;
   --workspace-muted: #718098;
@@ -187,8 +188,8 @@
 .app-shell .candidate-form-actions { border-color: #e7ebf3; }
 .app-shell .candidate-form-actions .secondary-button { border-color: #dce4f0; border-radius: 7px; background: #fff; color: #52627c; transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease; }
 .app-shell .candidate-form-actions .secondary-button:hover { border-color: #b9c5da; background: #f7f9fd; color: #253550; }
-.app-shell .candidate-form-actions .primary-button { min-height: 42px; border-color: #4058e8; border-radius: 7px; background: #4058e8; box-shadow: 0 4px 11px #4058e821; transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease; }
-.app-shell .candidate-form-actions .primary-button:hover { transform: translateY(-1px); background: #334bd1; box-shadow: 0 7px 15px #4058e82b; }
+.app-shell .candidate-form-actions .primary-button { min-height: 42px; border-color: var(--workspace-blue); border-radius: 7px; background: var(--workspace-blue); box-shadow: 0 4px 11px #2864f021; transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease; }
+.app-shell .candidate-form-actions .primary-button:hover { transform: translateY(-1px); border-color: var(--workspace-blue-hover); background: var(--workspace-blue-hover); box-shadow: 0 7px 15px #2864f02b; }
 .app-shell .candidate-form-actions .primary-button:focus-visible { outline: 3px solid #8695ff; outline-offset: 3px; }
 .app-shell .candidate-form-field input:focus-visible { outline: none; }
 .app-shell .candidate-management-page > .back-link { color: #516485; }

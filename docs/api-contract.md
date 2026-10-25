@@ -10,7 +10,7 @@ Shared Zod schemas and inferred types live in `packages/contracts/src`. Import t
 - Errors use `{ "error": { "code": "...", "message": "...", "details": ... } }`. `details` is optional and contains field paths/messages for validation failures only.
 - Unknown routes return HTTP 404 with code `NOT_FOUND`. Malformed JSON returns HTTP 400 with code `INVALID_JSON`. Unexpected errors do not expose exception messages or stacks.
 - Zod body validators are registered on routes with `validateBody(schema)`; query and path inputs use `validateQuery` and `validateParams`.
-- New evaluations use six active GitHub + LeetCode categories under schema/scoring version `4.0.0`; category weights and deterministic source-specific formulas are documented in `docs/scoring-rules.md`. Historical v1/v2/v3 snapshots are read-only and are never recalculated or converted as v4.
+- New evaluations use six active GitHub + LeetCode categories under schema version `4.0.0` and scoring version `4.0.1`; category weights and deterministic source-specific formulas are documented in `docs/scoring-rules.md`. Historical v4.0.0 and v1/v2/v3 snapshots are read-only and are never recalculated or converted as v4.0.1.
 
 ## Authentication
 

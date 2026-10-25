@@ -35,6 +35,7 @@ describe('proposed rubric and contribution panel', () => {
     expect(html).toContain('GitHub');
     expect(html).toContain('LeetCode');
     expect(html).toContain('Sync LeetCode');
+    expect(html).toMatch(/<form class="platform-data-form github-sync-form leetcode-sync-form"[\s\S]*?<label>LeetCode username or profile URL<input[\s\S]*?<\/label><button class="primary-button" type="submit"/);
     expect(html).not.toContain('Save LeetCode profile');
   });
 
