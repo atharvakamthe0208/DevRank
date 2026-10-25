@@ -28,5 +28,5 @@ export function workspaceBreadcrumbs(pathname: string, labels: { candidateName?:
     if (evaluation[2]) return [root, parent, { label: evaluationLabel, to: `/evaluations/${evaluation[1]}` }, current('AI Analysis')];
     return [root, parent, current(evaluationLabel)];
   }
-  return [root, current('Overview')];
+  return [root, current('Home')];
 }

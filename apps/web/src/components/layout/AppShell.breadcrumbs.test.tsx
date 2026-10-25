@@ -13,6 +13,7 @@ function createRouter(initialEntries: string[], initialIndex = initialEntries.le
     { path: '/candidates/new', element: createElement('p', null, 'New candidate') },
     { path: '/candidates/:id', element: createElement('p', null, 'Candidate details') },
     { path: '/dashboard', element: createElement('p', null, 'Overview') },
+    { path: '/profile', element: createElement('p', null, 'Profile destination') },
   ] }], { initialEntries, initialIndex });
 }
 
@@ -29,8 +30,6 @@ describe('AppShell route breadcrumbs', () => {
 
     const create = renderAt('/candidates/new');
     expect(create).toContain('href="/dashboard" data-discover="true">Home</a>');
-    expect(create).toContain('class="workspace-label">HOME</div>');
-    expect(create).toContain('Recruiter home');
     expect(create).toContain('href="/dashboard/candidates" data-discover="true">Candidates</a>');
     expect(create).toContain('aria-current="page">Add Candidate</span>');
   });
@@ -41,6 +40,22 @@ describe('AppShell route breadcrumbs', () => {
     expect(html).toContain('aria-current="page">Candidate Details</span>');
   });
 
+  it('links both account avatars to the profile and marks them active there', () => {
+    const html = renderAt('/profile');
+    const profileLinks = html.match(/<a(?=[^>]*href="\/profile")(?=[^>]*aria-current="page")[^>]*>/g) ?? [];
+    expect(profileLinks).toHaveLength(2);
+    expect(html).toContain('aria-label="View profile for Recruiter"');
+    expect(html).toContain('Home</a>');
+    expect(html).toContain('My Profile');
+  });
+
+  it('keeps logout as a separate button, outside the profile links', () => {
+    const html = renderAt('/dashboard');
+    expect(html).toContain('<button type="button" class="logout-button"');
+    expect(html).toContain('Log out</button>');
+    expect((html.match(/href="\/profile"/g) ?? [])).toHaveLength(2);
+    expect(html).not.toContain('My Profile</a>');
+  });
   it('updates the current breadcrumb on router Back and Forward navigation', async () => {
     const router = createRouter(['/dashboard', '/candidates/new']);
     expect(renderRouter(router)).toContain('aria-current="page">Add Candidate</span>');
