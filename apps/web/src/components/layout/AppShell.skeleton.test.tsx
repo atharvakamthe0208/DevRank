@@ -31,5 +31,7 @@ describe('workspace navigation loading', () => {
     const navPositions = navLabels.map((label) => html.indexOf('<span class="nav-label">' + label + '</span>'));
     expect(navPositions.every((position) => position >= 0)).toBe(true);
     expect(navPositions).toEqual([...navPositions].sort((left, right) => left - right));
+    expect((html.match(/class="nav-icon"><svg/g) ?? [])).toHaveLength(5);
+    expect(html).toContain('stroke="currentColor"');
   });
 });

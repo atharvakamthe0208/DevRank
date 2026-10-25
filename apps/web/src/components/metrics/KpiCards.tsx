@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import './kpi-cards.css';
 
 function formatted(value: number, decimals: number): string {
@@ -90,7 +90,7 @@ export function KpiCard({ label, value, detail, icon, decimals = 0, suffix = '',
   label: string;
   value?: number;
   detail: string;
-  icon: string;
+  icon: ReactNode;
   decimals?: number;
   suffix?: string;
   progress?: { value: number; max: number; label: string };

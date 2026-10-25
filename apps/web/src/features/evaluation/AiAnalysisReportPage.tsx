@@ -102,11 +102,6 @@ export function AiAnalysisReportPage() {
   return <AiAnalysisReportView response={state.response} evaluation={currentEvaluation.data} candidateName={state.candidate.name} candidateEmail={state.candidate.email} analysisLoading={state.analysisStatus === 'loading'} analysisError={state.analysisStatus === 'error' ? state.analysisMessage : undefined} analysisRetryAt={state.analysisRetryAt} onRetry={() => void retryAnalysis()}/>;
 }
 
-function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength).trimEnd()}…`;
-}
-
 function formatRoleLabel(role: string): string {
   return role.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 }
@@ -213,20 +208,6 @@ export function AiAnalysisReportView({ response, evaluation: evaluationProp, can
 
             <p className="ai-report-summary-text">{analysis.summary}</p>
 
-            <div className="ai-report-chips-row">
-              {analysis.strengths[0] && (
-                <span className="ai-report-chip chip-strength">
-                  <span className="chip-dot dot-green" aria-hidden="true" />
-                  Top strength: {truncateText(analysis.strengths[0].text, 48)}
-                </span>
-              )}
-              {analysis.weaknesses[0] && (
-                <span className="ai-report-chip chip-growth">
-                  <span className="chip-dot dot-amber" aria-hidden="true" />
-                  Development focus: {truncateText(analysis.weaknesses[0].text, 48)}
-                </span>
-              )}
-            </div>
           </section>
 
           <section aria-labelledby="detailed-insights-title">

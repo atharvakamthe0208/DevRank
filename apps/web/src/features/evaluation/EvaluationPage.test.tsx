@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { aiAnalysisResponseSchema, buildFinalEvaluationReport, evaluationResponseSchema, evaluationRunResponseSchema, parseProposedPlatformEvidence, persistedEvaluationSchema, scoringCategories, type AiAnalysisResponse, type EvaluationRunResponse } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
-import { AiAnalysisSummary, EvaluationRunResult } from './EvaluationPage';
+import { AiAnalysisSummary, EvaluationRunResult, EvaluationSetupCardHeading, EvaluationSetupHeader } from './EvaluationPage';
 import { AiAnalysisReportView } from './AiAnalysisReportPage';
 import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 
@@ -70,6 +70,23 @@ function completedAnalysis(): AiAnalysisResponse {
 function renderEvaluationRunResult(props: Parameters<typeof EvaluationRunResult>[0]) {
   return renderToStaticMarkup(createElement(MemoryRouter, null, createElement(EvaluationRunResult, props)));
 }
+
+describe('evaluation setup headings', () => {
+  it('keeps one concise page title, candidate action, and secondary form heading', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null,
+      createElement('div', null,
+        createElement(EvaluationSetupHeader, { returnToCandidate: null, onBackToCandidate: () => undefined }),
+        createElement(EvaluationSetupCardHeading),
+      ),
+    ));
+    expect(html).toContain('<h1>Evaluation</h1>');
+    expect(html).toContain('<h2>Evaluation</h2>');
+    expect(html).toContain('View candidates');
+    expect(html).toContain('Select a candidate and role. Scores use saved provider snapshots.');
+    expect(html).not.toContain('CANDIDATE ASSESSMENT');
+    expect(html).not.toContain('Run final rubric evaluation');
+  });
+});
 
 describe('evaluation run result', () => {
   it('shows the finalized v4 category result from the saved snapshot', () => {
@@ -208,6 +225,9 @@ describe('evaluation run result', () => {
     expect(html).toContain('Recommended Next Steps');
     expect(html).toContain('Strength 1 grounded in saved evidence.');
     expect(html).toContain('Strength 3 grounded in saved evidence.');
+    expect((html.match(/Strength 1 grounded in saved evidence\./g) ?? [])).toHaveLength(1);
+    expect(html).not.toContain('Top strength:');
+    expect(html).not.toContain('Development focus:');
     expect(html).not.toContain('Strength 4 grounded in saved evidence.');
     expect(html).toContain('The history is incomplete.');
     expect(html).toContain('Recommendation 4 grounded in saved evidence.');

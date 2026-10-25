@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+import { DashboardWelcome } from './DashboardPage';
 import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
 
 describe('dashboard presentation', () => {
+  it('keeps the welcome and primary action without a date label', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(DashboardWelcome, { firstName: 'Atharva' })));
+    expect(html).toContain('<h1>Welcome, Atharva</h1>');
+    expect(html).toContain('A clear view of your candidates and evaluation workload.');
+    expect(html).toContain('href="/candidates/new"');
+    expect(html).toContain('Add candidate');
+    expect(html).not.toContain('Monday');
+    expect(html).not.toContain('October');
+  });
+
   it('shows canonical role labels for roles retrieved from saved evaluation details', () => {
     expect(dashboardRoleLabel('software_developer')).toBe('Software Developer');
     expect(dashboardRoleLabel('ai_ml_engineer')).toBe('AI/ML Engineer');

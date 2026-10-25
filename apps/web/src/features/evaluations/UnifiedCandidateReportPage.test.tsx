@@ -74,6 +74,9 @@ describe('unified candidate report view', () => {
     expect(html).toContain('67/100');
     expect(html).toContain('Download / Print PDF');
     expect(html).toContain('Evidence &amp; methodology');
+    expect(html).toContain('Report generated');
+    expect(html).toContain('Decision support only. Saved evidence does not establish candidate identity, engineering competence, or hiring suitability.');
+    expect(html).not.toContain('>Generated ');
     expect(html).toContain('Data reliability and freshness');
     expect(html).toContain('Evidence coverage');
     expect(html).toContain('GitHub repository coverage');

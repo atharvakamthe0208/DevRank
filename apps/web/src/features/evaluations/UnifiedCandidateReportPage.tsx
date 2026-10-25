@@ -223,6 +223,6 @@ export function UnifiedCandidateReportView({ report, selectedResumeId = '', link
       </div>
     </details>
 
-    <footer className="unified-report-footer">Generated {date(report.generatedAt)}. Scores summarize saved evidence and are decision support only; they do not establish identity, competence, or hiring suitability.</footer>
+    <footer className="unified-report-footer">Decision support only. Saved evidence does not establish candidate identity, engineering competence, or hiring suitability.</footer>
   </main>;
 }

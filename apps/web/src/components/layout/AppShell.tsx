@@ -4,15 +4,16 @@ import { useAuth } from '../../features/auth/AuthProvider';
 import devrankMark from '../../assets/devrank-mark.svg';
 import { WorkspaceBreadcrumbContext } from './WorkspaceBreadcrumbContext';
 import { workspaceBreadcrumbs } from './workspace-breadcrumbs';
+import { WorkspaceIcon } from '../icons/WorkspaceIcon';
 import './workspace-breadcrumbs.css';
 
 const navItems = [
-  { to: '/dashboard', label: 'Overview', icon: '⌂' },
-  { to: '/dashboard/candidates', label: 'Candidates', icon: '♙' },
-  { to: '/evaluations', label: 'Evaluations', icon: '◉' },
-  { to: '/dashboard/reports', label: 'Insights', icon: '▤' },
-  { to: '/screening', label: 'Resume Screening', icon: '▧' },
-];
+  { to: '/dashboard', label: 'Overview', icon: 'overview' },
+  { to: '/dashboard/candidates', label: 'Candidates', icon: 'candidates' },
+  { to: '/evaluations', label: 'Evaluations', icon: 'evaluations' },
+  { to: '/dashboard/reports', label: 'Insights', icon: 'insights' },
+  { to: '/screening', label: 'Resume Screening', icon: 'screening' },
+] as const;
 
 export function AppShell() {
   const location = useLocation();
@@ -34,7 +35,7 @@ export function AppShell() {
         <nav className="side-nav" aria-label="Main navigation">
           {navItems.map((item) => {
             const isCandidatePage = item.to === '/dashboard/candidates' && location.pathname.startsWith('/candidates/');
-            return <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'} aria-label={item.label} title={item.label} aria-current={isCandidatePage ? 'page' : undefined} className={({ isActive }) => `nav-link${isActive || isCandidatePage ? ' active' : ''}`}><span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span></NavLink>;
+            return <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'} aria-label={item.label} title={item.label} aria-current={isCandidatePage ? 'page' : undefined} className={({ isActive }) => `nav-link${isActive || isCandidatePage ? ' active' : ''}`}><span className="nav-icon"><WorkspaceIcon name={item.icon}/></span><span className="nav-label">{item.label}</span></NavLink>;
           })}
         </nav>
         <div className="sidebar-bottom">
