@@ -82,7 +82,7 @@ describe('evaluation setup headings', () => {
     expect(html).toContain('<h1>Evaluation</h1>');
     expect(html).toContain('<h2>Evaluation</h2>');
     expect(html).toContain('View candidates');
-    expect(html).toContain('Select a candidate and role. Scores use saved provider snapshots.');
+    expect(html).toContain('Select a candidate and role.');
     expect(html).not.toContain('CANDIDATE ASSESSMENT');
     expect(html).not.toContain('Run final rubric evaluation');
   });
@@ -101,7 +101,7 @@ describe('evaluation run result', () => {
     expect(html).toContain('Overall score');
     expect(html).toContain('Score withheld');
     expect(html).toContain('An overall score is withheld because the available evidence is insufficient.');
-    expect(html).toContain('should support—not replace—interviews and work samples');
+    expect(html).not.toContain('Scores reflect available public evidence and should support—not replace—interviews and work samples.');
     expect(html).not.toContain('out of 100</small>');
     expect(html).toContain('View evidence');
     expect(html).toContain('Generate AI analysis');
