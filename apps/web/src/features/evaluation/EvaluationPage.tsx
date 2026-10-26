@@ -22,10 +22,18 @@ import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescript
 import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 import { formatEvidenceDate, readableProvenance } from './evidence-presentation';
 import { acquireEvaluationRun, ALL_CANDIDATES_ID, bulkEvaluationStatusLabel, bulkEvaluationSummary, candidateOptions, runBulkEvaluations, type BulkEvaluationItem, type BulkEvaluationSnapshot } from './bulk-evaluation';
+import { SessionDraftNotice } from '../../lib/forms/SessionDraftNotice';
+import { useSessionDraft } from '../../lib/forms/useSessionDraft';
 import './evaluation-page.css';
 import '../evaluations/evaluation.css';
 
 type PageState = 'loading' | 'ready' | 'error';
+type EvaluationSetupDraft = { candidateId: string; roleId: string };
+function isEvaluationSetupDraft(value: unknown): value is EvaluationSetupDraft {
+  return typeof value === 'object' && value !== null
+    && 'candidateId' in value && typeof value.candidateId === 'string' && value.candidateId.length <= 128
+    && 'roleId' in value && typeof value.roleId === 'string' && value.roleId.length <= 128;
+}
 
 export function EvaluationSetupHeader({ returnToCandidate, onBackToCandidate }: { returnToCandidate: string | null; onBackToCandidate: (event: MouseEvent<HTMLAnchorElement>) => void }) {
   return <section className="evaluation-heading">
@@ -73,8 +81,12 @@ export function EvaluationPage() {
   const [loadError, setLoadError] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [roles, setRoles] = useState<EvaluationRole[]>([]);
-  const [candidateId, setCandidateId] = useState(preselectedCandidateId);
-  const [roleId, setRoleId] = useState<EvaluationRole['id'] | ''>((searchParams.get('roleId') as EvaluationRole['id'] | null) ?? '');
+  const initialSelection: EvaluationSetupDraft = { candidateId: preselectedCandidateId, roleId: searchParams.get('roleId') ?? '' };
+  const { value: selection, status: draftStatus, persisted, setValue: setSelection, initialize: initializeSelection, clear: clearDraft } = useSessionDraft(session?.user?.id, 'evaluation:setup', initialSelection, isEvaluationSetupDraft);
+  const candidateId = selection.candidateId;
+  const roleId = selection.roleId as EvaluationRole['id'] | '';
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const [selectionEdited, setSelectionEdited] = useState(false);
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
@@ -88,7 +100,7 @@ export function EvaluationPage() {
   const [analysisError, setAnalysisError] = useState('');
   const [analysisRetryAt, setAnalysisRetryAt] = useState<number>();
   const analysisRequestRef = useRef(false);
-  useUnsavedChangesBlocker(selectionEdited && !running, 'You changed the evaluation selections. Leave this page and discard those choices?');
+  useUnsavedChangesBlocker(selectionEdited && !running, 'Your evaluation selections are kept as a draft in this browser tab. Leave this page?');
   const returnToCandidate = safeEvaluationReturn((location.state as { returnTo?: unknown } | null)?.returnTo);
   function backToCandidate(event: MouseEvent<HTMLAnchorElement>) {
     if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && returnToCandidate) {
@@ -136,11 +148,15 @@ export function EvaluationPage() {
         const selectedCandidate = candidateItems.some(({ id }) => id === preselectedCandidateId)
           ? preselectedCandidateId
           : (candidateItems[0]?.id ?? '');
-        setCandidateId(selectedCandidate);
         const chosenRole = parsedRoles.roles.some(({ id }) => id === (searchParams.get('roleId') ?? ''))
           ? (searchParams.get('roleId') as EvaluationRole['id'])
           : (parsedRoles.roles[0]?.id || '');
-        setRoleId(chosenRole);
+        const defaults = { candidateId: selectedCandidate, roleId: chosenRole };
+        const saved = selectionRef.current;
+        const candidateValid = !saved.candidateId || saved.candidateId === ALL_CANDIDATES_ID || candidateItems.some(({ id }) => id === saved.candidateId);
+        const roleValid = !saved.roleId || parsedRoles.roles.some(({ id }) => id === saved.roleId);
+        if (candidateValid && roleValid) initializeSelection(defaults);
+        else clearDraft(defaults);
 
         if (preselectedCandidateId && candidateItems.some(({ id }) => id === preselectedCandidateId)) {
           try {
@@ -178,19 +194,19 @@ export function EvaluationPage() {
     }
     void load();
     return () => { active = false; };
-  }, [session?.access_token, loadAttempt]);
+  }, [session?.access_token, loadAttempt, initializeSelection, clearDraft]);
 
   useEffect(() => {
     if (candidates.some(({ id }) => id === preselectedCandidateId) && candidateId !== preselectedCandidateId) {
-      setCandidateId(preselectedCandidateId);
+      setSelection((current) => ({ ...current, candidateId: preselectedCandidateId }));
     }
-  }, [preselectedCandidateId, candidates, candidateId]);
+  }, [preselectedCandidateId, candidates, candidateId, setSelection]);
   const preselectedRoleId = searchParams.get('roleId') ?? '';
   useEffect(() => {
     if (roles.some(({ id }) => id === preselectedRoleId) && roleId !== preselectedRoleId) {
-      setRoleId(preselectedRoleId as EvaluationRole['id']);
+      setSelection((current) => ({ ...current, roleId: preselectedRoleId }));
     }
-  }, [preselectedRoleId, roles, roleId]);
+  }, [preselectedRoleId, roles, roleId, setSelection]);
 
   async function executeEvaluation(candidateToRun = candidateId, roleToRun = roleId) {
     if (runningRef.current) return;
@@ -326,6 +342,12 @@ export function EvaluationPage() {
           ) : (
             <form className="evaluation-panel evaluation-form" onSubmit={handleFormSubmit}>
               <EvaluationSetupCardHeading/>
+              <SessionDraftNotice status={draftStatus} persisted={persisted} onDiscard={() => {
+                const defaults = { candidateId: candidates.find(({ id }) => id === preselectedCandidateId)?.id ?? candidates[0]?.id ?? '', roleId: roles.find(({ id }) => id === preselectedRoleId)?.id ?? roles[0]?.id ?? '' };
+                clearDraft(defaults);
+                updateSelectionParams(defaults.candidateId, defaults.roleId);
+                setSelectionEdited(false);
+              }}/>
               {candidates.length === 0 ? (
                 <div className="evaluation-empty">
                   <h3>No candidates available</h3>
@@ -342,7 +364,7 @@ export function EvaluationPage() {
                       disabled={running}
                       value={candidateId}
                       onChange={(event) => {
-                        setCandidateId(event.target.value);
+                        setSelection((current) => ({ ...current, candidateId: event.target.value }));
                         updateSelectionParams(event.target.value, roleId);
                         setSelectionEdited(true);
                         setResult(null);
@@ -367,7 +389,7 @@ export function EvaluationPage() {
                       value={roleId}
                       onChange={(event) => {
                         const value = event.target.value as EvaluationRole['id'];
-                        setRoleId(value);
+                        setSelection((current) => ({ ...current, roleId: value }));
                         updateSelectionParams(candidateId, value);
                         setSelectionEdited(true);
                         setResult(null);
