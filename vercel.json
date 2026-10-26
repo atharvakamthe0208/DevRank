@@ -3,5 +3,11 @@
   "framework": "vite",
   "installCommand": "npm ci",
   "buildCommand": "npm run build --workspace @devrank/contracts && npm exec --workspace @devrank/web -- vite build",
-  "outputDirectory": "apps/web/dist"
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    {
+      "source": "/((?!api(?:/|$)|.*\\.).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
