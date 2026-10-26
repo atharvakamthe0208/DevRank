@@ -83,7 +83,7 @@ export function AddCandidatePage() {
   return <div className="candidate-management-page"><Link className="back-link" to={returnPath} state={backState} replace onClick={backToList}>← <span>Back to candidates</span></Link><section className="candidate-form-card"><div className="candidate-form-heading"><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE MANAGEMENT</span><h1>Add candidate</h1><p className="page-subtitle">Add a candidate’s contact information and developer profile usernames.</p></div><form className="candidate-form" onSubmit={submit} noValidate>
       {field('name', 'Full name', 'text', true, 'Candidate name')}
       {field('email', 'Email address', 'email', false, 'name@example.com')}
-      <div className="candidate-form-divider"><span>Developer profiles</span><small>Optional · enter usernames, not profile URLs</small></div>
+      <div className="candidate-form-divider"><span>Developer profiles</span></div>
       {field('githubUsername', <span className="platform-field-label"><PlatformLogo platform="github"/>GitHub username</span>, 'text', false, 'e.g. octocat')}
       {field('leetcodeUsername', <span className="platform-field-label"><PlatformLogo platform="leetcode"/>LeetCode username</span>, 'text', false, 'e.g. leetcode_user')}
       {message && <p className="form-feedback form-feedback-error candidate-form-message" role="alert">{message}</p>}

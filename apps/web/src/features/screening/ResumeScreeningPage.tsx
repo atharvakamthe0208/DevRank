@@ -334,7 +334,7 @@ export function ResumeScreeningPage() {
         <section className="screening-panel" aria-labelledby="screening-job-title">
           <div className="screening-panel-heading">
             <span className="screening-step">01</span>
-            <div><h2 id="screening-job-title">Job details</h2><p>Set the role context shared by every resume in this screening session.</p></div>
+            <div><h2 id="screening-job-title">Job details</h2></div>
           </div>
           <div className="screening-job-layout">
             <div className="screening-job-fields">
@@ -387,7 +387,7 @@ export function ResumeScreeningPage() {
       <section className="screening-panel screening-results-panel" aria-labelledby="screening-results-title">
         <div className="screening-panel-heading">
           <span className="screening-step">03</span>
-          <div><h2 id="screening-results-title">Screening status and results</h2><p>Only server-returned, validated screening data is shown here.</p></div>
+          <div><h2 id="screening-results-title">Screening status and results</h2></div>
         </div>
           {submitted ? <>
           <p className="screening-session-status" role="status">Session {submitted.sessionId} · {details?.status ?? submitted.status}</p>

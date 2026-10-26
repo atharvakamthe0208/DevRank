@@ -132,7 +132,7 @@ export function DashboardPage() {
 
     <section className="dashboard-panel dashboard-proposal-panel" aria-labelledby="proposal-indexes-title">
       <details>
-        <summary><span><span className="dashboard-kicker">DRAFT EVIDENCE · SEPARATE FROM SCORING</span><strong id="proposal-indexes-title" className="dashboard-platform-title"><span className="platform-heading"><PlatformLogo platform="github"/>GitHub</span><span>+</span><span className="platform-heading"><PlatformLogo platform="leetcode"/>LeetCode</span><span>evidence indexes</span></strong><small>Draft indexes only · not active evaluation scores or rankings</small></span><span className="dashboard-disclosure" aria-hidden="true">＋</span></summary>
+        <summary><span><strong id="proposal-indexes-title" className="dashboard-platform-title"><span className="platform-heading"><PlatformLogo platform="github"/>GitHub</span><span>+</span><span className="platform-heading"><PlatformLogo platform="leetcode"/>LeetCode</span><span>evidence indexes</span></strong></span><span className="dashboard-disclosure" aria-hidden="true">＋</span></summary>
         {loading ? <p className="dashboard-state" role="status">Loading saved proposal indexes…</p> : error ? <div className="dashboard-state" role="alert"><p>Proposal indexes could not be loaded.</p><button className="dashboard-secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : dashboard && <ActiveDashboardReports evaluations={dashboard.recentEvaluations.slice(0, 3)}/>}
       </details>
     </section>

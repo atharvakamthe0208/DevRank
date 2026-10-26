@@ -40,7 +40,7 @@ export function EvaluationSetupCardHeading() {
   return <div className="evaluation-panel-heading">
     <div>
       <h2>Evaluation</h2>
-      <p>Select a candidate and role. Scores use saved provider snapshots.</p>
+      <p>Select a candidate and role.</p>
     </div>
   </div>;
 }
@@ -399,7 +399,6 @@ export function EvaluationPage() {
                         ))}
                       </ul>
                     )}
-                    <p>These are the selected role’s saved weights for the active scoring version.</p>
                   </details>
                   <button className="primary-button" type="submit" disabled={running || !candidateId || !roleId}>
                     {running ? candidateId === ALL_CANDIDATES_ID ? 'Evaluating candidates…' : 'Running evaluation…' : candidateId === ALL_CANDIDATES_ID ? 'Run Evaluation for All' : 'Run Evaluation'}
@@ -629,14 +628,6 @@ export function EvaluationRunResult({
               ? 'Weighted summary of the saved category evidence for this role.'
               : 'An overall score is withheld because the available evidence is insufficient.'}
           </p>
-          <p className="evaluation-overall-disclaimer">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            <span>Scores reflect available public evidence and should support—not replace—interviews and work samples.</span>
-          </p>
         </div>
       </section>
 
@@ -733,7 +724,6 @@ export function EvaluationRunResult({
             <span className="eyebrow"><span className="eyebrow-line" /> EVIDENCE-GROUNDED EXPLANATION</span>
             <h3 id="ai-analysis-title">AI Candidate Insights</h3>
             <p>Key strengths and recommended next steps.</p>
-            <p className="ai-analysis-authority-note">AI explanations are separate from the saved deterministic scores.</p>
           </div>
           <div className="ai-analysis-actions">
             <AiAnalysisRetryButton
