@@ -1,4 +1,8 @@
 /* Layout refinements use the existing DevRank light palette from styles.css. */
+.form-draft-notice{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0;padding:9px 12px;border:1px solid #dce3f2;border-radius:6px;background:#f5f7ff;color:#52617c;font-size:var(--type-supporting);line-height:1.45}
+.form-draft-notice .text-button{flex:none;color:var(--workspace-blue);font-size:inherit;font-weight:600}
+.form-draft-notice .text-button:focus-visible{outline:2px solid var(--workspace-blue);outline-offset:3px;border-radius:2px}
+@media(max-width:480px){.form-draft-notice{align-items:flex-start;flex-direction:column}}
 .app-shell .page-content { padding-top: 30px; }
 .app-shell .page-content :is(.candidate-management-heading, .candidate-form-heading, .dashboard-hero, .evaluation-heading, .evaluation-header, .insights-heading, .resume-screening-heading, .recruiter-profile-heading) :is(h1 + .page-subtitle, h1 + p) { margin-top: 4px; }
 .app-shell .page-content .candidate-form-heading > .eyebrow,

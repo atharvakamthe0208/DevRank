@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
+import { SessionDraftNotice } from '../../lib/forms/SessionDraftNotice';
+import { useSessionDraft } from '../../lib/forms/useSessionDraft';
 import './recruiter-profile-page.css';
 
 const recruiterProfileSchema = z.object({
@@ -24,6 +26,19 @@ export type ProfileFormValues = {
 const emptyForm: ProfileFormValues = {
   displayName: '', phoneNumber: '', companyName: '', jobTitle: '', companyWebsite: '', locationCity: '', locationCountry: '',
 };
+function isProfileDraft(value: unknown): value is ProfileFormValues {
+  const fields: (keyof ProfileFormValues)[] = ['displayName', 'phoneNumber', 'companyName', 'jobTitle', 'companyWebsite', 'locationCity', 'locationCountry'];
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return fields.every((field) => typeof record[field] === 'string')
+    && (record.displayName as string).length <= 120
+    && (record.phoneNumber as string).length <= 32
+    && (record.companyName as string).length <= 150
+    && (record.jobTitle as string).length <= 150
+    && (record.companyWebsite as string).length <= 2048
+    && (record.locationCity as string).length <= 100
+    && (record.locationCountry as string).length <= 100;
+}
 
 export function valuesFromProfile(identity: RecruiterIdentity): ProfileFormValues {
   const profile = identity.profile;
@@ -110,7 +125,7 @@ function profileUpdatePayload(form: ProfileFormValues): Omit<RecruiterProfileUpd
 export function RecruiterProfilePage() {
   const { session, refresh } = useAuth();
   const [identity, setIdentity] = useState<RecruiterIdentity | null>(null);
-  const [form, setForm] = useState<ProfileFormValues>(emptyForm);
+  const { value: form, status: draftStatus, persisted, setValue: setForm, initialize: initializeForm, clear: clearDraft } = useSessionDraft(session?.user?.id, 'recruiter-profile', emptyForm, isProfileDraft);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -125,22 +140,28 @@ export function RecruiterProfilePage() {
       try {
         if (!session?.access_token) throw new Error('Your authenticated session is unavailable. Sign in again to load your profile.');
         const result = recruiterProfileSchema.parse(await apiRequest<unknown>('/auth/me', undefined, session.access_token));
-        if (active) { setIdentity(result); setForm(valuesFromProfile(result)); }
+        if (active) { setIdentity(result); initializeForm(valuesFromProfile(result)); }
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : 'Your recruiter profile could not be loaded.');
       } finally { if (active) setLoading(false); }
     }
     void load();
     return () => { active = false; };
-  }, [session?.access_token, attempt]);
+  }, [session?.access_token, attempt, initializeForm]);
 
   function updateField(field: keyof ProfileFormValues, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
   function cancelEdit() {
-    if (identity) setForm(valuesFromProfile(identity));
+    if (identity) clearDraft(valuesFromProfile(identity));
     setEditing(false); setError('');
+  }
+
+  function discardDraft() {
+    if (identity) clearDraft(valuesFromProfile(identity));
+    setError('');
+    setNotice('');
   }
 
   async function save(event: FormEvent) {
@@ -158,7 +179,8 @@ export function RecruiterProfilePage() {
       const result = recruiterProfileSchema.parse(await apiRequest<unknown>('/auth/me', {
         method: 'PATCH', body: JSON.stringify(parsed.data),
       }, session.access_token));
-      setIdentity(result); setForm(valuesFromProfile(result)); setEditing(false);
+      const savedValues = valuesFromProfile(result);
+      setIdentity(result); clearDraft(savedValues); setEditing(false);
       setNotice('Your recruiter profile was saved.');
       await refresh();
     } catch (cause) {
@@ -174,13 +196,14 @@ export function RecruiterProfilePage() {
       : error && !identity ? <section className="recruiter-profile-state" role="alert"><p>{error}</p><button className="secondary-button recruiter-retry" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></section>
       : !identity || !profile ? <section className="recruiter-profile-state" role="alert"><h2>Profile unavailable</h2><p>Your signed-in account does not have a recruiter profile.</p></section>
       : <>
+        {draftStatus && <SessionDraftNotice status={draftStatus} persisted={persisted} onDiscard={discardDraft}/>}
         {error && <p className="form-feedback form-feedback-error" role="alert">{error}</p>}
         {notice && <p className="form-feedback" role="status">{notice}</p>}
         <section className="recruiter-profile-card" aria-labelledby="recruiter-profile-name">
           <div className="recruiter-profile-avatar" aria-label={`${profile.display_name || 'Recruiter'} profile initials`}>{recruiterInitials(profile.display_name)}</div>
           <div className="recruiter-profile-main">
             <div className="recruiter-profile-title"><div><span className="recruiter-profile-kicker">RECRUITER ACCOUNT</span><h2 id="recruiter-profile-name">{profile.display_name || 'Name not provided'}</h2><div className="recruiter-profile-badges"><span className="recruiter-profile-role">{profile.role === 'admin' ? 'Administrator' : 'Recruiter'}</span><span className={`recruiter-profile-access is-${profile.approval_status}`}><i aria-hidden="true"/>{profile.approval_status === 'approved' ? 'Approved access' : profile.approval_status[0].toUpperCase() + profile.approval_status.slice(1)}</span></div></div>
-              {!editing && <button className="secondary-button recruiter-edit" type="button" onClick={() => { setForm(valuesFromProfile(identity)); setError(''); setNotice(''); setEditing(true); }}>Edit profile</button>}
+              {!editing && <button className="secondary-button recruiter-edit" type="button" onClick={() => { setError(''); setNotice(''); setEditing(true); }}>Edit profile</button>}
             </div>
             {editing ? <RecruiterProfileEditForm form={form} email={identity.user.email} saving={saving} onFieldChange={updateField} onSubmit={(event) => void save(event)} onCancel={cancelEdit}/> : <RecruiterProfileFields identity={identity}/>}
           </div>
