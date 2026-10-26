@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import devrankMark from '../../assets/devrank-mark.svg';
 import { WorkspaceIcon } from '../../components/icons/WorkspaceIcon';
@@ -49,8 +49,30 @@ function ProductPreview({ activeTab }: { activeTab: PreviewTab }) {
 export function PublicLandingPage() {
   const [activeTab, setActiveTab] = useState<PreviewTab>('candidates');
   const [menuOpen, setMenuOpen] = useState(false);
+  const landingRef = useRef<HTMLElement>(null);
   const tabRefs = useRef<Record<PreviewTab, HTMLButtonElement | null>>({ candidates: null, evaluations: null, insights: null });
   const closeMenu = () => setMenuOpen(false);
+
+  useEffect(() => {
+    const landing = landingRef.current;
+    if (!landing || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) return;
+
+    const sections = Array.from(landing.querySelectorAll<HTMLElement>('[data-landing-reveal]'));
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add('landing-reveal-visible');
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: 0.12, rootMargin: '0px 0px -24px 0px' });
+
+    for (const section of sections) {
+      section.classList.add('landing-reveal-ready');
+      observer.observe(section);
+    }
+
+    return () => observer.disconnect();
+  }, []);
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const currentIndex = previewTabs.findIndex((tab) => tab.id === activeTab);
     const nextIndex = event.key === 'ArrowRight' ? (currentIndex + 1) % previewTabs.length
@@ -64,7 +86,7 @@ export function PublicLandingPage() {
   };
 
   return (
-    <main className="public-landing">
+    <main className="public-landing" ref={landingRef}>
       <header className="landing-nav-wrap">
         <nav className="landing-nav" aria-label="Public navigation">
           <Link className="landing-brand" to="/" aria-label="DevRank home"><img src={devrankMark} alt=""/><span>devrank<span>.</span></span></Link>
@@ -98,7 +120,7 @@ export function PublicLandingPage() {
 
       <section className="landing-proofline" aria-label="Platform approach"><div><span>01</span> Organized candidate context</div><i/><div><span>02</span> Structured evidence review</div><i/><div><span>03</span> Recruiter-led decisions</div></section>
 
-      <section className="landing-workflow landing-section" id="how-it-works">
+      <section className="landing-workflow landing-section" id="how-it-works" data-landing-reveal>
         <div className="landing-section-intro"><p className="landing-section-kicker">A thoughtful workflow</p><h2>From scattered profiles to a clearer review.</h2><p>Keep the work connected, the evidence visible, and the decision with your team.</p></div>
         <div className="landing-steps">
           <article><span className="landing-step-number">01</span><span className="landing-step-icon"><WorkspaceIcon name="candidates" size={22}/></span><h3>Organize candidates</h3><p>Keep candidate profiles and relevant developer evidence together in one workspace.</p><span className="landing-step-link">Candidate management <span aria-hidden="true">→</span></span></article>
@@ -109,7 +131,7 @@ export function PublicLandingPage() {
         </div>
       </section>
 
-      <section className="landing-capabilities landing-section" id="product">
+      <section className="landing-capabilities landing-section" id="product" data-landing-reveal>
         <div className="landing-capabilities-heading"><div><p className="landing-section-kicker">Inside DevRank</p><h2>One workspace for the hiring review.</h2></div><p>Designed to make context easier to find and results easier to interpret.</p></div>
         <div className="landing-capability-feature"><div className="landing-capability-index">A / Evidence</div><div className="landing-capability-copy"><h3>Keep profile evidence in context.</h3><p>Organize candidate information alongside available developer platform snapshots, with source and coverage details available for review.</p></div><div className="landing-capability-art landing-evidence-art" aria-hidden="true"><div><span className="landing-art-icon"><WorkspaceIcon name="candidates" size={19}/></span><strong>Candidate profile</strong><small>Evidence snapshot</small></div><div className="landing-art-source"><i/><span>Source details available</span></div><div className="landing-art-lines"><i/><i/><i/></div></div></div>
         <div className="landing-capability-pair">
@@ -118,9 +140,9 @@ export function PublicLandingPage() {
         </div>
       </section>
 
-      <section className="landing-transparency" id="recruiters"><div className="landing-transparency-mark" aria-hidden="true">D.</div><div className="landing-transparency-copy"><p className="landing-section-kicker">Evidence with context</p><h2>What’s missing stays visible.</h2><p>Public profile data can be incomplete. DevRank distinguishes missing evidence from a scored result and keeps source information available, so recruiters can interpret findings in context.</p></div><div className="landing-transparency-points"><div><span>01</span><p>Partial evidence is identified.</p></div><div><span>02</span><p>Sources remain available to review.</p></div><div><span>03</span><p>Hiring decisions remain with people.</p></div></div></section>
+      <section className="landing-transparency" id="recruiters" data-landing-reveal><div className="landing-transparency-mark" aria-hidden="true">D.</div><div className="landing-transparency-copy"><p className="landing-section-kicker">Evidence with context</p><h2>What’s missing stays visible.</h2><p>Public profile data can be incomplete. DevRank distinguishes missing evidence from a scored result and keeps source information available, so recruiters can interpret findings in context.</p></div><div className="landing-transparency-points"><div><span>01</span><p>Partial evidence is identified.</p></div><div><span>02</span><p>Sources remain available to review.</p></div><div><span>03</span><p>Hiring decisions remain with people.</p></div></div></section>
 
-      <section className="landing-final-cta"><div><p className="landing-section-kicker">A better-informed review</p><h2>Bring more clarity to your engineering hiring process.</h2></div><div className="landing-final-actions"><Link to="/signup" className="landing-request">Request access <span aria-hidden="true">↗</span></Link><Link to="/login" className="landing-final-signin">Already have access? Sign in</Link></div></section>
+      <section className="landing-final-cta" data-landing-reveal><div><p className="landing-section-kicker">A better-informed review</p><h2>Bring more clarity to your engineering hiring process.</h2></div><div className="landing-final-actions"><Link to="/signup" className="landing-request">Request access <span aria-hidden="true">↗</span></Link><Link to="/login" className="landing-final-signin">Already have access? Sign in</Link></div></section>
 
       <footer className="landing-footer"><Link className="landing-brand" to="/" aria-label="DevRank home"><img src={devrankMark} alt=""/><span>devrank<span>.</span></span></Link><p>Candidate context and evaluation support for recruiter teams.</p><nav aria-label="Footer navigation"><a href="#product">Product</a><a href="#how-it-works">How it works</a><Link to="/login">Sign in</Link><Link to="/signup">Request access</Link></nav><small>© 2026 DevRank</small></footer>
     </main>
