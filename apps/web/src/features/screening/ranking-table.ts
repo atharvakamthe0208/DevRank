@@ -29,7 +29,8 @@ export function scoreBand(score: number): 'high' | 'medium' | 'low' {
 }
 
 export function scorePresentation(resume: ScreeningDetailsResponse['resumes'][number]) {
-  if (resume.evaluation?.score !== undefined) return { score: resume.evaluation.score, label: 'Validated score' as const, preliminary: false };
+  if (resume.status === 'completed' && resume.evaluation?.status === 'complete' && resume.evaluation.score !== undefined) return { score: resume.evaluation.score, label: 'Validated score' as const, preliminary: false };
+  if (resume.status === 'completed' && resume.evaluation?.status === 'provisional' && resume.evaluation.score !== undefined) return { score: resume.evaluation.score, label: 'Preliminary match' as const, preliminary: true };
   if (resume.preliminaryEvaluation) return { score: resume.preliminaryEvaluation.score, label: 'Preliminary match' as const, preliminary: true };
   return null;
 }

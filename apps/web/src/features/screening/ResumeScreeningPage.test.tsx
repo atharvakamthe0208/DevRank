@@ -8,7 +8,7 @@ vi.mock('../auth/AuthProvider', () => ({
 }));
 
 import { AppShell } from '../../components/layout/AppShell';
-import { ResumeScreeningPage } from './ResumeScreeningPage';
+import { ExistingCandidateResumeLinks, refreshLinkedCandidateAssessments, ResumeScreeningPage } from './ResumeScreeningPage';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
 import { screeningProgress, screeningProgressLabel } from './screening-progress';
 
@@ -43,6 +43,18 @@ describe('screening summary cards', () => {
   });
 });
 
+describe('existing screening result reuse links', () => {
+  it('links only to the recruiter-selected candidate report and labels the reuse and replacement choices', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ExistingCandidateResumeLinks, {
+      candidateIds: ['e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2'],
+      candidates: [{ id: 'e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2', name: 'Akshay Nazare' }],
+    })));
+    expect(html).toContain('Akshay Nazare');
+    expect(html).toContain('reuse saved resume result or explicitly replace it');
+    expect(html).toContain('href="/candidates/e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2/report"');
+  });
+});
+
 describe('screening progress label', () => {
   it('counts completed and failed resumes as evaluated while showing pending and processing separately', () => {
     expect(screeningProgressLabel([
@@ -55,5 +67,35 @@ describe('screening progress label', () => {
       { status: 'completed' }, { status: 'failed' }, { status: 'queued' }, { status: 'processing' }, { status: 'uploaded' },
     ])).toEqual({ total: 5, resolved: 2, percent: 40 });
     expect(screeningProgress([])).toEqual({ total: 0, resolved: 0, percent: 0 });
+  });
+});
+
+describe('saved Insights assessment refresh after screening', () => {
+  it('refreshes only explicitly linked terminal results using the compatible role and saved resume IDs', async () => {
+    const request = vi.fn(async () => ({}));
+    const result = await refreshLinkedCandidateAssessments({
+      sessionId: '11111111-1111-4111-8111-111111111111', jobTitle: 'Senior Software Engineer', status: 'partial',
+      resumes: [
+        { id: '22222222-2222-4222-8222-222222222222', candidateId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', filename: 'candidate.pdf', status: 'completed', candidate: { name: 'Candidate A' }, evaluation: null },
+        { id: '33333333-3333-4333-8333-333333333333', candidateId: null, filename: 'unlinked.pdf', status: 'completed', candidate: null, evaluation: null },
+        { id: '44444444-4444-4444-8444-444444444444', candidateId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', filename: 'processing.pdf', status: 'processing', candidate: null, evaluation: null },
+      ],
+    }, 'test-token', request as never);
+
+    expect(result).toEqual({ refreshed: 1, failedCandidateIds: [] });
+    expect(request).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledWith('/candidates/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/unified-report/assessment', {
+      method: 'POST', body: JSON.stringify({ roleId: 'software_developer', resumeId: '22222222-2222-4222-8222-222222222222' }),
+    }, 'test-token');
+  });
+
+  it('does not guess a role or link by resume name when the job title is incompatible', async () => {
+    const request = vi.fn(async () => ({}));
+    const result = await refreshLinkedCandidateAssessments({
+      sessionId: '11111111-1111-4111-8111-111111111111', jobTitle: 'Unmapped Specialist', status: 'completed',
+      resumes: [{ id: '22222222-2222-4222-8222-222222222222', candidateId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', filename: 'same-name.pdf', status: 'completed', candidate: { name: 'Candidate A' }, evaluation: null }],
+    }, 'test-token', request as never);
+    expect(result.refreshed).toBe(0);
+    expect(request).not.toHaveBeenCalled();
   });
 });

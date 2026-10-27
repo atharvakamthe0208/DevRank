@@ -83,12 +83,12 @@ export function createScreeningController(
       if (session.error?.code === 'PGRST116') throw new HttpError(404, 'SCREENING_NOT_FOUND', 'Screening session not found.');
       throw screeningDatabaseError('session_read', session.error);
     }
-    const resumes = await client.from('resume_screenings').select('id,original_filename,status,extracted_data,evaluation,preliminary_evaluation,safe_error_code,retry_count,safe_error_message').eq('session_id', sessionId).order('created_at');
+    const resumes = await client.from('resume_screenings').select('id,candidate_id,original_filename,status,extracted_data,evaluation,preliminary_evaluation,safe_error_code,retry_count,safe_error_message').eq('session_id', sessionId).order('created_at');
     if (resumes.error) throw screeningDatabaseError('resume_read', resumes.error);
     return screeningDetailsResponseSchema.parse({
       sessionId, jobTitle: session.data.job_title, status: session.data.status,
       resumes: (resumes.data ?? []).map((row) => ({
-        id: row.id, filename: row.original_filename, status: row.status,
+        id: row.id, candidateId: row.candidate_id ?? null, filename: row.original_filename, status: row.status,
         candidate: row.extracted_data && typeof row.extracted_data === 'object' && 'candidate' in row.extracted_data ? row.extracted_data.candidate : null,
         evaluation: row.evaluation, preliminaryEvaluation: row.preliminary_evaluation ?? null,
         ...(row.safe_error_code ? { errorCode: row.safe_error_code } : {}),
@@ -121,16 +121,17 @@ export function createScreeningController(
       if (!files.length) throw new HttpError(400, 'RESUMES_REQUIRED', 'Select at least one PDF or DOCX resume.');
       if (files.length > MAX_BATCH) throw new HttpError(400, 'TOO_MANY_RESUMES', `A screening session can include at most ${MAX_BATCH} resumes.`);
       if (files.some(({ size }) => !size || size > MAX_FILE_SIZE)) throw new HttpError(413, 'INVALID_RESUME_SIZE', 'Each resume must be between 1 byte and 10 MB.');
-      if (parsed.data.candidateIds && (parsed.data.candidateIds.length !== files.length || new Set(parsed.data.candidateIds).size !== parsed.data.candidateIds.length)) {
-        throw new HttpError(400, 'INVALID_SCREENING_CANDIDATES', 'Each uploaded resume must map to one distinct candidate.');
+      if (parsed.data.candidateIds && parsed.data.candidateIds.length !== files.length) {
+        throw new HttpError(400, 'INVALID_SCREENING_CANDIDATES', 'Candidate mappings must include one entry for each uploaded resume.');
       }
 
       const client = clientForToken(auth.accessToken);
       const queueClient = serviceClientFactory();
-      if (parsed.data.candidateIds) {
-        const ownedCandidates = await client.from('candidates').select('id').eq('owner_id', auth.userId).is('archived_at', null).in('id', parsed.data.candidateIds);
+      const mappedCandidateIds = parsed.data.candidateIds?.filter((id): id is string => id !== null) ?? [];
+      if (mappedCandidateIds.length) {
+        const ownedCandidates = await client.from('candidates').select('id').eq('owner_id', auth.userId).is('archived_at', null).in('id', mappedCandidateIds);
         if (ownedCandidates.error) throw screeningDatabaseError('screening_candidate_lookup', ownedCandidates.error);
-        if ((ownedCandidates.data ?? []).length !== parsed.data.candidateIds.length) throw new HttpError(404, 'SCREENING_CANDIDATE_NOT_FOUND', 'One or more candidates do not belong to this recruiter.');
+        if ((ownedCandidates.data ?? []).length !== mappedCandidateIds.length) throw new HttpError(404, 'SCREENING_CANDIDATE_NOT_FOUND', 'One or more candidates do not belong to this recruiter.');
       }
       const idempotencyKey = request.get('Idempotency-Key');
       if (!idempotencyKey || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
@@ -151,10 +152,11 @@ export function createScreeningController(
         return;
       }
 
-      if (parsed.data.candidateIds) {
-        const linked = await client.from('resume_screenings').select('candidate_id').eq('owner_id', auth.userId).in('candidate_id', parsed.data.candidateIds);
+      if (mappedCandidateIds.length) {
+        const linked = await client.from('resume_screenings').select('candidate_id').eq('owner_id', auth.userId).in('candidate_id', mappedCandidateIds);
         if (linked.error) throw screeningDatabaseError('screening_candidate_link_lookup', linked.error);
-        if ((linked.data ?? []).length) throw new HttpError(409, 'CANDIDATE_RESUME_ALREADY_LINKED', 'One or more candidates already have a saved resume result. Review the candidate report before screening another resume.');
+        const linkedCandidateIds = [...new Set((linked.data ?? []).flatMap((row) => typeof row.candidate_id === 'string' ? [row.candidate_id] : []))];
+        if (linkedCandidateIds.length) throw new HttpError(409, 'CANDIDATE_RESUME_ALREADY_LINKED', 'A saved resume result is already linked to one or more selected candidates. Reuse it from the candidate report, or screen the new resume without linking it and explicitly replace the saved result after screening completes.', { candidateIds: linkedCandidateIds });
       }
 
       const fileHashes = new Set<string>();

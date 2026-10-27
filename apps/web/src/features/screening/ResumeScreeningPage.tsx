@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
-import { screeningComparisonResponseSchema, screeningDetailsResponseSchema, screeningRankingResponseSchema, screeningReportResponseSchema, screeningRetryableErrorCodes, screeningRetryResponseSchema, screeningSubmissionResponseSchema, type ScreeningComparisonResponse, type ScreeningDetailsResponse, type ScreeningReportResponse } from '@devrank/contracts';
+import { Link } from 'react-router-dom';
+import { candidateListResponseSchema, isResumeRoleCompatible, screeningComparisonResponseSchema, screeningDetailsResponseSchema, screeningRankingResponseSchema, screeningReportResponseSchema, screeningRetryableErrorCodes, screeningRetryResponseSchema, screeningSubmissionResponseSchema, type ScreeningComparisonResponse, type ScreeningDetailsResponse, type ScreeningReportResponse } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { screeningReportCsv } from './report-export';
@@ -16,8 +17,10 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx'];
 const SCREENING_POLL_MS = 1000;
 const SCREENING_SESSION_STORAGE_KEY = 'devrank.resume-screening.session-id';
+const UNIFIED_ROLE_IDS = ['software_developer', 'ai_ml_engineer', 'data_analyst'] as const;
 
-type SelectedResume = { id: string; file: File };
+type SelectedResume = { id: string; file: File; candidateId?: string };
+type CandidateOption = { id: string; name: string };
 type SubmittedSession = ReturnType<typeof screeningSubmissionResponseSchema.parse>;
 type ScreeningNavigationSnapshot = {
   submitted: SubmittedSession; details: ScreeningDetailsResponse; selectedIds: string[];
@@ -25,6 +28,15 @@ type ScreeningNavigationSnapshot = {
   report: ScreeningReportResponse | null; candidateSearch: string; expandedDetailsId: string | null;
 };
 const screeningNavigationCache = createUserSessionCache<ScreeningNavigationSnapshot>();
+
+export function ExistingCandidateResumeLinks({ candidateIds, candidates }: { candidateIds: string[]; candidates: CandidateOption[] }) {
+  if (!candidateIds.length) return null;
+  return <ul aria-label="Candidates with saved resume results">{candidateIds.map((candidateId) => {
+    const candidate = candidates.find((item) => item.id === candidateId);
+    return <li key={candidateId}><Link to={`/candidates/${encodeURIComponent(candidateId)}/report`}>{candidate?.name ?? 'Open candidate'} · reuse saved resume result or explicitly replace it</Link></li>;
+  })}</ul>;
+}
+
 function storedScreeningSessionId() {
   if (typeof window === 'undefined') return null;
   try { return sessionStorage.getItem(SCREENING_SESSION_STORAGE_KEY); } catch { return null; }
@@ -38,6 +50,23 @@ function formatSize(size: number): string {
   return size < 1024 * 1024 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
+export async function refreshLinkedCandidateAssessments(details: ScreeningDetailsResponse, accessToken: string, request: typeof apiRequest = apiRequest) {
+  const roleId = UNIFIED_ROLE_IDS.find((role) => isResumeRoleCompatible(role, details.jobTitle));
+  if (!roleId) return { refreshed: 0, failedCandidateIds: [] as string[] };
+  let refreshed = 0;
+  const failedCandidateIds: string[] = [];
+  for (const resume of details.resumes) {
+    if (!resume.candidateId || !['completed', 'failed'].includes(resume.status)) continue;
+    try {
+      await request(`/candidates/${encodeURIComponent(resume.candidateId)}/unified-report/assessment`, {
+        method: 'POST', body: JSON.stringify({ roleId, resumeId: resume.id }),
+      }, accessToken);
+      refreshed += 1;
+    } catch { failedCandidateIds.push(resume.candidateId); }
+  }
+  return { refreshed, failedCandidateIds };
+}
+
 export function ResumeScreeningPage() {
   const { session } = useAuth();
   const storedSessionId = storedScreeningSessionId();
@@ -45,12 +74,16 @@ export function ResumeScreeningPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const nextFileId = useRef(0);
   const idempotencyKey = useRef<string | null>(null);
+  const refreshedAssessmentKeys = useRef(new Set<string>());
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [resumes, setResumes] = useState<SelectedResume[]>([]);
+  const [candidateOptions, setCandidateOptions] = useState<CandidateOption[]>([]);
+  const [candidateOptionsError, setCandidateOptionsError] = useState('');
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [duplicateCandidateIds, setDuplicateCandidateIds] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState<SubmittedSession | null>(cachedNavigation?.submitted ?? null);
   const [details, setDetails] = useState<ScreeningDetailsResponse | null>(cachedNavigation?.details ?? null);
   const [selectedIds, setSelectedIds] = useState<string[]>(cachedNavigation?.selectedIds ?? []);
@@ -63,6 +96,48 @@ export function ResumeScreeningPage() {
   const [candidateSearch, setCandidateSearch] = useState(cachedNavigation?.candidateSearch ?? '');
   const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(cachedNavigation?.expandedDetailsId ?? null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
+  useEffect(() => {
+    if (!session?.access_token || !details) return;
+    const roleId = UNIFIED_ROLE_IDS.find((role) => isResumeRoleCompatible(role, details.jobTitle));
+    if (!roleId) return;
+    const pending = details.resumes.filter((resume) => resume.candidateId && ['completed', 'failed'].includes(resume.status))
+      .filter((resume) => {
+        const key = `${details.sessionId}:${resume.id}:${JSON.stringify(resume.evaluation)}:${JSON.stringify(resume.preliminaryEvaluation)}`;
+        if (refreshedAssessmentKeys.current.has(key)) return false;
+        refreshedAssessmentKeys.current.add(key);
+        return true;
+      });
+    if (!pending.length) return;
+    let active = true;
+    void (async () => {
+      const result = await refreshLinkedCandidateAssessments({ ...details, resumes: pending }, session.access_token);
+      if (active && result.failedCandidateIds.length) {
+        setReviewError(`Screening results were saved, but ${result.failedCandidateIds.length} linked candidate assessment(s) could not be refreshed. Use Assess All Candidates in Insights to retry.`);
+      }
+    })();
+    return () => { active = false; };
+  }, [details, session?.access_token]);
+
+  useEffect(() => {
+    let active = true;
+    if (!session?.access_token) return () => { active = false; };
+    void (async () => {
+      try {
+        const first = candidateListResponseSchema.parse(await apiRequest<unknown>('/candidates?page=1&pageSize=100', {}, session.access_token));
+        const candidates = [...first.items];
+        for (let page = 2; candidates.length < first.total; page += 1) {
+          const next = candidateListResponseSchema.parse(await apiRequest<unknown>(`/candidates?page=${page}&pageSize=100`, {}, session.access_token));
+          candidates.push(...next.items);
+          if (!next.items.length) break;
+        }
+        if (active) setCandidateOptions(candidates.map(({ id, name }) => ({ id, name })));
+      } catch {
+        if (active) setCandidateOptionsError('Candidate records could not be loaded. You can still screen resumes and link them later from each candidate report.');
+      }
+    })();
+    return () => { active = false; };
+  }, [session?.access_token]);
 
   async function loadScreeningResults(sessionId: string, accessToken: string, waitForCompletion: boolean, isCurrent: () => boolean = () => true, initialDetails?: ScreeningDetailsResponse) {
     let current = initialDetails;
@@ -141,6 +216,7 @@ export function ResumeScreeningPage() {
     try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ }
     setValidationMessages(messages);
     setError('');
+    setDuplicateCandidateIds([]);
     setSubmitted(null);
     setDetails(null);
     setRankingData(null);
@@ -165,6 +241,7 @@ export function ResumeScreeningPage() {
     event?.preventDefault();
     if (submitting) return;
     setError('');
+    setDuplicateCandidateIds([]);
     setSubmitted(null);
     if (!session?.access_token) {
       setError('Your secure session is unavailable. Sign in again before submitting resumes.');
@@ -189,6 +266,9 @@ export function ResumeScreeningPage() {
       body.set('jobTitle', jobTitle.trim());
       body.set('jobDescription', jobDescription.trim());
       resumes.forEach(({ file }) => body.append('resumes', file, file.name));
+      if (resumes.some(({ candidateId }) => candidateId)) {
+        body.set('candidateIds', JSON.stringify(resumes.map(({ candidateId }) => candidateId ?? null)));
+      }
       idempotencyKey.current ??= crypto.randomUUID();
       const response = await apiRequest<unknown>('/screenings', {
         method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey.current },
@@ -206,6 +286,10 @@ export function ResumeScreeningPage() {
       setReport(null);
       setExpandedDetailsId(null);
     } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.code === 'CANDIDATE_RESUME_ALREADY_LINKED') {
+        const details = cause.details && typeof cause.details === 'object' ? cause.details as { candidateIds?: unknown } : {};
+        setDuplicateCandidateIds(Array.isArray(details.candidateIds) ? details.candidateIds.filter((id): id is string => typeof id === 'string') : []);
+      }
       if (cause instanceof Error && cause.name === 'ApiNetworkError') {
         setError(cause.message);
       } else if (cause instanceof ApiRequestError) {
@@ -373,12 +457,25 @@ export function ResumeScreeningPage() {
             {resumes.map(({ id, file }) => <li key={id}>
               <span className="screening-file-icon" aria-hidden="true">{file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'DOC'}</span>
               <span className="screening-file-copy"><strong>{file.name}</strong><small>{formatSize(file.size)} · Ready to submit</small></span>
+              <label className="screening-candidate-assignment">Candidate
+                <select aria-label={`Candidate for ${file.name}`} value={resumes.find((item) => item.id === id)?.candidateId ?? ''} onChange={(event) => {
+                  const candidateId = event.target.value;
+                  setResumes((current) => current.map((item) => item.id === id ? { ...item, candidateId: candidateId || undefined } : item));
+                }}>
+                  <option value="">Leave unlinked</option>
+                  {candidateOptions.map((candidate) => <option key={candidate.id} value={candidate.id} disabled={resumes.some((item) => item.id !== id && item.candidateId === candidate.id)}>{candidate.name}</option>)}
+                </select>
+              </label>
               <button className="screening-remove-button" type="button" onClick={() => removeFile(id)} aria-label={`Remove ${file.name}`}>Remove</button>
             </li>)}
           </ul> : <p className="screening-empty-files">No resume files selected.</p>}
+          {candidateOptionsError && <p className="screening-field-hint" role="status">{candidateOptionsError}</p>}
+          {candidateOptions.length > 0 && <p className="screening-field-hint">Link resumes to existing candidates here to make their saved scores available to Insights. Unlinked results can be explicitly linked later from the candidate report.</p>}
         </section>
 
-        {error && <div className="screening-alert" role="alert"><p>{error}</p><button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Retrying…' : 'Try again'}</button></div>}
+        {error && <div className="screening-alert" role="alert"><p>{error}</p><ExistingCandidateResumeLinks candidateIds={duplicateCandidateIds} candidates={candidateOptions}/>{duplicateCandidateIds.length > 0
+          ? <p>The duplicate check stopped this batch before creating a screening session. To evaluate a new file, leave its candidate unlinked, submit it, then use Replace linked result from that candidate’s report after processing completes.</p>
+          : <button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Retrying…' : 'Try again'}</button>}</div>}
         <div className="screening-form-footer">
           <p>Resume job-match results will remain separate from existing GitHub, LeetCode, and developer evaluation scores.</p>
           <button className="primary-button" type="submit" disabled={submitting || !canStartScreening}>

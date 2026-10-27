@@ -62,7 +62,12 @@ export const preliminaryEvaluationSchema = z.object({
 export const screeningCreateSchema = z.object({
   jobTitle: z.string().trim().min(1).max(200),
   jobDescription: z.string().trim().min(50).max(30000),
-  candidateIds: z.array(z.string().uuid()).min(1).max(20).optional(),
+  candidateIds: z.array(z.string().uuid().nullable()).min(1).max(20).optional().superRefine((ids, context) => {
+    if (!ids) return;
+    const selected = ids.filter((id): id is string => id !== null);
+    if (!selected.length) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Select at least one candidate when providing a candidate mapping.' });
+    if (new Set(selected).size !== selected.length) context.addIssue({ code: z.ZodIssueCode.custom, message: 'A candidate can be mapped to only one resume in a screening session.' });
+  }),
 }).strict();
 export const screeningSubmissionResponseSchema = z.object({
   sessionId: z.string().uuid(),
@@ -75,6 +80,7 @@ export const screeningSubmissionResponseSchema = z.object({
 }).strict();
 export const screeningResumeDetailsSchema = z.object({
   id: z.string().uuid(),
+  candidateId: z.string().uuid().nullable().optional(),
   filename: z.string().min(1),
   status: screeningStatusSchema,
   candidate: z.object({ name: z.string().min(1).max(120).nullable() }).nullable(),

@@ -45,6 +45,9 @@
 .screening-file-copy { min-width: 0; display: grid; flex: 1; gap: 4px; }
 .screening-file-copy strong { overflow: hidden; color: #33352f; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .screening-file-copy small { color: #85877f; font-size: 10px; }
+.screening-candidate-assignment { display: grid; gap: 3px; min-width: 155px; color: #66738a; font-size: 10px; }
+.screening-candidate-assignment select { min-height: 34px; max-width: 220px; padding: 5px 8px; border: 1px solid #dce2ec; border-radius: 6px; background: #fff; color: #263650; font: inherit; }
+.screening-candidate-assignment select:focus-visible { outline: 2px solid #4378d1; outline-offset: 2px; }
 .screening-remove-button { border: 0; background: transparent; color: #8a5048; font-size: 11px; font-weight: 650; cursor: pointer; }
 .screening-remove-button:hover { text-decoration: underline; }
 .screening-empty-files, .screening-empty-results { margin: 15px 0 0; color: #85877f; font-size: 11px; }
@@ -150,6 +153,8 @@
   .screening-panel { padding: 18px; }
   .screening-form-footer .primary-button { width: 100%; justify-content: center; }
   .screening-file-list li { gap: 9px; padding: 10px; }
+  .screening-candidate-assignment { flex: 1 1 100%; }
+  .screening-candidate-assignment select { max-width: none; width: 100%; }
   .screening-result-heading { align-items: flex-start; }
   .screening-result-footer { align-items: flex-start; gap: 9px; }
   .screening-result-message { flex-basis: 100%; order: 3; }

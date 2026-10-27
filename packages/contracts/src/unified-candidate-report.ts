@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { candidateSchema } from './candidate.js';
 import { finalReportCategorySchema } from './proposed-report.js';
+import { unifiedAssessmentSchema } from './unified-assessment.js';
 
 export const unifiedReportSourceSchema = z.object({
   status: z.enum(['available', 'partial', 'unavailable', 'not_evaluated']),
@@ -23,8 +24,10 @@ export const unifiedCandidateReportSchema = z.object({
     strengths: z.array(z.string()),
     improvementAreas: z.array(z.string()),
   }).strict(),
+  assessment: unifiedAssessmentSchema.nullable(),
   sources: z.object({ github: unifiedReportSourceSchema, leetcode: unifiedReportSourceSchema }).strict(),
   resume: z.object({
+    id: z.string().uuid().nullable(),
     status: z.enum(['unlinked', 'unavailable', 'available']),
     message: z.string(),
     jobTitle: z.string().nullable(),

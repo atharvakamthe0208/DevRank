@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { unifiedCandidateReportSchema, type UnifiedCandidateReport } from '@devrank/contracts';
+import { evaluationRolesResponseSchema, unifiedAssessmentSchema, unifiedCandidateReportSchema, type EvaluationRole, type UnifiedAssessment, type UnifiedCandidateReport } from '@devrank/contracts';
 import { useAuth } from '../auth/AuthProvider';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
@@ -62,13 +62,28 @@ export function UnifiedCandidateReportPage() {
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [linkError, setLinkError] = useState('');
   const [linking, setLinking] = useState(false);
+  const [roles, setRoles] = useState<EvaluationRole[]>([]);
+  const [roleId, setRoleId] = useState<EvaluationRole['id']>('software_developer');
+  const [assessment, setAssessment] = useState<UnifiedAssessment | null>(null);
+  const [assessing, setAssessing] = useState(false);
+  const [assessmentError, setAssessmentError] = useState('');
   useWorkspaceBreadcrumbLabels({ candidateName: state.status === 'ready' ? state.report.candidate.name : undefined });
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async (signal?: AbortSignal, selectedRole?: EvaluationRole['id']) => {
     if (!session?.access_token) { setState({ status: 'error', message: 'Sign in again to view this report.' }); return; }
     setState({ status: 'loading' });
     try {
-      const response = unifiedCandidateReportSchema.parse(await apiRequest<unknown>(`/candidates/${encodeURIComponent(id)}/unified-report`, { signal }, session.access_token));
-      if (!signal?.aborted) setState({ status: 'ready', report: response });
+      const [rawReport, rolesResult] = await Promise.all([
+        apiRequest<unknown>(`/candidates/${encodeURIComponent(id)}/unified-report${selectedRole ? `?roleId=${encodeURIComponent(selectedRole)}` : ''}`, { signal }, session.access_token),
+        apiRequest<unknown>('/evaluations/roles', { signal }, session.access_token).catch(() => null),
+      ]);
+      const response = unifiedCandidateReportSchema.parse(rawReport);
+      const availableRoles = rolesResult ? evaluationRolesResponseSchema.parse(rolesResult).roles : [];
+      if (!signal?.aborted) {
+        setRoles(availableRoles);
+        setRoleId((current) => availableRoles.some((role) => role.id === current) ? current : response.job.roleId as EvaluationRole['id'] ?? availableRoles[0]?.id ?? 'software_developer');
+        setAssessment(response.assessment);
+        setState({ status: 'ready', report: response });
+      }
     } catch (error) {
       if (signal?.aborted) return;
       setState({ status: 'error', message: error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : 'Could not load the candidate report.' });
@@ -83,25 +98,53 @@ export function UnifiedCandidateReportPage() {
     } catch (error) { setLinkError(error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : 'Could not attach this resume result.'); }
     finally { setLinking(false); }
   }
+  async function generateAssessment() {
+    if (!session?.access_token || state.status !== 'ready' || assessing || !roleId) return;
+    setAssessing(true); setAssessmentError('');
+    try {
+      const result = unifiedAssessmentSchema.parse(await apiRequest<unknown>(`/candidates/${encodeURIComponent(id)}/unified-report/assessment`, {
+        method: 'POST', body: JSON.stringify({ roleId, resumeId: state.report.resume.id }),
+      }, session.access_token));
+      setAssessment(result);
+    } catch (error) { setAssessmentError(error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : 'Could not generate the unified assessment.'); }
+    finally { setAssessing(false); }
+  }
+  async function changeAssessmentRole(nextRole: EvaluationRole['id']) {
+    setRoleId(nextRole); setAssessmentError('');
+    await load(undefined, nextRole);
+  }
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
   if (state.status === 'loading') return <main className="unified-report-page"><WorkspaceSkeleton variant="detail"/></main>;
   if (state.status === 'error') return <main className="unified-report-page"><section className="unified-report-state" role="alert"><h1>Report unavailable</h1><p>{state.message}</p><button type="button" className="primary-button" onClick={() => void load()}>Try again</button><Link className="secondary-button link-button" to={`/candidates/${id}`}>Back to candidate</Link></section></main>;
   const { report } = state;
-  return <UnifiedCandidateReportView report={report} selectedResumeId={selectedResumeId} linking={linking} linkError={linkError}
+  return <UnifiedCandidateReportView report={report} selectedResumeId={selectedResumeId} linking={linking} linkError={linkError} roles={roles} roleId={roleId} assessment={assessment} assessing={assessing} assessmentError={assessmentError}
+    onRoleChange={(role) => void changeAssessmentRole(role)} onGenerateAssessment={() => void generateAssessment()}
     onSelectResume={setSelectedResumeId} onLinkResume={() => void linkResume()}/>;
 }
 
-export function UnifiedCandidateReportView({ report, selectedResumeId = '', linking = false, linkError = '', onSelectResume = () => undefined, onLinkResume = () => undefined }: {
+export function UnifiedCandidateReportView({ report, selectedResumeId = '', linking = false, linkError = '', roles = [], roleId = 'software_developer', assessment = report.assessment, assessing = false, assessmentError = '', onRoleChange = () => undefined, onGenerateAssessment = () => undefined, onSelectResume = () => undefined, onLinkResume = () => undefined }: {
   report: UnifiedCandidateReport;
   selectedResumeId?: string;
   linking?: boolean;
   linkError?: string;
+  roles?: EvaluationRole[];
+  roleId?: EvaluationRole['id'];
+  assessment?: UnifiedAssessment | null;
+  assessing?: boolean;
+  assessmentError?: string;
+  onRoleChange?: (role: EvaluationRole['id']) => void;
+  onGenerateAssessment?: () => void;
   onSelectResume?: (id: string) => void;
   onLinkResume?: () => void;
 }) {
   const sources = [['GitHub', report.sources.github], ['LeetCode', report.sources.leetcode]] as const;
   const findings = sources.flatMap(([sourceName, source]) => source.findings.map((finding) => ({ sourceName, source, finding })));
   const missingFindings = findings.filter(({ finding }) => finding.score === undefined);
+  const displayedResumeScore = assessment?.components.resume.score ?? report.resume.validatedScore ?? report.resume.preliminaryScore;
+  const scoreText = (score: number | null | undefined, status?: string) => score === null || score === undefined
+    ? 'Not found' : `${score}/100${status === 'preliminary' ? ' · Preliminary' : ''}`;
+  const shortStrengths = (assessment?.strengths.length ? assessment.strengths : report.platformEvaluation.strengths).slice(0, 3);
+  const shortImprovements = (assessment?.improvementAreas.length ? assessment.improvementAreas : report.platformEvaluation.improvementAreas).slice(0, 3);
 
   return <main className="unified-report-page">
     <header className="unified-report-header">
@@ -119,6 +162,27 @@ export function UnifiedCandidateReportView({ report, selectedResumeId = '', link
       <button className="primary-button no-print unified-print-button" type="button" onClick={() => window.print()}>Download / Print PDF</button>
     </header>
 
+    <section className="unified-report-panel unified-overview" aria-label="Candidate assessment summary">
+      <div className="unified-overview-heading"><div><span className="unified-section-kicker">FINAL CANDIDATE SUMMARY</span><h2>{report.job.roleLabel ?? 'Target role not saved'}</h2><p>{assessment?.status === 'completed' ? 'Completed' : 'Incomplete'} · {assessment ? `${assessment.evidenceCompleteness}% validated evidence` : 'No unified assessment saved'}</p></div><div className={`unified-final-score${assessment?.overallScore === null || !assessment ? ' is-incomplete' : ''}`}><span>Final score</span><strong>{assessment?.overallScore === null || !assessment ? 'Incomplete' : `${assessment.overallScore}/100`}</strong></div></div>
+      <div className="unified-overview-scores" aria-label="Component scores">
+        <article><span>Resume</span><strong>{scoreText(displayedResumeScore, assessment?.components.resume.status ?? (report.resume.preliminaryScore !== null ? 'preliminary' : undefined))}</strong></article>
+        <article><span>GitHub</span><strong>{scoreText(assessment?.components.github.score)}</strong></article>
+        <article><span>LeetCode</span><strong>{scoreText(assessment?.components.leetcode.score)}</strong></article>
+        <article><span>Evidence completion</span><strong>{assessment ? `${assessment.evidenceCompleteness}% validated` : 'Not assessed'}</strong></article>
+      </div>
+      <div className="unified-overview-lists">
+        <section><h3>Strengths</h3>{shortStrengths.length ? <ul>{shortStrengths.map((item, index) => <li key={`strength-${index}`}>{item}</li>)}</ul> : <p>No saved strengths.</p>}</section>
+        <section><h3>Development areas</h3>{shortImprovements.length ? <ul>{shortImprovements.map((item, index) => <li key={`improvement-${index}`}>{item}</li>)}</ul> : <p>No saved development areas.</p>}</section>
+      </div>
+      {assessment?.missingComponents.length ? <p className="unified-overview-missing">Missing validated evidence: {assessment.missingComponents.join(', ')}. Final score and rank are withheld until required evidence is validated.</p> : null}
+      <div className="unified-assessment-controls no-print"><label htmlFor="unified-role">Target role<select id="unified-role" value={roleId} onChange={(event) => onRoleChange(event.target.value as EvaluationRole['id'])}>{roles.length ? roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>) : <option value={roleId}>{report.job.roleLabel ?? displayLabel(roleId)}</option>}</select></label><button type="button" className="primary-button" disabled={assessing} onClick={onGenerateAssessment}>{assessing ? 'Generating…' : assessment ? 'Refresh assessment' : 'Generate final assessment'}</button></div>
+      {assessmentError && <p role="alert" className="unified-assessment-error">{assessmentError}</p>}
+      {assessment && <details className="unified-extra-details"><summary>Assessment details and limitations</summary><p>{assessment.explanation}</p><p>Component weights: Resume · weight {assessment.weights.resume}% · GitHub · weight {assessment.weights.github}% · LeetCode · weight {assessment.weights.leetcode}%</p><p>Assessment version {assessment.scoringVersion} · saved {date(assessment.generatedAt)}</p><ul className="unified-assessment-limitations" aria-label="Assessment limitations">{assessment.limitations.map((item) => <li key={item}>{item}</li>)}</ul></details>}
+    </section>
+
+    <details className="unified-more-report unified-report-panel">
+      <summary>Detailed evaluation, resume evidence, and methodology</summary>
+      <div className="unified-more-report-content">
     <section className="unified-report-summary" aria-labelledby="unified-summary-title">
       <div className="unified-index-block">
         <span className="unified-section-kicker" id="unified-summary-title">SAVED PLATFORM EVALUATION</span>
@@ -220,6 +284,8 @@ export function UnifiedCandidateReportView({ report, selectedResumeId = '', link
         <section><h3>Interpretation and limitations</h3><p>Activity counts and repository volume are context, not direct proof of engineering competence, code quality, or collaboration quality. Platform indexes and resume job-match scores use different rubrics and are not combined.</p>
           {sources.map(([sourceName, source]) => <div className="unified-limitations" key={sourceName}><h4>{sourceName} limitations</h4>{source.limitations.length ? <ul>{source.limitations.map((item) => <li key={item}>{item}</li>)}</ul> : <p>No additional source limitations were saved.</p>}</div>)}
         </section>
+      </div>
+    </details>
       </div>
     </details>
 
