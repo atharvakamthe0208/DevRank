@@ -15,6 +15,7 @@ import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { supabase } from '../../lib/supabase/client';
 import { useAuth } from '../auth/AuthProvider';
 import { KpiCard } from '../../components/metrics/KpiCards';
+import { WorkspaceIcon } from '../../components/icons/WorkspaceIcon';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { comparableRecentEvaluations } from './insights-presentation';
 import { recentScoredEvaluationAverage } from '../dashboard/dashboard-presentation';
@@ -179,8 +180,8 @@ export function InsightsPage() {
     <section className="insights-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER HOME</span><h1>Insights &amp; rankings</h1><p className="page-subtitle">Home activity and comparable evaluation results.</p></div><Link className="secondary-button insights-run-evaluation" to="/evaluations">Run an evaluation</Link></section>
     {loading ? <WorkspaceSkeleton variant="insights"/> : error ? <section className="insights-state" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></section> : dashboard && <>
       <section className="workspace-kpi-grid" aria-label="Home metrics">
-        <KpiCard icon="♙" label="Candidates" value={dashboard.candidateCount} detail="Recruiter home"/>
-        <KpiCard icon="▤" label="Evaluations" value={dashboard.evaluationCount} detail="All saved evaluation runs"/>
+        <KpiCard icon={<WorkspaceIcon name="candidates" size={17}/>} label="Candidates" value={dashboard.candidateCount} detail="Recruiter home"/>
+        <KpiCard icon={<WorkspaceIcon name="evaluations" size={17}/>} label="Evaluations" value={dashboard.evaluationCount} detail="All saved evaluation runs"/>
         <KpiCard icon="✓" label="Completed" value={dashboard.statusCounts.completed ?? 0} detail="Completed evaluation runs" progress={dashboard.evaluationCount > 0 ? { value: dashboard.statusCounts.completed ?? 0, max: dashboard.evaluationCount, label: 'Completed evaluations out of all saved evaluations' } : undefined}/>
         <KpiCard icon="◉" label="Recent average" value={recentAverageProgress} decimals={1} suffix=" / 100" detail={recentScoreSummary.count ? `Across ${recentScoreSummary.count} scored recent evaluations` : 'No scored evaluations yet'} progress={recentAverageProgressBar} trend={recentScoreTrend}/>
       </section>

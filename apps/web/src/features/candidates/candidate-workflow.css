@@ -207,3 +207,19 @@
   .candidate-import-confirm > div button { width: 100%; }
 }
 .candidate-profile-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.app-shell .candidate-api-detail .primary-button {
+  border-color: var(--workspace-blue);
+  background: var(--workspace-blue);
+  box-shadow: 0 4px 11px #2864f021;
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.app-shell .candidate-api-detail .primary-button:hover:not(:disabled) {
+  border-color: var(--workspace-blue-hover);
+  background: var(--workspace-blue-hover);
+  box-shadow: 0 7px 15px #2864f02b;
+}
+.app-shell .candidate-api-detail .primary-button:focus-visible {
+  outline: 3px solid #8190f2;
+  outline-offset: 3px;
+}
