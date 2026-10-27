@@ -13,6 +13,7 @@ import { isValidScreeningSessionId } from './screening-restore';
 import { SessionDraftNotice } from '../../lib/forms/SessionDraftNotice';
 import { useSessionDraft } from '../../lib/forms/useSessionDraft';
 import { pollScreeningUntilSettled } from './screening-polling';
+import { buildScreeningRequest } from './screening-request';
 import { screeningErrorMessage } from './screening-errors';
 import './resume-screening-page.css';
 
@@ -23,6 +24,14 @@ const SCREENING_POLL_MS = 1000;
 const SCREENING_MAX_POLL_ATTEMPTS = 10;
 const SCREENING_SESSION_STORAGE_KEY = 'devrank.resume-screening.session-id';
 const UNIFIED_ROLE_IDS = ['software_developer', 'ai_ml_engineer', 'data_analyst'] as const;
+type ScreeningFormDraft = { jobTitle: string; jobDescription: string };
+const emptyScreeningDraft: ScreeningFormDraft = { jobTitle: '', jobDescription: '' };
+
+function isScreeningDraft(value: unknown): value is ScreeningFormDraft {
+  if (typeof value !== 'object' || value === null || !('jobTitle' in value) || !('jobDescription' in value)) return false;
+  return typeof value.jobTitle === 'string' && value.jobTitle.length <= 200
+    && typeof value.jobDescription === 'string' && value.jobDescription.length <= 30000;
+}
 
 type SelectedResume = { id: string; file: File; candidateId?: string };
 type CandidateOption = { id: string; name: string };
@@ -80,8 +89,10 @@ export function ResumeScreeningPage() {
   const nextFileId = useRef(0);
   const idempotencyKey = useRef<string | null>(null);
   const refreshedAssessmentKeys = useRef(new Set<string>());
-  const [jobTitle, setJobTitle] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
+  const { value: jobDraft, status: draftStatus, persisted, setValue: setJobDraft, clear: clearDraft } = useSessionDraft(
+    session?.user?.id, 'resume-screening:new', emptyScreeningDraft, isScreeningDraft,
+  );
+  const { jobTitle, jobDescription } = jobDraft;
   const [resumes, setResumes] = useState<SelectedResume[]>([]);
   const [candidateOptions, setCandidateOptions] = useState<CandidateOption[]>([]);
   const [candidateOptionsError, setCandidateOptionsError] = useState('');
@@ -276,13 +287,7 @@ export function ResumeScreeningPage() {
     setSubmitting(true);
     let submissionAccepted = false;
     try {
-      const body = new FormData();
-      body.set('jobTitle', jobTitle.trim());
-      body.set('jobDescription', jobDescription.trim());
-      resumes.forEach(({ file }) => body.append('resumes', file, file.name));
-      if (resumes.some(({ candidateId }) => candidateId)) {
-        body.set('candidateIds', JSON.stringify(resumes.map(({ candidateId }) => candidateId ?? null)));
-      }
+      const body = buildScreeningRequest(jobTitle.trim(), jobDescription.trim(), resumes);
       idempotencyKey.current ??= crypto.randomUUID();
       const response = await apiRequest<unknown>('/screenings', {
         method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey.current },
