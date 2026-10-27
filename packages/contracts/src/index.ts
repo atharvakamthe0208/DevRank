@@ -20,3 +20,4 @@ export * from './recruiter-profile.js';
 export * from './scoring.js';
 export * from './screening.js';
 export * from './unified-candidate-report.js';
+export * from './unified-assessment.js';

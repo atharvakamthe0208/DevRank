@@ -1,9 +1,9 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { candidateSchema, finalRubric, githubInsightsSchema, scoringCategories } from '@devrank/contracts';
+import { candidateSchema, finalRubric, githubInsightsSchema, scoringCategories, type LeetCodeSyncResponse } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
 import { AuthProvider } from '../auth/AuthProvider';
-import { CandidatePlatformDataPanel } from './CandidatePlatformDataPanel';
+import { CandidatePlatformDataPanel, LeetCodeSyncSummary } from './CandidatePlatformDataPanel';
 import { ProposedRubricPanel } from './ProposedRubricPanel';
 
 const partialInsights = githubInsightsSchema.parse({
@@ -23,6 +23,24 @@ const partialInsights = githubInsightsSchema.parse({
 });
 
 describe('proposed rubric and contribution panel', () => {
+  it('displays saved LeetCode provider statistics and sync metadata', () => {
+    const result: LeetCodeSyncResponse = {
+      id: 'ea574cd8-8d21-4586-a887-dc2a6fc7ba08',
+      candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c',
+      platform: 'leetcode', availability: 'available', provenance: 'alfa_leetcode_api',
+      provider: 'alfa-leetcode-api', handle: 'example', profileUrl: 'https://leetcode.com/u/example/',
+      statistics: { problemsSolved: 120, easySolved: 50, mediumSolved: 60, hardSolved: 10 },
+      syncedAt: '2026-10-15T12:00:00.000Z',
+    };
+    const html = renderToStaticMarkup(createElement(LeetCodeSyncSummary, { result }));
+    expect(html).toContain('Statistics saved for <strong>@example</strong>');
+    expect(html).toContain('Problems solved</span><strong>120');
+    expect(html).toContain('Easy solved</span><strong>50');
+    expect(html).toContain('Medium solved</span><strong>60');
+    expect(html).toContain('Hard solved</span><strong>10');
+    expect(html).toContain('not evaluation scores');
+  });
+
   it('keeps the active rubric details off the candidate profile while preserving platform panels', () => {
     const candidate = candidateSchema.parse({
       id: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', name: 'Test Candidate', email: 'test@example.com',

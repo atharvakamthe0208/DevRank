@@ -31,6 +31,26 @@ function when(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
+const leetCodeStatisticLabels: Record<string, string> = {
+  problemsSolved: 'Problems solved',
+  easySolved: 'Easy solved',
+  mediumSolved: 'Medium solved',
+  hardSolved: 'Hard solved',
+  contestsAttended: 'Contests attended',
+  contestRating: 'Contest rating',
+  contestGlobalRanking: 'Global ranking',
+  contestParticipants: 'Contest participants',
+  contestTopPercentage: 'Top percentage',
+};
+
+export function LeetCodeSyncSummary({ result }: { result?: LeetCodeSyncResponse }) {
+  if (!result) return null;
+  return <div className="saved-platform-data leetcode-sync-result" role="status">
+    <p>Statistics saved for <strong>@{result.handle}</strong> · synced {when(result.syncedAt)} via {result.provider}. These profile statistics are not evaluation scores.</p>
+    <ul>{Object.entries(result.statistics).map(([name, value]) => <li key={name}><span>{leetCodeStatisticLabels[name] ?? name}</span><strong>{value}</strong></li>)}</ul>
+  </div>;
+}
+
 export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { candidate: Candidate; onCandidateUpdated?: (candidate: Candidate) => void }) {
   const { session } = useAuth();
   const { value: githubProfile, status: githubDraftStatus, persisted: githubDraftPersisted, setValue: setGithubProfile, initialize: initializeGithub, clear: clearGithubDraft } = useSessionDraft(session?.user?.id, `candidate:${candidate.id}:github-profile`, candidate.githubUsername ?? '', isUsernameDraft);
@@ -115,6 +135,8 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
   }
 
   const latestLeetCode = saved.find((item): item is CandidatePlatformResponse => 'platform' in item && item.platform === 'leetcode' && 'submittedAt' in item);
+  const savedLeetCodeSync = saved.find((item): item is LeetCodeSyncResponse => 'platform' in item && item.platform === 'leetcode' && item.provenance === 'alfa_leetcode_api' && 'syncedAt' in item);
+  const latestLeetCodeSync = leetcodeState.status === 'synced' ? leetcodeState.result : savedLeetCodeSync;
   return <section className="detail-section platform-data-section" aria-labelledby="platform-data-heading">
     <div className="section-heading"><div><h2 id="platform-data-heading">Platform data</h2><p>GitHub syncs through its public API. Coding profile links are saved to the candidate record; unsupported stats are never fabricated.</p></div></div>
     <article className="platform-data-card github-sync-card">
@@ -126,15 +148,14 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
       </div>}
     </article>
     <article className="platform-data-card platform-data-card-leetcode">
-      <div className="platform-data-heading"><span className="platform-mark leetcode-mark"><PlatformLogo platform="leetcode" size="regular"/></span><div><h3>LeetCode</h3><p>Profile link and any previously saved candidate-provided summary</p></div><span className={`source-status ${leetcodeState.status === 'syncing' ? 'is-pending' : latestLeetCode?.availability === 'available' ? 'is-available' : latestLeetCode ? 'is-unavailable' : 'is-idle'}`} role="status">{leetcodeState.status === 'syncing' ? 'Syncing…' : latestLeetCode ? latestLeetCode.availability.replace('_', ' ') : 'No stats saved'}</span></div>
-      <SessionDraftNotice status={leetcodeDraftStatus} persisted={leetcodeDraftPersisted} onDiscard={() => clearLeetCodeDraft(leetcodeBaseline)}/>
+      <div className="platform-data-heading"><span className="platform-mark leetcode-mark"><PlatformLogo platform="leetcode" size="regular"/></span><div><h3>LeetCode</h3><p>Profile link and saved provider statistics</p></div><span className={`source-status ${leetcodeState.status === 'syncing' ? 'is-pending' : leetcodeState.status === 'error' && !latestLeetCodeSync ? 'is-error' : latestLeetCodeSync ? 'is-available' : latestLeetCode?.availability === 'available' ? 'is-available' : latestLeetCode ? 'is-unavailable' : 'is-idle'}`} role="status">{leetcodeState.status === 'syncing' ? 'Syncing…' : leetcodeState.status === 'error' ? latestLeetCodeSync ? 'Last sync saved' : 'Needs attention' : latestLeetCodeSync ? 'Synced' : latestLeetCode ? latestLeetCode.availability.replace('_', ' ') : 'No stats saved'}</span></div>
       <form className="platform-data-form github-sync-form leetcode-sync-form" onSubmit={(event) => void syncLeetCode(event)}>
         <label>LeetCode username or profile URL<input value={leetcodeProfile} onChange={(event) => { setLeetCodeProfile(event.target.value); if (leetcodeState.status === 'error') setLeetCodeState({ status: 'idle' }); }} placeholder="username or https://leetcode.com/u/username" autoComplete="off" aria-invalid={leetcodeState.status === 'error'} aria-describedby={leetcodeState.status === 'error' ? 'leetcode-profile-feedback' : undefined} /></label>
         <button className="primary-button" type="submit" disabled={leetcodeState.status === 'syncing'}>{leetcodeState.status === 'syncing' ? 'Syncing…' : <><PlatformLogo platform="leetcode"/>Sync LeetCode</>}</button>
       </form>
       <p className="platform-sync-explanation">{platformSyncCapabilities.leetcode.explanation}</p>
       {leetcodeState.status === 'error' && <div id="leetcode-profile-feedback" className="platform-feedback is-error" role="alert"><p>{leetcodeState.message}</p><button type="button" className="text-button" onClick={() => void syncLeetCode()}>Try again</button></div>}
-      {leetcodeState.status === 'synced' && <div className="saved-platform-data" role="status"><p>Profile saved and synced {when(leetcodeState.result.syncedAt)} via {leetcodeState.result.provider}. Public profile data does not independently verify identity and is not used as an evaluation score.</p></div>}
+      <LeetCodeSyncSummary result={latestLeetCodeSync}/>
       {latestLeetCode && <div className="saved-platform-data"><p>Last saved {when(latestLeetCode.submittedAt)} · {latestLeetCode.provenance.replaceAll('_', ' ')}</p>{latestLeetCode.statistics && <ul>{Object.entries(latestLeetCode.statistics).map(([name, value]) => <li key={name}><span>{name.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</span><strong>{value}</strong></li>)}</ul>}</div>}
     </article>
   </section>;

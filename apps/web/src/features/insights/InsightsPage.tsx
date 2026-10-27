@@ -4,11 +4,12 @@ import {
   candidateComparisonResponseSchema,
   dashboardResponseSchema,
   evaluationRolesResponseSchema,
-  rankingResponseSchema,
+  candidateListResponseSchema,
+  unifiedAssessmentRankingResponseSchema,
   type CandidateComparisonResponse,
   type DashboardResponse,
   type EvaluationRole,
-  type RankingResponse,
+  type UnifiedAssessmentRankingResponse,
 } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { supabase } from '../../lib/supabase/client';
@@ -31,15 +32,16 @@ function clearExpiredSession(error: unknown) {
   if (error instanceof ApiRequestError && error.status === 401) void supabase?.auth.signOut({ scope: 'local' });
 }
 
-export function InsightsRankingTable({ ranking, roleDisplayName, candidateNames }: { ranking: RankingResponse; roleDisplayName: string; candidateNames: ReadonlyMap<string, string> }) {
-  return <div className="insights-table-wrap" role="region" aria-label="Candidate rankings" aria-describedby="insights-ranking-scroll-hint" tabIndex={0}>
-    <p className="insights-scroll-hint" id="insights-ranking-scroll-hint">On small screens, scroll horizontally to see all ranking details.</p>
-    <table className="insights-table"><caption className="visually-hidden">Ranked candidate evaluations for {roleDisplayName}</caption><thead><tr><th scope="col">Rank</th><th scope="col">Candidate</th><th scope="col">Score</th><th scope="col">Evaluated</th></tr></thead><tbody>{ranking.items.map((item) => {
-      const candidateName = candidateNames.get(item.candidateId);
-      return <tr key={item.evaluationId}><td>#{item.rank}</td><td><Link aria-label={`Open ${candidateName ?? 'candidate'} profile`} to={`/candidates/${item.candidateId}`}>{candidateName ?? 'View candidate'}</Link></td><td><strong>{item.score}</strong> / 100</td><td><time dateTime={item.evaluatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(item.evaluatedAt))}</time></td></tr>;
-    })}</tbody></table>
-    <p className="insights-footnote">{ranking.total} ranked · {ranking.excluded.incomplete} incomplete excluded · scoring version {ranking.scoringVersion}</p>
-  </div>;
+function unifiedComponentLabel(component: UnifiedAssessmentRankingResponse['items'][number]['assessment']['components']['resume']) {
+  if (component.status === 'policy_only') return 'Not observed';
+  if (component.score === null) return 'Not found';
+  if (component.status === 'validated') return `${component.score}/100`;
+  if (component.status === 'preliminary') return `${component.score} preliminary · excluded`;
+  return 'Unavailable';
+}
+
+export function UnifiedRankingTable({ ranking, roleLabel }: { ranking: UnifiedAssessmentRankingResponse; roleLabel: string }) {
+  return <div className="insights-table-wrap"><table className="insights-table unified-ranking-table"><caption className="visually-hidden">Unified final candidate report for {roleLabel}, sorted by validated final score descending</caption><thead><tr><th scope="col">Rank</th><th scope="col">Candidate</th><th scope="col">GitHub</th><th scope="col">GitHub Score</th><th scope="col">LeetCode</th><th scope="col">LeetCode Score</th><th scope="col">Resume Score</th><th scope="col">Final Score /100</th><th scope="col">Status</th><th scope="col">Report</th></tr></thead><tbody>{ranking.items.map((item) => { const assessment = item.assessment; const github = assessment.components.github; const leetcode = assessment.components.leetcode; const resume = assessment.components.resume; const resumeScore = item.resumeScore === undefined ? unifiedComponentLabel(resume) : item.resumeScore === null ? 'Not found' : `${item.resumeScore}/100`; return <tr key={assessment.id}><td>{item.rank === null ? '—' : `#${item.rank}`}</td><td><Link to={`/candidates/${assessment.candidateId}`}>{item.candidateName}</Link></td><td>{item.githubUsername ? `@${item.githubUsername}` : 'Not found'}</td><td><strong>{unifiedComponentLabel(github)}</strong></td><td>{item.leetcodeUsername ? `@${item.leetcodeUsername}` : 'Not found'}</td><td><strong>{unifiedComponentLabel(leetcode)}</strong></td><td><strong>{resumeScore}</strong></td><td><strong>{assessment.overallScore === null ? 'Withheld' : `${assessment.overallScore}/100`}</strong></td><td>{assessment.status === 'completed' ? 'Completed' : `Incomplete · missing ${assessment.missingComponents.join(', ')}`}</td><td><Link to={`/candidates/${assessment.candidateId}/report`}>View report</Link></td></tr>; })}</tbody></table><p className="insights-footnote">{ranking.ranked} complete and ranked · {ranking.total - ranking.ranked} incomplete and unranked. Scores shown for components are validated unless explicitly marked preliminary. Preliminary, failed, policy-only, and unavailable values do not contribute to a final score.</p></div>;
 }
 
 export function InsightsPage() {
@@ -47,7 +49,10 @@ export function InsightsPage() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [roles, setRoles] = useState<EvaluationRole[]>([]);
   const [roleId, setRoleId] = useState<EvaluationRole['id'] | ''>('');
-  const [ranking, setRanking] = useState<RankingResponse | null>(null);
+  const [unifiedRanking, setUnifiedRanking] = useState<UnifiedAssessmentRankingResponse | null>(null);
+  const [assessmentProgress, setAssessmentProgress] = useState<{ current: number; total: number; candidate: string; completed: number; failed: number } | null>(null);
+  const [assessmentError, setAssessmentError] = useState('');
+  const [assessingAll, setAssessingAll] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [comparison, setComparison] = useState<CandidateComparisonResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,7 +67,7 @@ export function InsightsPage() {
     let active = true;
     async function load() {
       if (!session?.access_token) { setError('Your secure session is unavailable. Sign in again.'); setLoading(false); return; }
-      setLoading(true); setError(''); setRankingError(''); setDashboard(null); setRanking(null); setComparison(null);
+      setLoading(true); setError(''); setRankingError(''); setDashboard(null); setComparison(null);
       try {
         const [dashboardResponse, rolesResponse] = await Promise.all([
           apiRequest<unknown>('/dashboard', undefined, session.access_token),
@@ -89,11 +94,10 @@ export function InsightsPage() {
     let active = true;
     async function loadRanking() {
       if (!session?.access_token || !roleId || loading) return;
-      setRankingLoading(true); setRankingError(''); setRanking(null);
+      setRankingLoading(true); setRankingError(''); setUnifiedRanking(null);
       try {
-        const response = await apiRequest<unknown>(`/rankings?roleId=${encodeURIComponent(roleId)}&page=1&pageSize=20`, undefined, session.access_token);
-        const parsed = rankingResponseSchema.parse(response);
-        if (active) setRanking(parsed);
+        const unifiedResponse = await apiRequest<unknown>(`/rankings/unified?roleId=${encodeURIComponent(roleId)}`, { cache: 'no-store' }, session.access_token);
+        if (active) setUnifiedRanking(unifiedAssessmentRankingResponseSchema.parse(unifiedResponse));
       } catch (cause) { if (active) { clearExpiredSession(cause); setRankingError(messageFor(cause)); } }
       finally { if (active) setRankingLoading(false); }
     }
@@ -141,6 +145,36 @@ export function InsightsPage() {
     finally { setComparing(false); }
   }
 
+  async function assessAllCandidates() {
+    if (!session?.access_token || !roleId || assessingAll) return;
+    setAssessingAll(true); setAssessmentError(''); setAssessmentProgress(null);
+    let completed = 0; let failed = 0; let total = 0; let current = 0;
+    try {
+      const firstPage = candidateListResponseSchema.parse(await apiRequest<unknown>('/candidates?page=1&pageSize=100', undefined, session.access_token));
+      const candidates = [...firstPage.items];
+      for (let page = 2; candidates.length < firstPage.total; page += 1) {
+        const next = candidateListResponseSchema.parse(await apiRequest<unknown>(`/candidates?page=${page}&pageSize=100`, undefined, session.access_token));
+        candidates.push(...next.items);
+        if (!next.items.length) break;
+      }
+      total = candidates.length;
+      setAssessmentProgress({ current: 0, total, candidate: '', completed, failed });
+      for (const candidate of candidates) {
+        current += 1;
+        setAssessmentProgress({ current, total, candidate: candidate.name, completed, failed });
+        try {
+          await apiRequest(`/candidates/${encodeURIComponent(candidate.id)}/unified-report/assessment`, { method: 'POST', body: JSON.stringify({ roleId, resumeId: null }) }, session.access_token);
+          completed += 1;
+        } catch { failed += 1; }
+        setAssessmentProgress({ current, total, candidate: candidate.name, completed, failed });
+      }
+      const refreshed = unifiedAssessmentRankingResponseSchema.parse(await apiRequest<unknown>(`/rankings/unified?roleId=${encodeURIComponent(roleId)}`, { cache: 'no-store' }, session.access_token));
+      setUnifiedRanking(refreshed);
+    } catch (cause) {
+      setAssessmentError(messageFor(cause));
+    } finally { setAssessingAll(false); }
+  }
+
   return <div className="insights-page">
     <section className="insights-heading"><div><span className="eyebrow"><span className="eyebrow-line"/> RECRUITER HOME</span><h1>Insights &amp; rankings</h1><p className="page-subtitle">Home activity and comparable evaluation results.</p></div><Link className="secondary-button insights-run-evaluation" to="/evaluations">Run an evaluation</Link></section>
     {loading ? <WorkspaceSkeleton variant="insights"/> : error ? <section className="insights-state" role="alert"><p>{error}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></section> : dashboard && <>
@@ -150,9 +184,11 @@ export function InsightsPage() {
         <KpiCard icon="✓" label="Completed" value={dashboard.statusCounts.completed ?? 0} detail="Completed evaluation runs" progress={dashboard.evaluationCount > 0 ? { value: dashboard.statusCounts.completed ?? 0, max: dashboard.evaluationCount, label: 'Completed evaluations out of all saved evaluations' } : undefined}/>
         <KpiCard icon="◉" label="Recent average" value={recentAverageProgress} decimals={1} suffix=" / 100" detail={recentScoreSummary.count ? `Across ${recentScoreSummary.count} scored recent evaluations` : 'No scored evaluations yet'} progress={recentAverageProgressBar} trend={recentScoreTrend}/>
       </section>
-      <section className="insights-panel" aria-labelledby="ranking-title">
-        <div className="insights-panel-heading"><div><h2 id="ranking-title">Candidate rankings</h2><p>Ranked results for the selected role.</p></div><label htmlFor="ranking-role">Role<select id="ranking-role" value={roleId} onChange={(event) => changeRole(event.target.value as EvaluationRole['id'])}>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label></div>
-        {!roles.length ? <div className="insights-state"><h3>No evaluation roles available</h3><p>Rankings will appear when a supported evaluation role is available.</p></div> : rankingLoading ? <WorkspaceSkeleton variant="ranking"/> : rankingError ? <div className="insights-state" role="alert"><p>{rankingError}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : ranking?.items.length ? <InsightsRankingTable ranking={ranking} roleDisplayName={roles.find(({ id }) => id === roleId)?.displayName ?? 'selected role'} candidateNames={new Map(dashboard.recentEvaluations.map(({ candidateId, candidateName }) => [candidateId, candidateName]))}/> : <div className="insights-state"><h3>No comparable rankings yet</h3><p>Complete an evaluation with sufficient evidence for this role to appear here. Missing or incomplete evidence is not assigned a zero score.</p><Link className="primary-button link-button" to="/evaluations">Start an evaluation</Link></div>}
+    <section className="insights-panel" aria-labelledby="unified-ranking-title">
+        <div className="insights-panel-heading"><div><h2 id="unified-ranking-title">Final candidate ranking</h2><p>{roles.find(({ id }) => id === roleId)?.displayName ?? 'Selected role'} · ordered by validated final score, highest first. Incomplete candidates remain visible without a rank.</p></div><div className="unified-ranking-actions"><label htmlFor="ranking-role">Role<select id="ranking-role" value={roleId} onChange={(event) => changeRole(event.target.value as EvaluationRole['id'])}>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label><button type="button" className="primary-button" disabled={assessingAll || !roles.length} onClick={() => void assessAllCandidates()}>{assessingAll ? 'Assessing candidates…' : 'Assess All Candidates'}</button></div></div>
+        {assessmentProgress && <p role="status" aria-live="polite">{assessingAll ? `Assessing ${assessmentProgress.current} of ${assessmentProgress.total} candidates · ${assessmentProgress.candidate}` : `Finished ${assessmentProgress.current} of ${assessmentProgress.total}: ${assessmentProgress.completed} saved, ${assessmentProgress.failed} failed.`}</p>}
+        {assessmentError && <p role="alert" className="insights-error">{assessmentError}</p>}
+        {rankingLoading ? <WorkspaceSkeleton variant="ranking"/> : rankingError ? <div className="insights-state" role="alert"><p>{rankingError}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : unifiedRanking?.items.length ? <UnifiedRankingTable ranking={unifiedRanking} roleLabel={roles.find(({ id }) => id === roleId)?.displayName ?? 'selected role'}/> : <div className="insights-state"><p>No unified assessments saved for this role yet. Use Assess All Candidates or generate one from a candidate report.</p></div>}
       </section>
       <section className="insights-panel" aria-labelledby="comparison-title">
         <div className="insights-panel-heading"><div><h2 id="comparison-title">Compare candidates</h2></div><button className="primary-button" type="button" disabled={!canCompare} onClick={() => void compareSelected()}>{comparing ? 'Comparing…' : `Compare selected (${selected.length})`}</button></div>

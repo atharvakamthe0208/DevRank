@@ -129,7 +129,7 @@ export function createLeetCodeAdapter(
       };
 
       // Profile and solved counts are required; contest details are supplementary. Fetch
-      // independently so each endpoint retains its own eight-second timeout.
+      // independently so each endpoint retains its own bounded 30-second timeout.
       const [profileBody, solvedBody, contestBody] = await Promise.all([
         requestJson(''),
         requestJson('/solved'),
