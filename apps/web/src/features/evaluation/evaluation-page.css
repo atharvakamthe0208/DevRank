@@ -174,7 +174,7 @@
 .evaluation-bulk-summary > div { display: grid; gap: 5px; min-width: 0; padding: 11px 13px; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; }
 .evaluation-bulk-summary span { color: #526174; font-size: 12px; font-weight: 550; }
 .evaluation-bulk-summary strong { color: #17243a; font: 700 19px/1.2 var(--font-family-base); }
-.evaluation-bulk-summary [data-tone="success"] strong { color: #18734a; }
+.evaluation-bulk-summary [data-tone="success"] strong { color: #000000; }
 .evaluation-bulk-summary [data-tone="danger"] strong { color: #b42318; }
 .evaluation-bulk-summary [data-tone="neutral"] strong { color: #475569; }
 .evaluation-bulk-results ul { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
@@ -183,7 +183,7 @@
 .evaluation-bulk-candidate > strong { overflow: hidden; color: #17243a; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .evaluation-bulk-candidate > p { grid-column: 1 / -1; margin: 0; color: #9f2d26; font-size: 13px; line-height: 1.45; }
 .evaluation-bulk-status { display: inline-flex; align-items: center; width: fit-content; padding: 4px 9px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; white-space: nowrap; }
-.evaluation-bulk-status[data-state="completed"][data-evaluation-status="completed"] { background: #ecfdf3; color: #18734a; }
+.evaluation-bulk-status[data-state="completed"][data-evaluation-status="completed"] { background: #ecfdf3; color: #000000; }
 .evaluation-bulk-status[data-evaluation-status="insufficient_evidence"] { background: #fff7e6; color: #8a5b00; }
 .evaluation-bulk-status[data-state="failed"] { background: #fef3f2; color: #b42318; }
 .evaluation-bulk-status[data-state="skipped"],
@@ -286,7 +286,7 @@
 }
 .evaluation-status-badge.is-completed {
   background: #ecfdf5;
-  color: #065f46;
+  color: #000000;
   border: 1px solid #a7f3d0;
 }
 .evaluation-status-badge.is-evidence {
@@ -779,7 +779,7 @@
   padding: 3px 8px;
   border-radius: 999px;
   background: #ecfdf5;
-  color: #065f46;
+  color: #000000;
   font-size: 11px;
   font-weight: 600;
 }
