@@ -18,10 +18,6 @@ export function DashboardWelcome({ firstName }: { firstName?: string }) {
   </section>;
 }
 
-export function DashboardEvaluationColumns() {
-  return <div className="dashboard-evaluation-columns" aria-hidden="true"><span>Candidate</span><span>Job Title</span><span>Status</span><span>Actions</span></div>;
-}
-
 export function DashboardEvaluationRow({ item, roleLabel, reportRoleLabel }: { item: DashboardResponse['recentEvaluations'][number]; roleLabel: string; reportRoleLabel: string }) {
   return <article className="dashboard-evaluation-row">
     <Link className="dashboard-candidate-link" to={`/candidates/${item.candidateId}`}><span className="dashboard-avatar" aria-hidden="true">{item.candidateName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span><strong>{item.candidateName}</strong></span></Link>
@@ -121,7 +117,6 @@ export function DashboardPage() {
     <section className="dashboard-panel" aria-labelledby="recent-evaluations-heading">
       <div className="dashboard-section-heading"><div><span className="dashboard-kicker">HOME ACTIVITY</span><h2 id="recent-evaluations-heading">Recent evaluations</h2></div><Link className="dashboard-text-link" to="/evaluations">Run evaluation <span aria-hidden="true">→</span></Link></div>
       {loading ? <p className="dashboard-state" role="status">Loading evaluation activity…</p> : error ? <div className="dashboard-state" role="alert"><p>Evaluation activity could not be loaded.</p><button className="dashboard-secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : dashboard?.recentEvaluations.length ? <div className="dashboard-evaluation-list">
-        <DashboardEvaluationColumns/>
         {dashboard.recentEvaluations.slice(0, 5).map((item) => <DashboardEvaluationRow key={item.id} item={item} roleLabel={evaluationRoles[item.id] ?? (evaluationRolesLoading ? 'Loading role…' : 'Role unavailable')} reportRoleLabel={evaluationRoles[item.id] ?? 'evaluation'}/>)}
       </div> : <div className="dashboard-state"><h3>No evaluations yet</h3><p>Run an evaluation to see its saved status and score here.</p><Link className="dashboard-secondary-button" to="/evaluations">Start an evaluation</Link></div>}
     </section>
