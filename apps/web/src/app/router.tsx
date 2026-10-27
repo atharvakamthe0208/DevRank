@@ -8,6 +8,7 @@ import { AdminRecruitersPage } from '../features/admin/AdminRecruitersPage';
 import { CandidateListPage } from '../features/candidates/CandidateListPage';
 import { AddCandidatePage } from '../features/candidates/AddCandidatePage';
 import { EvaluationPage } from '../features/evaluation/EvaluationPage';
+import { LandingPage } from '../features/landing/LandingPage';
 
 function ProtectedRecruiterRoutes() {
   const { state, error, refresh, signOut } = useAuth();
@@ -41,7 +42,8 @@ function NotFoundPage() {
   return <div className="not-found-card"><span className="not-found-mark">404</span><h1>Page not found</h1><p>We couldn’t find the page you were looking for.</p><a className="primary-button link-button" href="/dashboard">Back to overview</a></div>;
 }
 
-export const router = createBrowserRouter([
+export const appRoutes = [
+  { path: '/', element: <LandingPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/signup', element: <SignupPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
@@ -49,8 +51,7 @@ export const router = createBrowserRouter([
   { path: '/auth/callback', element: <AuthCallbackPage /> },
   { path: '/access-pending', element: <AccessPendingPage /> },
   { element: <ProtectedAdminRoutes />, children: [{ path: '/admin/recruiters', element: <AdminRecruitersPage /> }] },
-  { element: <ProtectedRecruiterRoutes />, children: [{ path: '/', element: <AppShell />, children: [
-    { index: true, element: <Navigate to="/dashboard" replace /> },
+  { element: <ProtectedRecruiterRoutes />, children: [{ element: <AppShell />, children: [
     { path: 'dashboard', element: <DashboardPage /> },
     { path: 'dashboard/candidates', element: <CandidateListPage /> },
     { path: 'dashboard/reports', element: <SimplePage title="Reports" /> },
@@ -59,4 +60,8 @@ export const router = createBrowserRouter([
     { path: 'candidates/:id', element: <CandidateDetailsPage /> },
   ] }] },
   { path: '*', element: <NotFoundPage /> },
-]);
+];
+
+export function createAppRouter() {
+  return createBrowserRouter(appRoutes);
+}

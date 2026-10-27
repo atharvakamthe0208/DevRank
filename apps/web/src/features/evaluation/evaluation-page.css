@@ -16,7 +16,7 @@
 .evaluation-empty { margin: 24px 0 4px; padding: 24px; border-radius: 12px; background: #f7f9fc; text-align: center; }
 .evaluation-result-top { align-items: flex-start; padding-bottom: 22px; border-bottom: 1px solid var(--border, #e5e7eb); }
 .evaluation-result-top h2 { margin-top: 10px; }
-.overall-score { display: grid; justify-items: center; min-width: 144px; padding: 16px 20px; border-radius: 14px; background: #eaf7f1; color: #176b53; }
+.overall-score { display: grid; justify-items: center; min-width: 144px; padding: 16px 20px; border-radius: 14px; background: #eff5fc; color: #36588c; }
 .overall-score.is-pending { background: #fff6e8; color: #845c16; }
 .overall-score span, .overall-score small { font-size: 12px; }
 .overall-score strong { font-size: 34px; line-height: 1.15; }
@@ -25,7 +25,7 @@
 .evaluation-category-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .evaluation-category h3 { margin: 0; font-size: 15px; }
 .evaluation-category-heading strong { white-space: nowrap; color: #315e99; font-size: 13px; }
-.evaluation-category progress { width: 100%; height: 9px; margin: 15px 0 4px; accent-color: #32a680; }
+.evaluation-category progress { width: 100%; height: 9px; margin: 15px 0 4px; accent-color: #5278b8; }
 .evaluation-category p { margin: 12px 0 8px; color: var(--muted, #697586); font-size: 13px; line-height: 1.55; }
 .evaluation-category small { color: #8a94a4; }
 .evaluation-limitations { padding: 18px; border-radius: 12px; background: #f7f9fc; }
