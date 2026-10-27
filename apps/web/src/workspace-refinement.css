@@ -32,7 +32,7 @@
 .dashboard-avatar{width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:50%;background:#e9ecff;color:#4545b5;font-size:10px;font-weight:700}
 .dashboard-status{width:max-content;display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid #e8eae5;border-radius:20px;background:#f7f8f5;color:#676a60;font-size:10px;white-space:nowrap}
 .dashboard-status i{width:6px;height:6px;border-radius:50%;background:#9a9c93}
-.dashboard-status.status-completed{border-color:#dcebe0;background:#edf5ee;color:#4f815d}.dashboard-status.status-completed i{background:#5c9471}
+.dashboard-status.status-completed{border-color:#dcebe0;background:#edf5ee;color:#000000}.dashboard-status.status-completed i{background:#5c9471}
 .dashboard-status.status-pending,.dashboard-status.status-in_progress{border-color:#e8eae5;background:#f7f8f5;color:#676a60}
 .dashboard-status.status-insufficient_evidence{border-color:#eee3c5;background:#f9f2df;color:#927d40}.dashboard-status.status-insufficient_evidence i{background:#b59552}
 .dashboard-status.status-failed{border-color:#efdcd3;background:#fbede7;color:#a87258}.dashboard-status.status-failed i{background:#ce9273}

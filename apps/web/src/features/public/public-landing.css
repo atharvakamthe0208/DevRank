@@ -77,7 +77,7 @@
 .landing-avatar-muted { color: #657d99; background: #edf3f8; }
 .landing-status { white-space: nowrap; font-size: 8px; font-weight: 600; }
 .landing-status::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 5px; vertical-align: 1px; border-radius: 50%; background: currentColor; }
-.landing-status-ready { color: #44846a; }.landing-status-partial { color: #9a7a3d; }
+.landing-status-ready { color: #000000; }.landing-status-partial { color: #9a7a3d; }
 .landing-preview-note { margin: 14px 0 0; color: #818da2; font-size: 10px; line-height: 1.5; }
 .landing-preview-score { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 14px; border-bottom: 1px solid #ebeff6; }
 .landing-preview-score > div:first-child { display: grid; gap: 6px; color: #8490a5; font-size: 10px; }

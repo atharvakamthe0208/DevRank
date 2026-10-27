@@ -18,7 +18,7 @@
 .unified-print-button { flex: none; min-height: 38px; padding-inline: 14px; background: linear-gradient(115deg, #315bd8, #514bd1); border-color: #315bd8; box-shadow: 0 4px 10px #315bd81c; font-size: 12px; }
 .unified-print-button:hover { box-shadow: 0 7px 16px #315bd82a; }
 .unified-status { display: inline-flex; align-items: center; width: fit-content; padding: 4px 8px; border: 1px solid #dfe5ef; border-radius: 999px; background: #f4f6fa; color: #4f617c; font-size: 12px; font-weight: 700; line-height: 1.25; text-transform: capitalize; }
-.unified-status-completed,.unified-status-scored,.unified-status-available { border-color: #d5e8dc; background: #eff8f2; color: #286444; }
+.unified-status-completed,.unified-status-scored,.unified-status-available { border-color: #d5e8dc; background: #eff8f2; color: #000000; }
 .unified-status-insufficient_evidence,.unified-status-partial,.unified-status-historical { border-color: #f0dfbd; background: #fff8e9; color: #80520f; }
 .unified-status-unavailable,.unified-status-not_evaluated,.unified-status-unlinked { border-color: #e2e6ed; background: #f5f7fa; color: #596a82; }
 .unified-report-panel,.unified-report-summary,.unified-summary-card {
@@ -206,7 +206,7 @@
 .unified-overview-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .unified-overview-heading h2 { margin: 4px 0; color: #1b2c4b; font: 650 21px/1.25 Manrope, sans-serif; }
 .unified-overview-heading p { margin: 0; color: var(--report-muted); font-size: 13px; }
-.unified-final-score { display: grid; gap: 3px; min-width: 150px; padding: 12px 16px; border: 1px solid #cfe4d5; border-radius: 11px; background: #f2f8f3; color: #286444; }
+.unified-final-score { display: grid; gap: 3px; min-width: 150px; padding: 12px 16px; border: 1px solid #cfe4d5; border-radius: 11px; background: #f2f8f3; color: #000000; }
 .unified-final-score span { font-size: 12px; font-weight: 650; }
 .unified-final-score strong { font: 700 25px/1.2 Manrope, sans-serif; }
 .unified-final-score.is-incomplete { border-color: #e5e8ed; background: #f6f7f9; color: #596a82; }

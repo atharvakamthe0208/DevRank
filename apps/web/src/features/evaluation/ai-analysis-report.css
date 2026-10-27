@@ -92,7 +92,7 @@
   border: 1px solid #a7f3d0;
   border-radius: 999px;
   background: #ecfdf5;
-  color: #065f46;
+  color: #000000;
   font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
@@ -111,7 +111,7 @@
 .ai-report-header h1 { margin: 0; font: 700 24px var(--font-family-base); }
 .ai-report-header p { margin: 5px 0 0; color: #64748b; font-size: 13px; }
 .ai-report-status { display: inline-flex; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 650; }
-.ai-report-status.report-complete { background: #ecfdf5; color: #065f46; }
+.ai-report-status.report-complete { background: #ecfdf5; color: #000000; }
 .ai-report-status.report-incomplete { background: #fffbeb; color: #92400e; }
 .ai-report-score-panel { padding: 18px 22px; border: 1px solid #dbe5f4; border-radius: 14px; background: #fff; }
 .ai-report-score-panel > div { display: grid; gap: 5px; }
@@ -163,7 +163,7 @@
 .ai-report-chip .chip-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; }
 .dot-green { background: #059669; }
 .dot-amber { background: #d97706; }
-.chip-strength { border-color: #a7f3d0; background: #ecfdf5; color: #065f46; }
+.chip-strength { border-color: #a7f3d0; background: #ecfdf5; color: #000000; }
 .chip-growth { border-color: #fde68a; background: #fffbeb; color: #92400e; }
 .ai-report-section-heading { margin: 2px 0 12px; }
 .ai-report-section-heading h2 { margin: 0; font: 700 19px var(--font-family-base); }
