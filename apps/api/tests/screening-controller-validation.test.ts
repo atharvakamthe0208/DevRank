@@ -18,7 +18,10 @@ describe('resume screening request validation', () => {
   it('returns the persisted candidate ID with screening details for safe assessment refresh', async () => {
     const sessionQuery = { select: vi.fn(), eq: vi.fn(), single: vi.fn(async () => ({ data: { id: 'c3a5f5f0-fd65-4c13-9378-5a4377dcd1e2', job_title: 'Software Developer', status: 'completed' }, error: null })) };
     sessionQuery.select.mockReturnValue(sessionQuery); sessionQuery.eq.mockReturnValue(sessionQuery);
-    const resumeQuery = { select: vi.fn(), eq: vi.fn(), order: vi.fn(async () => ({ data: [{ id: 'e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2', candidate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', original_filename: 'candidate.pdf', status: 'completed', extracted_data: null, evaluation: null, preliminary_evaluation: null, safe_error_code: null, retry_count: 0, safe_error_message: null }], error: null })) };
+    const resumeQuery = { select: vi.fn(), eq: vi.fn(), order: vi.fn(async () => ({ data: [
+      { id: 'e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2', candidate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', original_filename: 'candidate.pdf', status: 'completed', extracted_data: null, evaluation: null, preliminary_evaluation: null, safe_error_code: null, retry_count: 0, safe_error_message: null },
+      { id: 'b5a5f5f0-fd65-4c13-9378-5a4377dcd1e2', candidate_id: null, original_filename: 'unlinked.pdf', status: 'completed', extracted_data: null, evaluation: null, preliminary_evaluation: null, safe_error_code: null, retry_count: 0, safe_error_message: null },
+    ], error: null })) };
     resumeQuery.select.mockReturnValue(resumeQuery); resumeQuery.eq.mockReturnValue(resumeQuery);
     const client = { from: vi.fn((table: string) => table === 'screening_sessions' ? sessionQuery : resumeQuery) };
     const controller = createScreeningController(vi.fn(() => client) as never, processor);
@@ -28,7 +31,10 @@ describe('resume screening request validation', () => {
     await vi.waitFor(() => expect(response.json).toHaveBeenCalledOnce());
     expect(next).not.toHaveBeenCalled();
     expect(resumeQuery.select).toHaveBeenCalledWith('id,candidate_id,original_filename,status,extracted_data,evaluation,preliminary_evaluation,safe_error_code,retry_count,safe_error_message');
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ resumes: [expect.objectContaining({ candidateId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })] }));
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ resumes: [
+      expect.objectContaining({ candidateId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+      expect.objectContaining({ candidateId: null }),
+    ] }));
   });
 
   it('maps missing-table, outdated-column, and RLS failures to actionable safe errors', () => {
@@ -82,10 +88,13 @@ describe('resume screening request validation', () => {
     chain.in.mockResolvedValue({ data: [], error: null });
     const ownerClient = { from: vi.fn(() => chain) };
     const ownerClientFactory = vi.fn(() => ownerClient) as never;
-    const controller = createScreeningController(ownerClientFactory, processor);
+    const serviceClientFactory = vi.fn(() => ({ from: vi.fn() })) as never;
+    const controller = createScreeningController(ownerClientFactory, processor, serviceClientFactory);
     const request = { auth: approved, body: { jobTitle: 'Engineer', jobDescription: 'A sufficiently descriptive role for engineering production services and teams.', candidateIds: ['e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2'] }, files: [{ size: 120, mimetype: 'application/pdf' }] } as unknown as Request;
     const error = await new Promise<unknown>((resolve) => controller.submit(request, {} as Response, ((cause?: unknown) => resolve(cause)) as NextFunction));
     expect(error).toMatchObject({ code: 'SCREENING_CANDIDATE_NOT_FOUND', statusCode: 404 });
+    expect(chain.eq).toHaveBeenCalledWith('owner_id', approved.userId);
+    expect(chain.is).toHaveBeenCalledWith('archived_at', null);
     expect(chain.in).toHaveBeenCalledWith('id', ['e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2']);
   });
 });

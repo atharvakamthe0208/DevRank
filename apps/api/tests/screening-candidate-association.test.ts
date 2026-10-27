@@ -40,6 +40,8 @@ describe('screening result candidate association', () => {
       details: { candidateIds: [candidateId] },
     });
     expect(candidateQuery.in).toHaveBeenCalledWith('id', [candidateId]);
+    expect(candidateQuery.eq).toHaveBeenCalledWith('owner_id', ownerId);
+    expect(candidateQuery.is).toHaveBeenCalledWith('archived_at', null);
     expect(resumeQuery.in).toHaveBeenCalledWith('candidate_id', [candidateId]);
     expect(sessionQuery.insert).not.toHaveBeenCalled();
   });
@@ -112,6 +114,8 @@ describe('screening result candidate association', () => {
       expect(responseBody.resumes[0].id).toBe(insertedResumeRows[0].id);
       expect(responseBody.resumes[1].id).toBe(insertedResumeRows[1].id);
       expect(candidateQuery.in).toHaveBeenCalledWith('id', [candidateId]);
+      expect(candidateQuery.eq).toHaveBeenCalledWith('owner_id', ownerId);
+      expect(candidateQuery.is).toHaveBeenCalledWith('archived_at', null);
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
 });
