@@ -22,7 +22,7 @@
 }
 .evaluation-heading h1 {
   margin: 8px 0 4px;
-  font: 700 32px Manrope, sans-serif;
+  font: 700 32px var(--font-family-base);
   letter-spacing: -0.8px;
   line-height: 1.12;
   color: #0f172a;
@@ -56,7 +56,7 @@
 }
 .evaluation-panel-heading h2 {
   margin: 0;
-  font: 700 21px/1.3 Manrope, sans-serif;
+  font: 700 21px/1.3 var(--font-family-base);
   color: #0f172a;
 }
 .evaluation-panel-heading p {
@@ -164,7 +164,7 @@
 }
 .evaluation-bulk-confirm { border-color: #bfdbfe; background: #f5f9ff; }
 .evaluation-bulk-confirm h3,
-.evaluation-bulk-results h3 { margin: 0; color: #17243a; font: 700 18px/1.3 Manrope, sans-serif; }
+.evaluation-bulk-results h3 { margin: 0; color: #17243a; font: 700 18px/1.3 var(--font-family-base); }
 .evaluation-bulk-confirm p,
 .evaluation-bulk-results-heading p { margin: 6px 0 0; color: #526174; font-size: 13px; line-height: 1.5; }
 .evaluation-bulk-confirm>div { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
@@ -173,7 +173,7 @@
 .evaluation-bulk-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .evaluation-bulk-summary > div { display: grid; gap: 5px; min-width: 0; padding: 11px 13px; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; }
 .evaluation-bulk-summary span { color: #526174; font-size: 12px; font-weight: 550; }
-.evaluation-bulk-summary strong { color: #17243a; font: 700 19px/1.2 Manrope, sans-serif; }
+.evaluation-bulk-summary strong { color: #17243a; font: 700 19px/1.2 var(--font-family-base); }
 .evaluation-bulk-summary [data-tone="success"] strong { color: #18734a; }
 .evaluation-bulk-summary [data-tone="danger"] strong { color: #b42318; }
 .evaluation-bulk-summary [data-tone="neutral"] strong { color: #475569; }
@@ -229,7 +229,7 @@
   border-radius: 50%;
   background: #e0e7ff;
   color: #3730a3;
-  font: 700 17px Manrope, sans-serif;
+  font: 700 17px var(--font-family-base);
   display: grid;
   place-items: center;
   letter-spacing: -0.3px;
@@ -240,7 +240,7 @@
 .candidate-name {
   margin: 0;
   color: #0f172a;
-  font: 700 clamp(20px, 2.5vw, 24px) Manrope, sans-serif;
+  font: 700 clamp(20px, 2.5vw, 24px) var(--font-family-base);
   letter-spacing: -0.4px;
   line-height: 1.25;
   overflow: hidden;
@@ -258,6 +258,15 @@
   color: #94a3b8;
   font-size: 12px;
 }
+.evaluation-candidate-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+.evaluation-candidate-metrics strong { color: #0f172a; font-weight: 700; }
 .candidate-card-actions {
   display: flex;
   align-items: center;
@@ -284,6 +293,16 @@
   background: #eff6ff;
   color: #1e40af;
   border: 1px solid #bfdbfe;
+}
+.evaluation-status-badge.is-incomplete {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.evaluation-evidence-indicator {
+  color: #64748b;
+  font-size: 11px;
+  white-space: nowrap;
 }
 .evaluation-status-badge .status-dot {
   width: 6px;
@@ -373,12 +392,12 @@
   min-width: 0;
 }
 .evidence-section-label {
-  font: 700 13px Manrope, sans-serif;
+  font: 700 13px var(--font-family-base);
   color: #0f172a;
   line-height: 1.25;
 }
 .evidence-metric-number {
-  font: 700 17px Manrope, sans-serif;
+  font: 700 17px var(--font-family-base);
   color: #0f172a;
   line-height: 1.2;
 }
@@ -432,7 +451,7 @@
 }
 .sources-popover-content h4 {
   margin: 0 0 8px;
-  font: 650 13px Manrope, sans-serif;
+  font: 650 13px var(--font-family-base);
   color: #0f172a;
 }
 .sources-popover-content ul {
@@ -459,7 +478,7 @@
 .evaluation-section-title-wrap h2 {
   margin: 0;
   color: #0f172a;
-  font: 700 22px Manrope, sans-serif;
+  font: 700 22px var(--font-family-base);
   letter-spacing: -0.3px;
 }
 .evaluation-section-title-wrap p {
@@ -475,6 +494,126 @@
   min-width: 260px;
   flex-shrink: 0;
 }
+.candidate-card-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.evaluation-overall-panel {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 28px;
+  border: 1px solid #dbe5f4;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+.evaluation-overall-gauge-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.evaluation-score-ring {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.evaluation-ring-svg {
+  transform: rotate(-90deg);
+  width: 104px;
+  height: 104px;
+}
+.evaluation-ring-track {
+  fill: none;
+  stroke: #e2e8f0;
+  stroke-width: 8;
+}
+.evaluation-ring-track.is-withheld {
+  stroke: #cbd5e1;
+}
+.evaluation-ring-fill {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.evaluation-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+.evaluation-overall-score-number {
+  font-family: var(--font-family-base);
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+.evaluation-overall-score-denom {
+  font-family: var(--font-family-base);
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 1px;
+}
+.evaluation-overall-panel-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex-grow: 1;
+}
+.evaluation-overall-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.evaluation-overall-panel-copy .evaluation-overview-label {
+  font-family: var(--font-family-base);
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.3px;
+  text-transform: none;
+}
+.evaluation-overall-panel-copy .evaluation-overall-score-val {
+  font-family: var(--font-family-base);
+  font-size: 18px;
+  font-weight: 700;
+  color: #2563eb;
+}
+.evaluation-overall-desc {
+  margin: 0;
+  font-size: 13.5px;
+  color: #475569;
+  line-height: 1.5;
+}
+.evaluation-overall-disclaimer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.45;
+}
+.evaluation-overall-disclaimer svg {
+  flex-shrink: 0;
+  color: #94a3b8;
+}
 .evaluation-overall-score-line {
   display: flex;
   align-items: baseline;
@@ -489,7 +628,7 @@
 }
 .evaluation-overall-score-val {
   color: #2563eb;
-  font: 700 20px Manrope, sans-serif;
+  font: 700 20px var(--font-family-base);
   letter-spacing: -0.2px;
 }
 .evaluation-overall-progress-bar {
@@ -544,8 +683,8 @@
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
 }
 .evaluation-category-card-v2[data-score-state="unscored"] {
-  background: #fffdfa;
-  border-color: #f1ebd8;
+  background: #ffffff;
+  border-color: #e2e8f0;
 }
 .evaluation-category-card-heading-v2 {
   display: flex;
@@ -563,18 +702,18 @@
 .evaluation-category-title-wrap h3 {
   margin: 0;
   color: #0f172a;
-  font: 650 14px Manrope, sans-serif;
+  font: 650 14px var(--font-family-base);
   line-height: 1.25;
 }
 .evaluation-category-score-val {
   color: #2563eb;
-  font: 700 16px Manrope, sans-serif;
+  font: 700 16px var(--font-family-base);
   text-align: right;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .evaluation-category-card-v2[data-score-state="unscored"] .evaluation-category-score-val {
-  color: #92400e;
+  color: #2563eb;
   font-size: 13px;
   font-weight: 600;
 }
@@ -590,29 +729,14 @@
   width: 18px;
   height: 18px;
 }
-.evaluation-category-icon-project_portfolio {
-  background: #dbeafe;
-  color: #2563eb;
-}
-.evaluation-category-icon-technical_skills {
-  background: #ede9fe;
-  color: #7c3aed;
-}
-.evaluation-category-icon-development_activity {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.evaluation-category-icon-collaboration {
-  background: #ffedd5;
-  color: #ea580c;
-}
-.evaluation-category-icon-current_year_contributions {
-  background: #ffe4e6;
-  color: #e11d48;
-}
+.evaluation-category-icon-project_portfolio,
+.evaluation-category-icon-technical_skills,
+.evaluation-category-icon-development_activity,
+.evaluation-category-icon-collaboration,
+.evaluation-category-icon-current_year_contributions,
 .evaluation-category-icon-problem_solving_dsa {
-  background: #f3e8ff;
-  color: #9333ea;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .evaluation-progress-wrap {
@@ -738,7 +862,7 @@
 }
 .ai-analysis-heading h3 {
   margin: 4px 0 3px;
-  font: 700 20px Manrope, sans-serif;
+  font: 700 20px var(--font-family-base);
   color: #0f172a;
   letter-spacing: -0.3px;
 }
@@ -748,6 +872,9 @@
   font-size: 13px;
   line-height: 1.45;
 }
+.ai-analysis-authority-note { margin-top: 5px !important; font-size: 11px !important; }
+.ai-analysis-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; flex-wrap: wrap; }
+.ai-analysis-full-report-link { white-space: nowrap; }
 .evaluation-ai-primary-action {
   flex: none;
   width: auto;
@@ -809,7 +936,7 @@
 }
 .ai-analysis-summary h4 {
   margin: 0 0 8px;
-  font: 650 14px Manrope, sans-serif;
+  font: 650 14px var(--font-family-base);
   color: #0f172a;
 }
 .ai-analysis-summary p {
@@ -829,9 +956,12 @@
   border-radius: 10px;
   background: #ffffff;
 }
+.ai-insight-strengths { border-top: 3px solid #4b9b70 !important; }
+.ai-insight-improvements { border-top: 3px solid #c68a2d !important; }
+.ai-insight-next-steps { border-top: 3px solid #2563eb !important; }
 .ai-analysis-preview-grid h4 {
   margin: 0 0 9px;
-  font: 650 13px Manrope, sans-serif;
+  font: 650 13px var(--font-family-base);
   color: #0f172a;
 }
 .ai-analysis-preview-grid ul {
@@ -915,6 +1045,7 @@
     align-items: flex-start;
     gap: 12px;
   }
+  .evaluation-overall-panel { flex-direction: column; align-items: flex-start; padding: 18px; gap: 16px; }
   .evaluation-overall-summary {
     align-items: flex-start;
     width: 100%;
@@ -972,6 +1103,7 @@
   .evaluation-category-grid {
     grid-template-columns: 1fr;
   }
+  .evaluation-candidate-metrics { gap: 6px 12px; }
   .evaluation-category-card-v2 {
     min-height: 0;
     padding: 16px;
@@ -982,4 +1114,29 @@
   .evaluation-ai-primary-action {
     width: 100%;
   }
+  .ai-analysis-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .ai-analysis-full-report-link { justify-content: center; }
+}
+
+/* Compact setup layout; result-report spacing remains unchanged. */
+.app-shell.evaluation-page-shell:has(.evaluation-setup-page) .page-content { padding-top: 16px; padding-bottom: 18px; }
+.evaluation-setup-page { gap: 14px; padding-bottom: 0; }
+.evaluation-setup-page .evaluation-heading { align-items: center; gap: 16px; }
+.evaluation-setup-page .evaluation-heading h1 { margin: 0; font: 700 var(--type-page-heading)/1.15 var(--font-family-base); }
+.evaluation-setup-page .evaluation-back-link { min-height: 40px; }
+.evaluation-setup-page .evaluation-panel { padding: 18px 20px; }
+.evaluation-setup-page .evaluation-panel-heading { padding-bottom: 10px; }
+.evaluation-setup-page .evaluation-panel-heading h2 { font: 700 var(--type-card-heading)/1.25 var(--font-family-base); }
+.evaluation-setup-page .evaluation-panel-heading p { margin-top: 4px; }
+.evaluation-setup-page .evaluation-select-grid { gap: 16px; margin: 14px 0; }
+.evaluation-setup-page .evaluation-form-footer { gap: 14px; padding-top: 12px; }
+@media (max-width: 700px) {
+  .app-shell.evaluation-page-shell:has(.evaluation-setup-page) .page-content { padding-top: 14px; padding-bottom: 16px; }
+  .evaluation-setup-page { gap: 12px; }
+  .evaluation-setup-page .evaluation-heading { align-items: flex-start; flex-wrap: wrap; gap: 10px 14px; }
+  .evaluation-setup-page .evaluation-heading h1 { font-size: clamp(28px, 7vw, 32px); }
+}
+@media (max-width: 600px) {
+  .evaluation-setup-page .evaluation-panel { padding: 18px 16px; }
+  .evaluation-setup-page .evaluation-select-grid { gap: 12px; margin: 12px 0; }
 }

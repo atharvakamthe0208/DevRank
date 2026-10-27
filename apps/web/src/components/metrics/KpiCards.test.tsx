@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { KpiCard } from './KpiCards';
+import { WorkspaceIcon } from '../icons/WorkspaceIcon';
 
 describe('workspace KPI presentation', () => {
   it('renders a real metric with an accessible final value', () => {
@@ -30,5 +31,14 @@ describe('workspace KPI presentation', () => {
     expect(html).toContain('role="progressbar"');
     expect(html).toContain('aria-valuenow="72"');
     expect(html).toContain('aria-label="Recent scored evaluation values: 64, 80"');
+  });
+
+  it('supports a consistent decorative outline icon inside the existing KPI icon container', () => {
+    const html = renderToStaticMarkup(createElement(KpiCard, {
+      label: 'Total candidates', value: 4, detail: 'Recruiter home', icon: createElement(WorkspaceIcon, { name: 'candidates', size: 17 }),
+    }));
+    expect(html).toContain('class="workspace-kpi-icon" aria-hidden="true"><svg');
+    expect(html).toContain('width="17"');
+    expect(html).toContain('stroke="currentColor"');
   });
 });

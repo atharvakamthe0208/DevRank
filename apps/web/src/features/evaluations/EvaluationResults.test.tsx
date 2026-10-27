@@ -46,7 +46,8 @@ describe('evaluation result view', () => {
     expect(html).toContain('class="evaluation-report-grid"');
     expect(html).toContain('About scoring');
     expect(html).toContain('Weighted score calculated from all six categories.');
-    expect(html).toContain('Required evidence gaps remain unscored; absent optional LeetCode profiles use the defined DSA zero policy.');
+    expect(html).toContain('Optional missing LeetCode profiles use the rubric-defined DSA zero policy.');
+    expect(html).not.toContain('Required evidence gaps remain unscored');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).toContain('View evidence (1)');

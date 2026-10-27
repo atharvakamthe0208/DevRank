@@ -1,4 +1,5 @@
 import { createElement } from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -23,12 +24,27 @@ describe('Resume Screening route content', () => {
     expect(html).toContain('Resume Screening');
     expect(html).toContain('Job title');
     expect(html).toContain('Job description');
+    expect(html).toContain('Resume files');
+    expect(html).toContain('Screening status and results');
+    expect(html).toContain('PDF or DOCX · up to 20 files · 10 MB maximum per file');
     expect(html).toContain('Start Screening');
+    expect(html).not.toContain('RECRUITER HOME');
+    expect(html).not.toContain('Specific criteria help');
+    expect(html).not.toContain('For best results');
     expect(html).toContain('No screening results yet');
     expect(html).toContain('disabled=""');
     expect(html).not.toContain('Sort by');
     expect(html).not.toContain('Average available score');
     expect(html).not.toContain('Highest available score');
+  });
+
+  it('uses the shared workspace rule to hide page-title eyebrows without hiding section labels', () => {
+    const workspaceStyles = readFileSync(new URL('../../workspace-refinement.css', import.meta.url), 'utf8');
+
+    expect(workspaceStyles).toContain('.app-shell .page-content .resume-screening-heading > div > .eyebrow');
+    expect(workspaceStyles).toContain('.app-shell .page-content .insights-heading > div > .eyebrow');
+    expect(workspaceStyles).toContain('display: none;');
+    expect(workspaceStyles).not.toContain('.screening-panel-heading .eyebrow');
   });
 });
 

@@ -22,10 +22,36 @@ import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescript
 import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 import { formatEvidenceDate, readableProvenance } from './evidence-presentation';
 import { acquireEvaluationRun, ALL_CANDIDATES_ID, bulkEvaluationStatusLabel, bulkEvaluationSummary, candidateOptions, runBulkEvaluations, type BulkEvaluationItem, type BulkEvaluationSnapshot } from './bulk-evaluation';
+import { SessionDraftNotice } from '../../lib/forms/SessionDraftNotice';
+import { useSessionDraft } from '../../lib/forms/useSessionDraft';
 import './evaluation-page.css';
 import '../evaluations/evaluation.css';
 
 type PageState = 'loading' | 'ready' | 'error';
+type EvaluationSetupDraft = { candidateId: string; roleId: string };
+function isEvaluationSetupDraft(value: unknown): value is EvaluationSetupDraft {
+  return typeof value === 'object' && value !== null
+    && 'candidateId' in value && typeof value.candidateId === 'string' && value.candidateId.length <= 128
+    && 'roleId' in value && typeof value.roleId === 'string' && value.roleId.length <= 128;
+}
+
+export function EvaluationSetupHeader({ returnToCandidate, onBackToCandidate }: { returnToCandidate: string | null; onBackToCandidate: (event: MouseEvent<HTMLAnchorElement>) => void }) {
+  return <section className="evaluation-heading">
+    <h1>Evaluation</h1>
+    <Link className="secondary-button evaluation-back-link" to={returnToCandidate ?? '/dashboard/candidates'} replace onClick={onBackToCandidate}>
+      {returnToCandidate ? 'Back to candidate' : 'View candidates'}
+    </Link>
+  </section>;
+}
+
+export function EvaluationSetupCardHeading() {
+  return <div className="evaluation-panel-heading">
+    <div>
+      <h2>Evaluation</h2>
+      <p>Select a candidate and role.</p>
+    </div>
+  </div>;
+}
 
 function explainError(error: unknown): string {
   if (error instanceof ApiRequestError) {
@@ -55,8 +81,12 @@ export function EvaluationPage() {
   const [loadError, setLoadError] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [roles, setRoles] = useState<EvaluationRole[]>([]);
-  const [candidateId, setCandidateId] = useState(preselectedCandidateId);
-  const [roleId, setRoleId] = useState<EvaluationRole['id'] | ''>((searchParams.get('roleId') as EvaluationRole['id'] | null) ?? '');
+  const initialSelection: EvaluationSetupDraft = { candidateId: preselectedCandidateId, roleId: searchParams.get('roleId') ?? '' };
+  const { value: selection, status: draftStatus, persisted, setValue: setSelection, initialize: initializeSelection, clear: clearDraft } = useSessionDraft(session?.user?.id, 'evaluation:setup', initialSelection, isEvaluationSetupDraft);
+  const candidateId = selection.candidateId;
+  const roleId = selection.roleId as EvaluationRole['id'] | '';
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const [selectionEdited, setSelectionEdited] = useState(false);
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
@@ -70,7 +100,7 @@ export function EvaluationPage() {
   const [analysisError, setAnalysisError] = useState('');
   const [analysisRetryAt, setAnalysisRetryAt] = useState<number>();
   const analysisRequestRef = useRef(false);
-  useUnsavedChangesBlocker(selectionEdited && !running, 'You changed the evaluation selections. Leave this page and discard those choices?');
+  useUnsavedChangesBlocker(selectionEdited && !running, 'Your evaluation selections are kept as a draft in this browser tab. Leave this page?');
   const returnToCandidate = safeEvaluationReturn((location.state as { returnTo?: unknown } | null)?.returnTo);
   function backToCandidate(event: MouseEvent<HTMLAnchorElement>) {
     if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && returnToCandidate) {
@@ -118,11 +148,15 @@ export function EvaluationPage() {
         const selectedCandidate = candidateItems.some(({ id }) => id === preselectedCandidateId)
           ? preselectedCandidateId
           : (candidateItems[0]?.id ?? '');
-        setCandidateId(selectedCandidate);
         const chosenRole = parsedRoles.roles.some(({ id }) => id === (searchParams.get('roleId') ?? ''))
           ? (searchParams.get('roleId') as EvaluationRole['id'])
           : (parsedRoles.roles[0]?.id || '');
-        setRoleId(chosenRole);
+        const defaults = { candidateId: selectedCandidate, roleId: chosenRole };
+        const saved = selectionRef.current;
+        const candidateValid = !saved.candidateId || saved.candidateId === ALL_CANDIDATES_ID || candidateItems.some(({ id }) => id === saved.candidateId);
+        const roleValid = !saved.roleId || parsedRoles.roles.some(({ id }) => id === saved.roleId);
+        if (candidateValid && roleValid) initializeSelection(defaults);
+        else clearDraft(defaults);
 
         if (preselectedCandidateId && candidateItems.some(({ id }) => id === preselectedCandidateId)) {
           try {
@@ -160,19 +194,19 @@ export function EvaluationPage() {
     }
     void load();
     return () => { active = false; };
-  }, [session?.access_token, loadAttempt]);
+  }, [session?.access_token, loadAttempt, initializeSelection, clearDraft]);
 
   useEffect(() => {
     if (candidates.some(({ id }) => id === preselectedCandidateId) && candidateId !== preselectedCandidateId) {
-      setCandidateId(preselectedCandidateId);
+      setSelection((current) => ({ ...current, candidateId: preselectedCandidateId }));
     }
-  }, [preselectedCandidateId, candidates, candidateId]);
+  }, [preselectedCandidateId, candidates, candidateId, setSelection]);
   const preselectedRoleId = searchParams.get('roleId') ?? '';
   useEffect(() => {
     if (roles.some(({ id }) => id === preselectedRoleId) && roleId !== preselectedRoleId) {
-      setRoleId(preselectedRoleId as EvaluationRole['id']);
+      setSelection((current) => ({ ...current, roleId: preselectedRoleId }));
     }
-  }, [preselectedRoleId, roles, roleId]);
+  }, [preselectedRoleId, roles, roleId, setSelection]);
 
   async function executeEvaluation(candidateToRun = candidateId, roleToRun = roleId) {
     if (runningRef.current) return;
@@ -291,18 +325,10 @@ export function EvaluationPage() {
   }
 
   return (
-    <div className="evaluation-page">
+    <div className={`evaluation-page${result ? '' : ' evaluation-setup-page'}`}>
       {!result ? (
         <>
-          <section className="evaluation-heading">
-            <div>
-              <span className="eyebrow"><span className="eyebrow-line" /> CANDIDATE ASSESSMENT</span>
-              <h1>Evaluation</h1>
-            </div>
-            <Link className="secondary-button evaluation-back-link" to={returnToCandidate ?? '/dashboard/candidates'} replace onClick={backToCandidate}>
-              {returnToCandidate ? 'Back to candidate' : 'View candidates'}
-            </Link>
-          </section>
+          <EvaluationSetupHeader returnToCandidate={returnToCandidate} onBackToCandidate={backToCandidate}/>
           {pageState === 'loading' ? (
             <WorkspaceSkeleton variant="evaluations" />
           ) : pageState === 'error' ? (
@@ -315,12 +341,13 @@ export function EvaluationPage() {
             </section>
           ) : (
             <form className="evaluation-panel evaluation-form" onSubmit={handleFormSubmit}>
-              <div className="evaluation-panel-heading">
-                <div>
-                  <h2>Run final rubric evaluation</h2>
-                  <p>Select a candidate and role. Scores use the candidate’s saved provider snapshots.</p>
-                </div>
-              </div>
+              <EvaluationSetupCardHeading/>
+              <SessionDraftNotice status={draftStatus} persisted={persisted} onDiscard={() => {
+                const defaults = { candidateId: candidates.find(({ id }) => id === preselectedCandidateId)?.id ?? candidates[0]?.id ?? '', roleId: roles.find(({ id }) => id === preselectedRoleId)?.id ?? roles[0]?.id ?? '' };
+                clearDraft(defaults);
+                updateSelectionParams(defaults.candidateId, defaults.roleId);
+                setSelectionEdited(false);
+              }}/>
               {candidates.length === 0 ? (
                 <div className="evaluation-empty">
                   <h3>No candidates available</h3>
@@ -337,7 +364,7 @@ export function EvaluationPage() {
                       disabled={running}
                       value={candidateId}
                       onChange={(event) => {
-                        setCandidateId(event.target.value);
+                        setSelection((current) => ({ ...current, candidateId: event.target.value }));
                         updateSelectionParams(event.target.value, roleId);
                         setSelectionEdited(true);
                         setResult(null);
@@ -362,7 +389,7 @@ export function EvaluationPage() {
                       value={roleId}
                       onChange={(event) => {
                         const value = event.target.value as EvaluationRole['id'];
-                        setRoleId(value);
+                        setSelection((current) => ({ ...current, roleId: value }));
                         updateSelectionParams(candidateId, value);
                         setSelectionEdited(true);
                         setResult(null);
@@ -394,7 +421,6 @@ export function EvaluationPage() {
                         ))}
                       </ul>
                     )}
-                    <p>These are the selected role’s saved weights for the active scoring version.</p>
                   </details>
                   <button className="primary-button" type="submit" disabled={running || !candidateId || !roleId}>
                     {running ? candidateId === ALL_CANDIDATES_ID ? 'Evaluating candidates…' : 'Running evaluation…' : candidateId === ALL_CANDIDATES_ID ? 'Run Evaluation for All' : 'Run Evaluation'}
@@ -500,15 +526,9 @@ export function EvaluationRunResult({
     ?? (Array.isArray(languageSummary?.observedLanguages) ? languageSummary.observedLanguages.length : undefined);
   const evidenceBacked = evaluation.evidence.length > 0
     || evaluation.platformEvidence?.some(({ availability }) => availability === 'available' || availability === 'partial') === true;
-  const isCompleted = result.status === 'completed' || (evaluation.overallScore !== undefined && evaluation.overallScore > 0);
+  const isCompleted = result.status === 'completed';
 
   const candidateName = candidate?.name || result.candidate.name;
-  const initials = candidateName
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || 'C';
-
   const profileDetails = [
     candidate?.email,
     candidate?.githubUsername ? `GitHub @${candidate.githubUsername}` : undefined,
@@ -520,16 +540,10 @@ export function EvaluationRunResult({
     timeStyle: 'short',
   }).format(new Date(result.evaluatedAt));
 
-  const connectedSourcesCount = (candidate?.githubUsername || evaluation.platformEvidence?.some((e) => e.source === 'github') ? 1 : 0)
-    + (candidate?.leetcodeUsername || evaluation.platformEvidence?.some((e) => e.source === 'leetcode') ? 1 : 0) || 1;
-
   return (
     <section className="evaluation-results" aria-labelledby="evaluation-results-title">
       <div className="evaluation-candidate-card">
         <div className="candidate-card-left">
-          <div className="candidate-avatar" aria-hidden="true">
-            {initials}
-          </div>
           <div className="candidate-card-meta">
             <h1 className="candidate-name">{candidateName}</h1>
             <p className="candidate-role-date">
@@ -538,19 +552,26 @@ export function EvaluationRunResult({
             {profileDetails.length > 0 && (
               <p className="evaluation-profile-details">{profileDetails.join(' · ')}</p>
             )}
+            {(repositoryCount !== undefined || languageCount !== undefined) && (
+              <div className="evaluation-candidate-metrics" aria-label="Available profile evidence">
+                {repositoryCount !== undefined && <span><strong>{repositoryCount}</strong> public {repositoryCount === 1 ? 'repository' : 'repositories'}</span>}
+                {languageCount !== undefined && <span><strong>{languageCount}</strong> detected {languageCount === 1 ? 'language' : 'languages'}</span>}
+              </div>
+            )}
           </div>
         </div>
         <div className="candidate-card-actions">
-          <span className={`evaluation-status-badge ${isCompleted ? 'is-completed' : 'is-evidence'}`}>
+          <span className={`evaluation-status-badge ${isCompleted ? 'is-completed' : 'is-incomplete'}`}>
             <span className="status-dot" aria-hidden="true" />
-            {isCompleted ? 'Completed' : evidenceBacked ? 'Evidence-backed' : 'Insufficient evidence'}
+            {isCompleted ? 'Completed' : 'Insufficient evidence'}
           </span>
+          {evidenceBacked && <span className="evaluation-evidence-indicator">Evidence-backed</span>}
           {onRegenerate && (
             <button
               type="button"
               className="secondary-button regenerate-button"
               onClick={onRegenerate}
-              title="Regenerate evaluation"
+              title="Run this evaluation again"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
@@ -558,15 +579,15 @@ export function EvaluationRunResult({
                 <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
                 <path d="M16 21h5v-5" />
               </svg>
-              <span>Regenerate Analysis</span>
+              <span>Run evaluation again</span>
             </button>
           )}
           <a
             className="secondary-button evaluation-back-action"
-            href={returnToCandidate ?? '/dashboard/candidates'}
+            href={returnToCandidate ?? `/candidates/${result.candidate.id}`}
             onClick={onBackToCandidate}
           >
-            {returnToCandidate ? 'Back to candidate' : 'View candidates'}
+            View Candidate
           </a>
           {onNewEvaluation && (
             <button
@@ -580,117 +601,62 @@ export function EvaluationRunResult({
         </div>
       </div>
 
-      <div className="evaluation-evidence-summary-card">
-        <div className="evidence-summary-section coverage-status-section">
-          <div className={`evidence-icon-tile ${evidenceBacked ? 'icon-tile-green' : 'icon-tile-amber'}`} aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              <path d="m9 12 2 2 4-4" />
+      <section className="evaluation-overall-panel" aria-label="Overall score">
+        <div className="evaluation-overall-gauge-wrap">
+          <div
+            className="evaluation-score-ring"
+            role="img"
+            aria-label={evaluation.overallScore !== undefined ? `Overall score ${evaluation.overallScore} out of 100` : 'Overall score withheld'}
+          >
+            <svg viewBox="0 0 110 110" width="110" height="110" className="evaluation-ring-svg" aria-hidden="true">
+              <circle cx="55" cy="55" r="44" className="evaluation-ring-track" />
+              {evaluation.overallScore !== undefined ? (
+                <circle
+                  cx="55"
+                  cy="55"
+                  r="44"
+                  className="evaluation-ring-fill"
+                  strokeDasharray="276.46"
+                  strokeDashoffset={276.46 - (276.46 * Math.min(100, Math.max(0, evaluation.overallScore))) / 100}
+                />
+              ) : (
+                <circle
+                  cx="55"
+                  cy="55"
+                  r="44"
+                  className="evaluation-ring-track is-withheld"
+                  strokeDasharray="4 6"
+                />
+              )}
             </svg>
-          </div>
-          <div className="evidence-section-copy">
-            <strong className="evidence-section-label">
-              {evidenceBacked ? 'Evidence-backed' : 'Insufficient evidence'}
-            </strong>
-            <span className="evidence-section-desc">
-              {evidenceBacked ? 'Based on public GitHub & LeetCode data' : 'Missing required rubric evidence'}
-            </span>
-          </div>
-        </div>
-
-        <div className="evidence-summary-divider" aria-hidden="true" />
-
-        <div className="evidence-summary-section">
-          <div className="evidence-icon-tile icon-tile-blue" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
-            </svg>
-          </div>
-          <div className="evidence-section-copy">
-            <strong className="evidence-metric-number">{connectedSourcesCount}</strong>
-            <span className="evidence-section-desc">Connected data {connectedSourcesCount === 1 ? 'source' : 'sources'}</span>
-          </div>
-        </div>
-
-        <div className="evidence-summary-divider" aria-hidden="true" />
-
-        <div className="evidence-summary-section">
-          <div className="evidence-icon-tile icon-tile-navy" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z" />
-            </svg>
-          </div>
-          <div className="evidence-section-copy">
-            <strong className="evidence-metric-number">
-              {repositoryCount !== undefined ? repositoryCount : '—'}
-            </strong>
-            <span className="evidence-section-desc">
-              {repositoryCount !== undefined ? `${repositoryCount} public ${repositoryCount === 1 ? 'repository' : 'repositories'} analyzed` : 'Public repositories'}
-            </span>
-          </div>
-        </div>
-
-        <div className="evidence-summary-divider" aria-hidden="true" />
-
-        <div className="evidence-summary-section">
-          <div className="evidence-icon-tile icon-tile-purple" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="16 18 22 12 16 6" />
-              <polyline points="8 6 2 12 8 18" />
-            </svg>
-          </div>
-          <div className="evidence-section-copy">
-            <strong className="evidence-metric-number">
-              {languageCount !== undefined ? languageCount : '—'}
-            </strong>
-            <span className="evidence-section-desc">
-              {languageCount !== undefined ? `${languageCount} detected ${languageCount === 1 ? 'language' : 'languages'}` : 'Languages detected'}
-            </span>
-          </div>
-        </div>
-
-        <div className="evidence-summary-action">
-          <details className="evaluation-sources-disclosure">
-            <summary className="sources-action-link">View sources <span aria-hidden="true">→</span></summary>
-            <div className="sources-popover-content">
-              <h4>Connected data sources</h4>
-              <ul>
-                <li><strong>GitHub:</strong> {candidate?.githubUsername ? `@${candidate.githubUsername}` : 'Platform snapshot'} ({repositoryCount ?? 0} repositories)</li>
-                <li><strong>LeetCode:</strong> {candidate?.leetcodeUsername ? `@${candidate.leetcodeUsername}` : (evaluation.platformEvidence?.some((e) => e.source === 'leetcode') ? 'Platform snapshot' : 'Not provided (policy-defined zero)')}</li>
-              </ul>
+            <div className="evaluation-ring-center">
+              <span className="evaluation-overall-score-number">
+                {evaluation.overallScore !== undefined ? evaluation.overallScore : '—'}
+              </span>
+              <span className="evaluation-overall-score-denom">/ 100</span>
             </div>
-          </details>
+          </div>
         </div>
-      </div>
+
+        <div className="evaluation-overall-panel-copy">
+          <div className="evaluation-overall-title-row">
+            <span className="evaluation-overview-label">Overall score</span>
+            <strong className="evaluation-overall-score-val">
+              {evaluation.overallScore !== undefined ? `${evaluation.overallScore} / 100` : 'Score withheld'}
+            </strong>
+          </div>
+          <p className="evaluation-overall-desc">
+            {evaluation.overallScore !== undefined
+              ? 'Weighted summary of the saved category evidence for this role.'
+              : 'An overall score is withheld because the available evidence is insufficient.'}
+          </p>
+        </div>
+      </section>
 
       <div className="evaluation-section-heading" aria-label="Evaluation report">
         <div className="evaluation-section-title-wrap">
           <h2 id="evaluation-results-title">Evaluation Results</h2>
           <p>Scores across key dimensions based on available evidence</p>
-        </div>
-        <div className="evaluation-overall-summary" aria-label="Overall score">
-          <div className="evaluation-overall-score-line">
-            <span className="evaluation-overview-label">Overall score</span>
-            <strong className="evaluation-overall-score-val">
-              {evaluation.overallScore !== undefined ? `${evaluation.overallScore} / 100` : 'Overall score withheld'}
-            </strong>
-          </div>
-          {evaluation.overallScore !== undefined ? (
-            <progress
-              className="evaluation-overall-progress-bar"
-              max="100"
-              value={evaluation.overallScore}
-              aria-label={`Overall score ${evaluation.overallScore} out of 100`}
-            />
-          ) : (
-            <div
-              className="evaluation-overall-progress-bar is-empty"
-              role="img"
-              aria-label="Overall score withheld due to insufficient evidence"
-            />
-          )}
         </div>
       </div>
 
@@ -733,12 +699,14 @@ export function EvaluationRunResult({
                 )}
               </div>
 
-              <div className="evaluation-status-row">
-                <span className={`evaluation-category-status status-${status.toLowerCase().replaceAll(' ', '-')}`}>
-                  <span className="status-indicator-dot" aria-hidden="true" />
-                  {status}
-                </span>
-              </div>
+              {category.score === undefined && (
+                <div className="evaluation-status-row">
+                  <span className={`evaluation-category-status status-${status.toLowerCase().replaceAll(' ', '-')}`}>
+                    <span className="status-indicator-dot" aria-hidden="true" />
+                    {status}
+                  </span>
+                </div>
+              )}
 
               <p className="evaluation-category-interpretation">
                 {categoryInterpretation(category, reportCategory)}
@@ -776,16 +744,21 @@ export function EvaluationRunResult({
         <div className="ai-analysis-heading">
           <div>
             <span className="eyebrow"><span className="eyebrow-line" /> EVIDENCE-GROUNDED EXPLANATION</span>
-            <h3 id="ai-analysis-title">AI analysis</h3>
-            <p>Explanatory support only. The persisted evaluation scores remain authoritative.</p>
+            <h3 id="ai-analysis-title">AI Candidate Insights</h3>
+            <p>Key strengths and recommended next steps.</p>
           </div>
-          <AiAnalysisRetryButton
-            className="primary-button evaluation-ai-primary-action"
-            onRetry={onAnalyze}
-            pending={analysisLoading}
-            retryAt={analysisRetryAt}
-            idleLabel={analysis ? 'Regenerate analysis' : 'Generate AI analysis'}
-          />
+          <div className="ai-analysis-actions">
+            <AiAnalysisRetryButton
+              className="primary-button evaluation-ai-primary-action"
+              onRetry={onAnalyze}
+              pending={analysisLoading}
+              retryAt={analysisRetryAt}
+              idleLabel={analysis ? 'Regenerate Analysis' : 'Generate AI analysis'}
+            />
+            <Link className="ai-report-link ai-analysis-full-report-link" to={`/evaluations/${result.id}/analysis`} state={analysis ? { analysis } : undefined}>
+              View full analysis <span aria-hidden="true">→</span>
+            </Link>
+          </div>
         </div>
         {analysisLoading && (
           <p className="ai-analysis-status" role="status">
@@ -965,29 +938,29 @@ export function AiAnalysisSummary({ response }: { response: AiAnalysisResponse }
   return (
     <div className="ai-analysis-content">
       <article className="ai-analysis-summary">
-        <h4>Executive summary</h4>
+        <h4>Executive Summary</h4>
         <p>{analysis.summary}</p>
         <AnalysisReferences evaluation={response.evaluation} references={analysis.summaryEvidenceReferences} />
       </article>
       <div className="ai-analysis-preview-grid">
-        <article>
-          <h4>Evidence-backed strengths</h4>
+        <article className="ai-insight-strengths">
+          <h4>Key Strengths</h4>
           {analysis.strengths.length ? (
             <ul>{analysis.strengths.slice(0, 3).map((item, index) => <li key={index}>{item.text}</li>)}</ul>
           ) : (
             <p className="ai-analysis-empty">No strengths were returned from the supplied evidence.</p>
           )}
         </article>
-        <article>
-          <h4>Evidence gaps</h4>
+        <article className="ai-insight-improvements">
+          <h4>Areas to Improve</h4>
           {analysis.weaknesses.length ? (
-            <ul>{analysis.weaknesses.slice(0, 3).map((item, index) => <li key={index}>{item.text}</li>)}</ul>
+            <ul>{analysis.weaknesses.slice(0, 2).map((item, index) => <li key={index}>{item.text}</li>)}</ul>
           ) : (
-            <p className="ai-analysis-empty">No evidence gaps were returned.</p>
+            <p className="ai-analysis-empty">No improvement areas were identified from the available evidence.</p>
           )}
         </article>
-        <article>
-          <h4>Recommendations</h4>
+        <article className="ai-insight-next-steps">
+          <h4>Recommended Next Steps</h4>
           {analysis.recommendations.length ? (
             <ul>{analysis.recommendations.slice(0, 3).map((item, index) => <li key={index}>{item.text}</li>)}</ul>
           ) : (
@@ -995,10 +968,6 @@ export function AiAnalysisSummary({ response }: { response: AiAnalysisResponse }
           )}
         </article>
       </div>
-      <Link className="ai-report-link" to={`/evaluations/${response.evaluation.id}/analysis`} state={{ analysis }}>
-        Read full AI report <span aria-hidden="true">→</span>
-      </Link>
-      <p className="ai-analysis-disclaimer">AI-generated explanation only; saved evaluation scores remain authoritative.</p>
     </div>
   );
 }

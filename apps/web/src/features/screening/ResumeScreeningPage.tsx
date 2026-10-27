@@ -10,6 +10,8 @@ import { ScreeningResultList } from './ScreeningResultList';
 import { screeningProgressLabel } from './screening-progress';
 import { createUserSessionCache } from './screening-navigation-cache';
 import { isValidScreeningSessionId } from './screening-restore';
+import { SessionDraftNotice } from '../../lib/forms/SessionDraftNotice';
+import { useSessionDraft } from '../../lib/forms/useSessionDraft';
 import './resume-screening-page.css';
 
 const MAX_FILES = 20;
@@ -274,11 +276,12 @@ export function ResumeScreeningPage() {
         method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey.current },
       }, session.access_token);
       const parsed = screeningSubmissionResponseSchema.parse(response);
-      idempotencyKey.current = null;
-      try { sessionStorage.setItem(SCREENING_SESSION_STORAGE_KEY, parsed.sessionId); } catch { /* session persistence is optional when storage is unavailable */ }
       if (parsed.resumes.length !== resumes.length) {
         throw new Error('The screening service returned a different number of resumes than submitted.');
       }
+      idempotencyKey.current = null;
+      clearDraft(jobDraft);
+      try { sessionStorage.setItem(SCREENING_SESSION_STORAGE_KEY, parsed.sessionId); } catch { /* session persistence is optional when storage is unavailable */ }
       setSubmitted(parsed);
       await loadScreeningResults(parsed.sessionId, session.access_token, true);
       setSelectedIds([]);
@@ -408,7 +411,6 @@ export function ResumeScreeningPage() {
     <div className="resume-screening-page">
       <header className="resume-screening-heading">
         <div>
-          <span className="eyebrow"><span className="eyebrow-line" /> RECRUITER HOME</span>
           <h1>Resume Screening</h1>
           <p>Create a job-specific screening session and review evidence-grounded results.</p>
         </div>
@@ -416,22 +418,22 @@ export function ResumeScreeningPage() {
       </header>
 
       <form className="screening-form" onSubmit={(event) => void startScreening(event)}>
+        <SessionDraftNotice status={draftStatus} persisted={persisted} onDiscard={() => { clearDraft(emptyScreeningDraft); setResumes([]); setValidationMessages([]); setError(''); if (inputRef.current) inputRef.current.value = ''; }} restoredMessage="Job details restored from this browser tab. Resume files are not stored and must be selected again."/>
         <section className="screening-panel" aria-labelledby="screening-job-title">
           <div className="screening-panel-heading">
             <span className="screening-step">01</span>
-            <div><h2 id="screening-job-title">Job details</h2><p>Set the role context shared by every resume in this screening session.</p></div>
+            <div><h2 id="screening-job-title">Job details</h2></div>
           </div>
           <div className="screening-job-layout">
             <div className="screening-job-fields">
               <label className="screening-field">Job title
-                <input value={jobTitle} onChange={(event) => { setJobTitle(event.target.value); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} maxLength={200} required placeholder="e.g. Senior Backend Engineer" />
+                <input value={jobTitle} onChange={(event) => { setJobDraft((current) => ({ ...current, jobTitle: event.target.value })); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} maxLength={200} required placeholder="e.g. Senior Backend Engineer" />
               </label>
               <label className="screening-field">Job description
-                <textarea value={jobDescription} onChange={(event) => { setJobDescription(event.target.value); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} minLength={50} maxLength={30000} required rows={7} placeholder="Describe the role responsibilities, required skills, experience, and qualifications." />
+                <textarea value={jobDescription} onChange={(event) => { setJobDraft((current) => ({ ...current, jobDescription: event.target.value })); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} minLength={50} maxLength={30000} required rows={7} placeholder="Describe the role responsibilities, required skills, experience, and qualifications." />
                 <span className="screening-field-hint">{jobDescription.length.toLocaleString()} / 30,000 characters · minimum 50</span>
               </label>
             </div>
-            <aside className="screening-guidance-card" aria-label="Job description guidance"><span className="screening-guidance-icon" aria-hidden="true">✳</span><strong>Specific criteria help</strong><p>Include responsibilities, must-have skills, and relevant experience so the screening has clear job context.</p><span>Job-match scores are separate from developer evaluations.</span></aside>
           </div>
         </section>
 
@@ -449,7 +451,6 @@ export function ResumeScreeningPage() {
             <label className="secondary-button screening-browse-button" htmlFor="screening-resumes">Browse files</label>
             <small>Files are sent to the screening service when you start screening.</small>
           </div>
-          <aside className="screening-upload-tips"><strong>For best results</strong><ul><li>Use readable, unencrypted PDF or DOCX files.</li><li>Text-selectable documents are easier to process.</li><li>Check each filename before starting the session.</li></ul></aside>
           </div>
 
           {validationMessages.length > 0 && <ul className="screening-validation-list" role="alert">{validationMessages.map((message, index) => <li key={`${index}-${message}`}>{message}</li>)}</ul>}
@@ -487,7 +488,7 @@ export function ResumeScreeningPage() {
       <section className="screening-panel screening-results-panel" aria-labelledby="screening-results-title">
         <div className="screening-panel-heading">
           <span className="screening-step">03</span>
-          <div><h2 id="screening-results-title">Screening status and results</h2><p>Only server-returned, validated screening data is shown here.</p></div>
+          <div><h2 id="screening-results-title">Screening status and results</h2></div>
         </div>
           {submitted ? <>
           <p className="screening-session-status" role="status">Session {submitted.sessionId} · {details?.status ?? submitted.status}</p>
