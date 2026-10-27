@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { screeningCreateSchema, screeningDetailsResponseSchema } from './screening.js';
+import { isResumeRoleCompatible, screeningCreateSchema, screeningDetailsResponseSchema } from './screening.js';
 
 const candidateId = 'e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2';
 
 describe('screening request and result contracts', () => {
+  it('matches supported resume role titles and known seniority prefixes only', () => {
+    expect(isResumeRoleCompatible('software_developer', 'Senior Software Engineer')).toBe(true);
+    expect(isResumeRoleCompatible('ai_ml_engineer', 'Machine Learning Engineer')).toBe(true);
+    expect(isResumeRoleCompatible('data_analyst', 'Business Intelligence Analyst')).toBe(true);
+    expect(isResumeRoleCompatible('software_developer', 'Product Manager')).toBe(false);
+  });
+
   it('accepts the documented top-level candidate mapping and rejects nested unsupported fields', () => {
     const base = { jobTitle: 'Engineer', jobDescription: 'Build reliable backend services with a cross-functional production team.' };
     expect(screeningCreateSchema.safeParse({ ...base, candidateIds: [candidateId, 'a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d'] }).success).toBe(true);

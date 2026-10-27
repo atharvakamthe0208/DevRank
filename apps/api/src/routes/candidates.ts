@@ -9,10 +9,6 @@ import {
   candidateUpdateSchema,
   githubSyncRequestSchema,
   leetCodeSyncRequestSchema,
-  unifiedAssessmentCreateRequestSchema,
-  unifiedAssessmentRankingQuerySchema,
-  unifiedReportQuerySchema,
-  unifiedReportResumeLinkRequestSchema,
 } from '@devrank/contracts';
 import { createCandidateController } from '../controllers/candidate-controller.js';
 import { authenticate, requireApprovedRecruiter } from '../middleware/authenticate.js';
@@ -50,11 +46,8 @@ export function createCandidatesRouter(
     platformController.submit,
   );
   router.get('/:id/platform-data', validateParams(candidateIdParamsSchema), platformController.getLatest);
-  router.get('/:id/unified-report', validateParams(candidateIdParamsSchema), validateQuery(unifiedReportQuerySchema), unifiedReportController.get);
-  router.post('/:id/unified-report/resume', validateParams(candidateIdParamsSchema), validateBody(unifiedReportResumeLinkRequestSchema), unifiedReportController.linkResume);
-  router.post('/:id/unified-report/resume/replace', validateParams(candidateIdParamsSchema), validateBody(unifiedReportResumeLinkRequestSchema), unifiedReportController.replaceResume);
-  router.post('/:id/unified-report/assessment', validateParams(candidateIdParamsSchema), validateBody(unifiedAssessmentCreateRequestSchema), unifiedReportController.assess);
-  router.get('/:id/unified-report/assessment', validateParams(candidateIdParamsSchema), validateQuery(unifiedAssessmentRankingQuerySchema), unifiedReportController.getAssessment);
+  router.get('/:id/unified-report', validateParams(candidateIdParamsSchema), unifiedReportController.get);
+  router.post('/:id/unified-report/resume', validateParams(candidateIdParamsSchema), unifiedReportController.linkResume);
   router.post(
     '/:id/platform-data/github-sync',
     validateParams(candidateIdParamsSchema),

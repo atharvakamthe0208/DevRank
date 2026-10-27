@@ -1,4 +1,18 @@
 import { z } from 'zod';
+import { roleIdSchema } from './scoring.js';
+
+const compatibleResumeTitles: Record<z.infer<typeof roleIdSchema>, ReadonlySet<string>> = {
+  software_developer: new Set(['software developer', 'software engineer', 'software development', 'full stack developer', 'full stack engineer', 'full stack software developer', 'frontend developer', 'frontend engineer', 'front end developer', 'front end engineer', 'backend developer', 'backend engineer', 'back end developer', 'back end engineer', 'web developer', 'application developer']),
+  ai_ml_engineer: new Set(['ai engineer', 'ai ml engineer', 'artificial intelligence engineer', 'machine learning engineer', 'ml engineer']),
+  data_analyst: new Set(['data analyst', 'business data analyst', 'business intelligence analyst', 'bi analyst']),
+};
+
+/** Exact title aliases plus known seniority prefixes only; arbitrary titles remain incompatible. */
+export function isResumeRoleCompatible(roleId: z.infer<typeof roleIdSchema>, jobTitle: string): boolean {
+  const normalized = jobTitle.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    .replace(/^(?:senior|sr|principal|staff|lead|junior|jr|associate|mid level)\s+/, '');
+  return compatibleResumeTitles[roleId].has(normalized);
+}
 
 export const screeningRubricVersion = 'resume-job-match-1.0.0' as const;
 export const screeningCategories = [
