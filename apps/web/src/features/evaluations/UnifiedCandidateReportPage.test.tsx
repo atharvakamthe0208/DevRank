@@ -11,7 +11,6 @@ const report = unifiedCandidateReportSchema.parse({
   candidate: { id: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', name: 'Taylor Example', email: 'taylor@example.com', createdAt: '2026-10-13T12:00:00.000Z', updatedAt: '2026-10-13T12:00:00.000Z' },
   job: { roleId: 'software_developer', roleLabel: 'software developer', description: 'Build accessible product experiences.' },
   platformEvaluation: { status: 'insufficient_evidence', evaluatedAt: '2026-10-14T12:00:00.000Z', overallIndex: null, rubricNotice: 'Missing source data remains unscored.', strengths: ['Saved strength'], improvementAreas: ['Saved improvement'] },
-  assessment: null,
   sources: {
     github: {
       status: 'partial', provenance: 'github_api', capturedAt: '2026-10-14T11:00:00.000Z',
@@ -32,7 +31,7 @@ const report = unifiedCandidateReportSchema.parse({
       limitations: ['Unofficial data source.'],
     },
   },
-  resume: { id: 'a1328d63-3e22-448f-b719-1a76ecbaea0d', status: 'available', message: 'resume.pdf · Taylor Example', jobTitle: 'Backend Engineer', jobDescription: 'Build APIs', evaluatedAt: '2026-10-14T10:00:00.000Z', validatedScore: null, preliminaryScore: 67, statusLabel: 'insufficient_evidence', evidence: ['Built an API service'], limitations: ['Preliminary result is not validated.'] },
+  resume: { status: 'available', message: 'resume.pdf · Taylor Example', jobTitle: 'Backend Engineer', jobDescription: 'Build APIs', evaluatedAt: '2026-10-14T10:00:00.000Z', validatedScore: null, preliminaryScore: 67, statusLabel: 'insufficient_evidence', evidence: ['Built an API service'], limitations: ['Preliminary result is not validated.'] },
   linkableResumes: [],
 });
 
@@ -41,22 +40,13 @@ function render(reportData: typeof report) {
 }
 
 describe('unified candidate report view', () => {
-  it('shows a compact recruiter summary first and keeps evidence details expandable with PDF action', () => {
+  it('presents saved identity, actual source indexes, evidence gaps, methodology and PDF action', () => {
     const html = render(report);
     expect(html).toContain('Taylor Example');
     expect(html).toContain('taylor@example.com');
     expect(html).toContain('software developer');
     expect(html).toContain('Build accessible product experiences.');
     expect(html).toContain('ROLE CONTEXT');
-    expect(html).toContain('FINAL CANDIDATE SUMMARY');
-    expect(html).toContain('Final score');
-    expect(html).toContain('Incomplete');
-    expect(html).toContain('Evidence completion');
-    expect(html).toContain('Strengths');
-    expect(html).toContain('Development areas');
-    expect(html).toContain('Detailed evaluation, resume evidence, and methodology');
-    expect(html).toContain('class="unified-more-report unified-report-panel"');
-    expect(html).toContain('Generate final assessment');
     expect(html).toContain('class="unified-report-context unified-report-panel"');
     expect(html).toContain('Candidate profile');
     expect(html).toContain('GitHub');
@@ -101,7 +91,7 @@ describe('unified candidate report view', () => {
   it('preserves explicit resume selection and provides the screening empty-state route', () => {
     const unlinkedReport = unifiedCandidateReportSchema.parse({
       ...report,
-      resume: { ...report.resume, id: null, status: 'unlinked', message: 'No resume has been linked.' },
+      resume: { ...report.resume, status: 'unlinked', message: 'No resume has been linked.' },
       linkableResumes: [{ id: '5a44e5c8-9c01-4d7c-a9d3-df34dd9a8c84', filename: 'resume.pdf', candidateName: 'Taylor Example', jobTitle: 'Backend Engineer', status: 'completed', scoreLabel: 'Validated', score: 76 }],
     });
     const withOptions = render(unlinkedReport);
@@ -114,38 +104,5 @@ describe('unified candidate report view', () => {
     expect(emptyState).toContain('No unlinked screening results are available');
     expect(emptyState).toContain('href=\"/screening\"');
     expect(emptyState).toContain('Open Resume Screening');
-  });
-
-  it('keeps the linked score and detailed resume evidence without showing the replacement control', () => {
-    const replaceable = unifiedCandidateReportSchema.parse({
-      ...report,
-      resume: { ...report.resume, id: 'a1328d63-3e22-448f-b719-1a76ecbaea0d', validatedScore: 82, preliminaryScore: null, statusLabel: 'complete' },
-      linkableResumes: [{ id: '5a44e5c8-9c01-4d7c-a9d3-df34dd9a8c84', filename: 'new-resume.pdf', candidateName: 'Taylor Example', jobTitle: 'Backend Engineer', status: 'completed', scoreLabel: 'Validated', score: 91 }],
-    });
-    const html = render(replaceable);
-    expect(html).toContain('Validated resume score: <strong>82/100</strong>');
-    expect(html).not.toContain('Replace linked result');
-    expect(html).not.toContain('Replace linked result with a completed saved resume');
-  });
-
-  it('labels component proportions as weights separately from the candidate score', () => {
-    const data = unifiedCandidateReportSchema.parse({ ...report, assessment: {
-      id: '1fa1c1bb-3c20-4b5c-ab53-437d8c616d28', candidateId: report.candidate.id, roleId: 'software_developer', roleLabel: 'Software Developer', generatedAt: '2026-10-25T12:00:00.000Z',
-      scoringVersion: 'unified-1.0.0', status: 'insufficient_evidence', overallScore: null, weights: { resume: 40, github: 45, leetcode: 15 },
-      components: {
-        resume: { score: null, status: 'not_evaluated', sourceId: null, sourceLabel: null },
-        github: { score: 0, status: 'validated', sourceId: null, sourceLabel: null },
-        leetcode: { score: null, status: 'policy_only', sourceId: null, sourceLabel: null },
-      },
-      sourceReferences: { platformEvaluationId: null, resumeScreeningId: null, githubSnapshotIds: [], leetcodeSnapshotIds: [] }, evidenceCompleteness: 33,
-      missingComponents: ['resume', 'leetcode'], strengths: [], improvementAreas: [], limitations: ['The linked resume evaluation targets a different job title and was excluded for this role.'], explanation: 'Only observed validated components contribute.',
-    } });
-    const html = render(data);
-    expect(html).toContain('Resume · weight 40%');
-    expect(html).toContain('Unavailable');
-    expect(html).toContain('0/100');
-    expect(html).toContain('Only observed validated components contribute.');
-    expect(html).toContain('targets a different job title');
-    expect(html).not.toContain('Resume · 40%');
   });
 });
