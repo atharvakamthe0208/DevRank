@@ -1,10 +1,10 @@
 {
-  "schemaVersion": "1.0.0",
-  "scoringVersion": "1.0.0",
-  "preliminary": true,
+  "schemaVersion": "4.0.0",
+  "scoringVersion": "4.0.1",
+  "status": "active",
   "roles": {
-    "software_developer": { "technical_skills": 25, "problem_solving_dsa": 20, "relevant_project_experience": 20, "practical_assessment_performance": 15, "communication_skills": 10, "learning_adaptability": 10 },
-    "ai_ml_engineer": { "technical_skills": 25, "problem_solving_dsa": 15, "relevant_project_experience": 20, "practical_assessment_performance": 15, "communication_skills": 10, "learning_adaptability": 15 },
-    "data_analyst": { "technical_skills": 20, "problem_solving_dsa": 15, "relevant_project_experience": 20, "practical_assessment_performance": 15, "communication_skills": 15, "learning_adaptability": 15 }
+    "software_developer": { "project_portfolio": 20, "technical_skills": 20, "development_activity": 15, "collaboration": 10, "current_year_contributions": 10, "problem_solving_dsa": 25 },
+    "ai_ml_engineer": { "project_portfolio": 20, "technical_skills": 20, "development_activity": 15, "collaboration": 10, "current_year_contributions": 10, "problem_solving_dsa": 25 },
+    "data_analyst": { "project_portfolio": 20, "technical_skills": 20, "development_activity": 15, "collaboration": 10, "current_year_contributions": 10, "problem_solving_dsa": 25 }
   }
 }

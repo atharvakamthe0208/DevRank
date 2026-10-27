@@ -8,7 +8,7 @@ import { HttpError } from '../src/middleware/http-error.js';
 import { validateBody } from '../src/middleware/validate-body.js';
 import { validateParams } from '../src/middleware/validate-request.js';
 import { createEvaluationController } from '../src/controllers/evaluation-controller.js';
-import { candidateIdParamsSchema, evaluationRequestSchema, scoringCategories, type AiAnalysisContent, type PersistedEvaluation } from '@devrank/contracts';
+import { candidateIdParamsSchema, evaluationRequestSchema, schemaVersion, scoringCategories, scoringVersion, type AiAnalysisContent, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
 import type { EvaluationRepository } from '../src/repositories/evaluation-repository.js';
 import { createEvaluationsRouter } from '../src/routes/evaluations.js';
 
@@ -22,9 +22,9 @@ describe('evaluation API routes', () => {
   let origin: string;
   const categories = scoringCategories.map(({ id, displayName }) => id);
   const created = { id: evaluationId, candidateId, roleProfileId, targetRole: 'software_developer', status: 'insufficient_evidence', createdAt: '2026-10-12T00:00:00.000Z', result: {
-    schemaVersion: '1.0.0', scoringVersion: '1.0.0', candidateId, targetRole: 'software_developer',
+    schemaVersion, scoringVersion, candidateId, targetRole: 'software_developer',
     categoryScores: scoringCategories.map(({ id, displayName }) => ({ categoryId: id, displayName, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'No evidence.' })),
-    roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+    roleWeightsUsed: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
     evidence: [], strengths: [], skillGaps: [], recommendations: ['Collect normalized evidence.'], missingEvidence: categories,
     calculationExplanation: 'No overall score without evidence.', evaluationStatus: 'insufficient_evidence',
     aiExplanation: { summary: 'No AI explanation.', strengths: [], skillGaps: [], recommendations: [] },
@@ -34,9 +34,24 @@ describe('evaluation API routes', () => {
   const runResult = { id: evaluationId, status: 'insufficient_evidence' as const, candidate: { id: candidateId, name: 'Taylor Example' }, role, evaluatedAt: created.createdAt, evaluation: created.result, evidenceLimitations: ['Insufficient rubric-normalized evidence.'] };
   const evidence = scoringCategories.map(({ id }) => ({ evidenceId: `evidence-${id}`, evidenceType: 'project' as const, source: 'candidate_project', description: `Demonstrated ${id}`, normalizedValue: 80, verificationStatus: 'verified' as const, categoryId: id, availability: 'available' as const }));
   const completeEvaluation: PersistedEvaluation = { ...created, status: 'completed', result: { ...created.result, overallScore: 80, evidence, categoryScores: scoringCategories.map(({ id, displayName }, index) => ({ categoryId: id, displayName, score: 80, status: 'scored' as const, evidenceRefs: [evidence[index]!.evidenceId], explanation: 'Verified score.' })), strengths: [], skillGaps: [], recommendations: [], missingEvidence: [], calculationExplanation: 'Calculated from evidence.', evaluationStatus: 'completed' } };
+  const legacyCategories = ['technical_skills', 'problem_solving_dsa', 'relevant_project_experience', 'practical_assessment_performance', 'communication_skills', 'learning_adaptability'] as const;
+  const legacyEvaluation: PersistedEvaluationRead = {
+    id: evaluationId, candidateId, roleProfileId: null, targetRole: 'software_developer', status: 'completed', createdAt: created.createdAt,
+    result: {
+      schemaVersion: '1.0.0', candidateId, targetRole: 'software_developer',
+      categoryScores: legacyCategories.map((categoryId) => ({ categoryId, displayName: categoryId, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'Historical evidence was insufficient.' })),
+      roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+      evidence: [], strengths: [], skillGaps: [], recommendations: [], missingEvidence: [...legacyCategories],
+      calculationExplanation: 'Historical snapshot omitted an overall score.', evaluationStatus: 'insufficient_evidence',
+      aiExplanation: { summary: '', strengths: [], skillGaps: [], recommendations: [] },
+      decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
+    },
+  };
   const analysis: AiAnalysisContent = { summary: 'Evidence supports the recorded scores.', summaryEvidenceReferences: ['evidence-technical_skills'], strengths: [{ text: 'Demonstrates relevant skills.', evidenceReferences: ['evidence-technical_skills'] }], weaknesses: [], roleRelevance: 'The evidence aligns with the selected role.', roleRelevanceEvidenceReferences: ['relevant_project_experience'], recommendations: [{ text: 'Gather more evidence from assessments.', evidenceReferences: ['practical_assessment_performance'] }] };
   const repository: EvaluationRepository = {
     listRoles: vi.fn(() => ({ roles: [role] })),
+    listRoleProfiles: vi.fn(async () => ({ items: [] })),
+    listForCandidate: vi.fn(async () => ({ items: [created] })),
     run: vi.fn(async () => runResult),
     create: vi.fn(async () => created),
     get: vi.fn(async () => created),
@@ -55,6 +70,7 @@ describe('evaluation API routes', () => {
     const controller = createEvaluationController(repository, aiService);
     const candidates = express.Router(); candidates.use(authMiddleware, requireApprovedRecruiter);
     candidates.post('/:id/evaluations', validateParams(candidateIdParamsSchema), validateBody(evaluationRequestSchema), controller.create);
+    candidates.get('/:id/evaluations', validateParams(candidateIdParamsSchema), controller.listForCandidate);
     const evaluations = createEvaluationsRouter(controller, authMiddleware);
     app.use('/api/candidates', candidates); app.use('/api/evaluations', evaluations); app.use(errorHandler);
     server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -71,6 +87,18 @@ describe('evaluation API routes', () => {
     expect(repository.create).toHaveBeenCalledWith(auth, candidateId, { roleProfileId });
     expect(repository.get).toHaveBeenCalledWith(auth, evaluationId);
   });
+  it('returns validated v1 results read-only and rejects them for current-model AI analysis', async () => {
+    vi.mocked(repository.get).mockResolvedValueOnce(legacyEvaluation);
+    const read = await fetch(`${origin}/api/evaluations/${evaluationId}`);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toEqual(legacyEvaluation);
+
+    vi.mocked(repository.get).mockResolvedValueOnce(legacyEvaluation);
+    const analysisResponse = await fetch(`${origin}/api/evaluations/${evaluationId}/ai-analysis`, { method: 'POST' });
+    expect(analysisResponse.status).toBe(409);
+    expect(await analysisResponse.json()).toMatchObject({ error: { code: 'SCORING_VERSION_UNSUPPORTED' } });
+    expect(aiService.analyze).not.toHaveBeenCalled();
+  });
   it('serves configured roles and persists configured-role runs through the workflow API', async () => {
     const rolesResponse = await fetch(`${origin}/api/evaluations/roles`);
     expect(rolesResponse.status).toBe(200);
@@ -79,6 +107,16 @@ describe('evaluation API routes', () => {
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual(runResult);
     expect(repository.run).toHaveBeenCalledWith(auth, { candidateId, roleId: role.id });
+  });
+  it('lists owner-scoped role profiles and candidate evaluation history', async () => {
+    vi.mocked(repository.listRoleProfiles).mockResolvedValueOnce({ items: [] });
+    const profiles = await fetch(`${origin}/api/evaluations/role-profiles`);
+    expect(profiles.status).toBe(200);
+    expect(await profiles.json()).toEqual({ items: [] });
+    const history = await fetch(`${origin}/api/candidates/${candidateId}/evaluations`);
+    expect(history.status).toBe(200);
+    expect(await history.json()).toEqual({ items: [created] });
+    expect(repository.listForCandidate).toHaveBeenCalledWith(auth, candidateId);
   });
   it('rejects invalid request bodies and IDs', async () => {
     const body = await fetch(`${origin}/api/candidates/${candidateId}/evaluations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roleProfileId, candidateId }) });
@@ -108,9 +146,7 @@ describe('evaluation API routes', () => {
     expect(aiService.analyze).not.toHaveBeenCalled();
   });
   it('returns AI analysis separately and preserves the persisted numerical scores', async () => {
-    vi.mocked(repository.get).mockResolvedValue(completeEvaluation);
-    const beforeResponse = await fetch(`${origin}/api/evaluations/${evaluationId}`);
-    const before = await beforeResponse.json();
+    vi.mocked(repository.get).mockResolvedValueOnce(completeEvaluation);
     const response = await fetch(`${origin}/api/evaluations/${evaluationId}/ai-analysis`, { method: 'POST' });
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -119,10 +155,6 @@ describe('evaluation API routes', () => {
     expect(body.evaluation.result.categoryScores).toEqual(completeEvaluation.result.categoryScores);
     expect(body.evaluation.result.roleWeightsUsed).toEqual(completeEvaluation.result.roleWeightsUsed);
     expect(aiService.analyze).toHaveBeenCalledWith(completeEvaluation);
-    const afterResponse = await fetch(`${origin}/api/evaluations/${evaluationId}`);
-    const after = await afterResponse.json();
-    expect({ status: after.status, overallScore: after.result.overallScore, scoringVersion: after.result.scoringVersion, evidence: after.result.evidence, weights: after.result.roleWeightsUsed, result: after.result })
-      .toEqual({ status: before.status, overallScore: before.result.overallScore, scoringVersion: before.result.scoringVersion, evidence: before.result.evidence, weights: before.result.roleWeightsUsed, result: before.result });
   });
   it('rejects caller-supplied scores and evidence', async () => {
     const response = await fetch(`${origin}/api/evaluations/${evaluationId}/ai-analysis`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ overallScore: 100, evidence: [] }) });
@@ -147,5 +179,13 @@ describe('evaluation API routes', () => {
     const providerFailure = await fetch(`${origin}/api/evaluations/${evaluationId}/ai-analysis`, { method: 'POST' });
     expect(providerFailure.status).toBe(503);
     expect(await providerFailure.json()).toMatchObject({ error: { code: 'AI_UNAVAILABLE' } });
+    vi.mocked(repository.get).mockResolvedValueOnce(completeEvaluation);
+    aiService.analyze.mockRejectedValueOnce(new HttpError(503, 'AI_RATE_LIMITED', 'The AI provider is rate limiting requests. Wait before trying again.', { retryAfterSeconds: 20 }));
+    const rateLimited = await fetch(`${origin}/api/evaluations/${evaluationId}/ai-analysis`, { method: 'POST' });
+    expect(rateLimited.status).toBe(503);
+    expect(rateLimited.headers.get('retry-after')).toBe('20');
+    expect(await rateLimited.json()).toMatchObject({ error: { code: 'AI_RATE_LIMITED', details: { retryAfterSeconds: 20 } } });
+    expect(completeEvaluation.result.overallScore).toBe(80);
+    expect(repository.get).toHaveBeenLastCalledWith(auth, evaluationId);
   });
 });

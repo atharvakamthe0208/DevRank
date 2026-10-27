@@ -1,6 +1,7 @@
 import {
   candidateIdParamsSchema,
   githubSyncRequestSchema,
+  leetCodeSyncRequestSchema,
   type CandidatePlatformSubmission,
 } from '@devrank/contracts';
 import type { Request } from 'express';
@@ -15,6 +16,10 @@ function authContext(request: Request) {
 
 export function createCandidatePlatformController(repository: CandidatePlatformRepository = candidatePlatformRepository) {
   return {
+    getLatest: asyncHandler(async (request, response) => {
+      const { id } = candidateIdParamsSchema.parse(request.params);
+      response.json(await repository.getLatest(authContext(request), id));
+    }),
     submit: asyncHandler(async (request, response) => {
       const { id } = candidateIdParamsSchema.parse(request.params);
       const input = request.body as CandidatePlatformSubmission;
@@ -24,6 +29,11 @@ export function createCandidatePlatformController(repository: CandidatePlatformR
       const { id } = candidateIdParamsSchema.parse(request.params);
       const { profile } = githubSyncRequestSchema.parse(request.body);
       response.status(201).json(await repository.syncGitHub(authContext(request), id, profile));
+    }),
+    syncLeetCode: asyncHandler(async (request, response) => {
+      const { id } = candidateIdParamsSchema.parse(request.params);
+      const { profile } = leetCodeSyncRequestSchema.parse(request.body);
+      response.status(201).json(await repository.syncLeetCode(authContext(request), id, profile));
     }),
   };
 }

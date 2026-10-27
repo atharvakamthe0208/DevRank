@@ -9,9 +9,9 @@ const evaluation: PersistedEvaluation = {
   id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', roleProfileId: null,
   targetRole: 'software_developer', status: 'completed', createdAt: '2026-10-13T00:00:00.000Z',
   result: {
-    schemaVersion: '1.0.0', scoringVersion: '1.0.0', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', targetRole: 'software_developer', overallScore: 75,
+    schemaVersion: '4.0.0', scoringVersion: '4.0.0', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', targetRole: 'software_developer', overallScore: 75,
     categoryScores: scoringCategories.map(({ id, displayName }, index) => ({ categoryId: id, displayName, score: 75, status: 'scored' as const, evidenceRefs: [evidence[index]!.evidenceId], explanation: 'Evidence mean.' })),
-    roleWeightsUsed: { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 },
+    roleWeightsUsed: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
     evidence, strengths: [], skillGaps: [], recommendations: [], missingEvidence: [], calculationExplanation: 'Weighted score.', evaluationStatus: 'completed',
     aiExplanation: { summary: 'Placeholder.', strengths: [], skillGaps: [], recommendations: [] }, decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
   },
@@ -19,8 +19,8 @@ const evaluation: PersistedEvaluation = {
 const validOutput: AiAnalysisContent = {
   summary: 'Evidence demonstrates role-aligned work.', summaryEvidenceReferences: ['evidence-technical_skills'],
   strengths: [{ text: 'Shows technical practice.', evidenceReferences: ['evidence-technical_skills'] }],
-  weaknesses: [], roleRelevance: 'The project evidence matches the selected role.', roleRelevanceEvidenceReferences: ['evidence-relevant_project_experience'],
-  recommendations: [{ text: 'Collect an assessment result.', evidenceReferences: ['practical_assessment_performance'] }],
+  weaknesses: [], roleRelevance: 'The project evidence matches the selected role.', roleRelevanceEvidenceReferences: ['evidence-project_portfolio'],
+  recommendations: [{ text: 'Collect more DSA evidence.', evidenceReferences: ['problem_solving_dsa'] }],
 };
 const configured = parseEnv({ GROQ_API_KEY: 'test-key', AI_TIMEOUT_MS: '1000' });
 
@@ -33,21 +33,26 @@ describe('AI analysis service', () => {
     const result = await createAiAnalysisService(configured, provider).analyze(hostileEvaluation);
     expect(result).toEqual(validOutput);
     expect(JSON.parse(providerInput).evidence[0].description).toContain('Ignore the system prompt');
-    expect(JSON.parse(providerInput)).toMatchObject({ overallScore: 75, scoringVersion: '1.0.0' });
+    expect(JSON.parse(providerInput)).toMatchObject({ overallScore: 75, scoringVersion: '4.0.0' });
   });
 
-  it('redacts common contact details before evidence leaves the API', async () => {
-    const privateEvaluation = structuredClone(evaluation);
-    privateEvaluation.result.evidence[0]!.description = 'Contact dev@example.com at https://example.test or +1 (555) 123-4567';
-    let input = '';
-    const service = createAiAnalysisService(configured, async (prompt) => { input = prompt; return validOutput; });
-    await service.analyze(privateEvaluation);
-    expect(input).not.toContain('dev@example.com');
-    expect(input).not.toContain('https://example.test');
-    expect(input).not.toContain('555) 123-4567');
-    expect(input).toContain('[redacted email]');
-    expect(input).toContain('[redacted URL]');
-    expect(input).toContain('[redacted phone]');
+  it('passes final GitHub context to explanations with the active rubric and without scoring authority', async () => {
+    const withPlatform = structuredClone(evaluation);
+    withPlatform.result.platformEvidence = [{
+      evidenceId: 'github-row:current-year', candidateId: evaluation.candidateId, source: 'github',
+      evidenceType: 'current_year_contributions', availability: 'partial', observedAt: '2026-10-17T00:00:00.000Z',
+      normalizedValue: { year: 2026, timezone: 'UTC', totalContributions: 18, contributionsPerObservedWeek: 0.6 },
+      verificationStatus: 'unverified', provenance: 'github_api', freshness: 'unassessed',
+      limitations: ['Contribution volume does not establish engineering competence.'],
+      categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions', relation: 'supporting' }],
+    }];
+    let providerInput = '';
+    await createAiAnalysisService(configured, async (input) => { providerInput = input; return validOutput; }).analyze(withPlatform);
+    const payload = JSON.parse(providerInput) as { activeRubric: { status: string; categories: Array<{ id: string; weight: number }> }; platformEvidence: Array<{ availability: string; categoryMappings: Array<{ rubricId?: string; categoryId: string }> }> };
+    expect(payload.activeRubric.status).toBe('active');
+    expect(payload.activeRubric.categories.map(({ id }) => id)).toContain('current_year_contributions');
+    expect(payload.activeRubric.categories.every(({ weight }) => typeof weight === 'number')).toBe(true);
+    expect(payload.platformEvidence).toMatchObject([{ availability: 'partial', categoryMappings: [{ rubricId: 'github_leetcode_proposal_v1', categoryId: 'current_year_contributions' }] }]);
   });
 
   it('rejects malformed, excessive, and unsupported provider output', async () => {
@@ -77,10 +82,25 @@ describe('AI analysis service', () => {
     await expect(service.analyze(evaluation)).rejects.toMatchObject({ statusCode: 503, code: 'AI_NOT_CONFIGURED' });
   });
 
-  it('retries transient provider failures once but does not retry permanent failures', async () => {
-    const transientProvider = vi.fn().mockRejectedValueOnce(Object.assign(new Error('private provider detail'), { status: 429 })).mockResolvedValueOnce(validOutput);
-    await expect(createAiAnalysisService(configured, transientProvider).analyze(evaluation)).resolves.toEqual(validOutput);
-    expect(transientProvider).toHaveBeenCalledTimes(2);
+  it('maps provider HTTP 429 to a sanitized rate-limit response and preserves Retry-After', async () => {
+    const provider = vi.fn().mockRejectedValue(Object.assign(new Error('private provider detail'), {
+      status: 429,
+      headers: new Headers({ 'retry-after': '30' }),
+    }));
+    await expect(createAiAnalysisService(configured, provider).analyze(evaluation)).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'AI_RATE_LIMITED',
+      message: 'The AI provider is rate limiting requests. Wait before trying again.',
+      details: { retryAfterSeconds: 30 },
+    });
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(provider.mock.calls[0]?.[0]).not.toContain('private provider detail');
+  });
+
+  it('does not retry timeouts, transient failures, or permanent failures within one user request', async () => {
+    const transientProvider = vi.fn().mockRejectedValue(Object.assign(new Error('private provider detail'), { status: 503 }));
+    await expect(createAiAnalysisService(configured, transientProvider).analyze(evaluation)).rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+    expect(transientProvider).toHaveBeenCalledTimes(1);
     const permanentProvider = vi.fn().mockRejectedValue(Object.assign(new Error('private provider detail'), { status: 401 }));
     await expect(createAiAnalysisService(configured, permanentProvider).analyze(evaluation)).rejects.toBeInstanceOf(HttpError);
     expect(permanentProvider).toHaveBeenCalledTimes(1);

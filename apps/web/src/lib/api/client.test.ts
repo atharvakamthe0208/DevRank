@@ -1,40 +1,93 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { classifyRecruiterAccess } from '../../features/auth/access-state';
+import { ApiNetworkError, ApiRequestError, apiRequest } from './client';
 
-const { refreshSession } = vi.hoisted(() => ({ refreshSession: vi.fn() }));
-vi.mock('../supabase/client', () => ({ supabase: { auth: { refreshSession } } }));
+afterEach(() => vi.unstubAllGlobals());
 
-import { apiRequest, ApiNetworkError, ApiRequestError } from './client';
+describe('apiRequest', () => {
+  it('preserves API error status, code, and details', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'VALIDATION_ERROR', message: 'Request body is invalid', details: [{ field: 'email' }] },
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } })));
 
-describe('API access token forwarding', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.clearAllMocks();
+    await expect(apiRequest('/candidates')).rejects.toMatchObject({
+      name: 'ApiRequestError',
+      message: 'Request body is invalid',
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      details: [{ field: 'email' }],
+    });
   });
 
-  it('forwards the current bearer token and retries once with a refreshed token after 401', async () => {
-    refreshSession.mockResolvedValue({ data: { session: { access_token: 'fresh-token' } }, error: null });
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'Expired' } }), { status: 401 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ user: { id: 'user-1' } }), { status: 200 }));
+  it('preserves a numeric Retry-After header for intentional AI analysis retries', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'AI_RATE_LIMITED', message: 'Wait before retrying', details: { retryAfterSeconds: 12 } },
+    }), { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': '12' } })));
+
+    await expect(apiRequest('/evaluations/id/ai-analysis')).rejects.toMatchObject({
+      name: 'ApiRequestError', status: 503, code: 'AI_RATE_LIMITED', retryAfterSeconds: 12,
+    });
+  });
+
+  it('uses a safe fallback for unrecognized error responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('not json', { status: 502 })));
+
+    await expect(apiRequest('/health')).rejects.toBeInstanceOf(ApiRequestError);
+    await expect(apiRequest('/health')).rejects.toMatchObject({
+      message: 'API request failed (502)',
+      status: 502,
+      code: undefined,
+      details: undefined,
+    });
+  });
+
+  it('wraps fetch failures in the exported ApiNetworkError', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('connection refused')));
+
+    await expect(apiRequest('/health')).rejects.toBeInstanceOf(ApiNetworkError);
+  });
+
+  it('forwards the provided Supabase access token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(apiRequest('/auth/me', undefined, 'expired-token')).resolves.toEqual({ user: { id: 'user-1' } });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({ Authorization: 'Bearer expired-token' });
-    expect(fetchMock.mock.calls[1]?.[1]?.headers).toMatchObject({ Authorization: 'Bearer fresh-token' });
+    await expect(apiRequest<{ ok: boolean }>('/auth/me', undefined, 'test-access-token')).resolves.toEqual({ ok: true });
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: { Authorization: 'Bearer test-access-token' },
+    });
   });
 
-  it('does not repeat a request when refresh cannot restore a session', async () => {
-    refreshSession.mockResolvedValue({ data: { session: null }, error: null });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: 'UNAUTHENTICATED', message: 'Expired' } }), { status: 401 })));
+  it('parses the confirmed admin profile from /auth/me so the admin route guard receives admin state', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      user: { id: 'admin-1', email: 'admin@example.com' },
+      profile: { id: 'admin-1', display_name: 'Admin', phone_number: null, company_name: null, job_title: null, company_website: null, location_city: null, location_country: null, role: 'admin', approval_status: 'approved' },
+      emailConfirmed: true,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
 
-    await expect(apiRequest('/auth/me', undefined, 'expired-token')).rejects.toBeInstanceOf(ApiRequestError);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    const identity = await apiRequest<{ user: { id: string }; profile: { id: string; display_name: string | null; phone_number: string | null; company_name: string | null; job_title: string | null; company_website: string | null; location_city: string | null; location_country: string | null; role: 'recruiter' | 'admin'; approval_status: 'pending' | 'approved' | 'rejected' | 'suspended' } | null; emailConfirmed: boolean }>(
+      '/auth/me', undefined, 'test-access-token',
+    );
+
+    expect(identity.profile).toMatchObject({ id: 'admin-1', role: 'admin', approval_status: 'approved' });
+    expect(classifyRecruiterAccess(identity.profile, identity.emailConfirmed)).toBe('admin');
   });
 
-  it('turns fetch failures into a safe connectivity error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
-    await expect(apiRequest('/candidates')).rejects.toBeInstanceOf(ApiNetworkError);
-    await expect(apiRequest('/candidates')).rejects.toThrow(/DevRank API/);
+  it('accepts a successful no-content response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+
+    await expect(apiRequest<void>('/candidates/candidate-id', { method: 'DELETE' })).resolves.toBeUndefined();
+  });
+
+  it('leaves multipart content type to the browser and forwards recruiter auth', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const formData = new FormData();
+    formData.set('jobTitle', 'Engineer');
+
+    await apiRequest('/screenings', { method: 'POST', body: formData }, 'recruiter-token');
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(request.headers);
+    expect(headers.get('Content-Type')).toBeNull();
+    expect(headers.get('Authorization')).toBe('Bearer recruiter-token');
   });
 });

@@ -1,53 +1,63 @@
 import { apiErrorSchema } from '@devrank/contracts';
-import { supabase } from '../supabase/client';
+import { resolveApiBaseUrl } from './api-base-url';
 
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
+const baseUrl = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, import.meta.env.PROD);
 
 export class ApiRequestError extends Error {
-  constructor(message: string, readonly status: number, readonly code?: string, readonly details?: unknown) { super(message); this.name = 'ApiRequestError'; }
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly details?: unknown,
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
 }
 
+/** Represents a request that could not receive an HTTP response. */
 export class ApiNetworkError extends Error {
-  constructor(message = 'Could not reach the DevRank API. Check that it is running and that this local frontend origin is allowed by API CORS.') {
-    super(message);
+  constructor(message = 'Could not connect to the API. Check your connection and try again.', options?: ErrorOptions) {
+    super(message, options);
     this.name = 'ApiNetworkError';
   }
 }
 
-async function send(path: string, init: RequestInit | undefined, accessToken?: string): Promise<Response> {
+function requestUrl(path: string) {
+  if (!baseUrl) throw new ApiRequestError('Set VITE_API_BASE_URL to the deployed HTTPS API before building the production frontend.', 0);
+  return `${baseUrl}${path}`;
+}
+
+async function checkedFetch(path: string, init: RequestInit | undefined, accessToken: string | undefined) {
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   try {
-    return await fetch(`${baseUrl}${path}`, {
+    return await fetch(requestUrl(path), {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
+      headers: { ...(!isFormData ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...init?.headers },
     });
   } catch (cause) {
-    if (init?.signal?.aborted) throw cause;
-    throw new ApiNetworkError();
+    throw new ApiNetworkError(undefined, { cause });
   }
 }
 
+async function throwApiError(response: Response): Promise<never> {
+  const body: unknown = await response.json().catch(() => undefined);
+  const parsedError = apiErrorSchema.safeParse(body);
+  const error = parsedError.success ? parsedError.data.error : undefined;
+  const retryAfterHeader = response.headers.get('retry-after');
+  const retryAfterSeconds = retryAfterHeader && /^\d+$/.test(retryAfterHeader) ? Number(retryAfterHeader) : undefined;
+  throw new ApiRequestError(error?.message ?? `API request failed (${response.status})`, response.status, error?.code, error?.details, retryAfterSeconds);
+}
+
 export async function apiRequest<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
-  let response = await send(path, init, accessToken);
-  // A stored session can outlive the current access token. Refresh once and retry
-  // with the SDK's renewed token; never retry arbitrary API failures.
-  if (response.status === 401 && accessToken && supabase) {
-    let refreshedToken: string | undefined;
-    try {
-      refreshedToken = (await supabase.auth.refreshSession()).data.session?.access_token;
-    } catch {
-      throw new ApiNetworkError('Could not refresh your secure session because Supabase Auth is unreachable. Check your connection and try again.');
-    }
-    if (refreshedToken && refreshedToken !== accessToken) response = await send(path, init, refreshedToken);
-  }
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => undefined);
-    const parsedError = apiErrorSchema.safeParse(body);
-    throw new ApiRequestError(
-      parsedError.success ? parsedError.data.error.message : `API request failed (${response.status})`,
-      response.status,
-      parsedError.success ? parsedError.data.error.code : undefined,
-      parsedError.success ? parsedError.data.error.details : undefined,
-    );
-  }
+  const response = await checkedFetch(path, init, accessToken);
+  if (!response.ok) await throwApiError(response);
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+/** Public API base for popup OAuth redirects; contains no credentials. */
+export function apiAbsoluteUrl(path: string): string {
+  return requestUrl(path);
 }

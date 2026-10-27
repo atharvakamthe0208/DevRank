@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../src/app.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
+import { HttpError } from '../src/middleware/http-error.js';
 import { validateBody } from '../src/middleware/validate-body.js';
 import { createAuthenticate } from '../src/middleware/authenticate.js';
 import { createApiRouter } from '../src/routes/index.js';
@@ -29,6 +30,8 @@ describe('API HTTP conventions', () => {
   let authServer: Server;
   let authOrigin: string;
   const verifiedTokens: string[] = [];
+  const profileUpdates: Array<{ token: string; userId: string; fields: Record<string, unknown> }> = [];
+  let profileForAuth = { id: 'user-1', display_name: 'Recruiter', phone_number: null, company_name: null, job_title: null, company_website: null, location_city: null, location_country: null, role: 'recruiter' as const, approval_status: 'pending' as const };
 
   beforeAll(async () => {
     ({ server: apiServer, origin: apiOrigin } = await startServer(app));
@@ -42,10 +45,18 @@ describe('API HTTP conventions', () => {
     ({ server: validationServer, origin: validationOrigin } = await startServer(validationApp));
 
     const authApp = express();
+    authApp.use(express.json());
     authApp.use('/api', createApiRouter(createAuthenticate(async (token) => {
       verifiedTokens.push(token);
-      return { userId: 'user-1', email: 'recruiter@example.com', emailConfirmed: true, profile: { id: 'user-1', display_name: 'Recruiter', role: 'recruiter', approval_status: 'pending' } };
-    })));
+      return { userId: 'user-1', email: 'recruiter@example.com', emailConfirmed: true, profile: profileForAuth };
+    }), async (token, userId, update) => {
+      if (update.companyName === 'Missing schema') throw new HttpError(503, 'PROFILE_SCHEMA_MIGRATION_REQUIRED', 'Apply the recruiter profile details migration.');
+      if (update.companyName === 'Database failure') throw new HttpError(503, 'PROFILE_UPDATE_UNAVAILABLE', 'Recruiter profile could not be saved right now');
+      profileUpdates.push({ token, userId, fields: update });
+      profileForAuth = { id: userId, display_name: update.displayName, phone_number: update.phoneNumber, company_name: update.companyName, job_title: update.jobTitle, company_website: update.companyWebsite, location_city: update.locationCity, location_country: update.locationCountry, role: 'recruiter', approval_status: 'pending' };
+      return profileForAuth;
+    }));
+    authApp.use(errorHandler);
     ({ server: authServer, origin: authOrigin } = await startServer(authApp));
   });
 
@@ -65,12 +76,29 @@ describe('API HTTP conventions', () => {
       headers: {
         Origin: 'http://localhost:5174',
         'Access-Control-Request-Method': 'GET',
-        'Access-Control-Request-Headers': 'authorization,content-type',
+        'Access-Control-Request-Headers': 'authorization,content-type,idempotency-key',
       },
     });
     expect(response.status).toBe(204);
     expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5174');
     expect(response.headers.get('access-control-allow-headers')).toContain('Authorization');
+    expect(response.headers.get('access-control-allow-headers')).toContain('Idempotency-Key');
+  });
+
+  it('answers production auth preflight for the configured frontend origin and request headers', async () => {
+    const response = await fetch(`${apiOrigin}/api/auth/me`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://dev-rank-ruddy.vercel.app',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://dev-rank-ruddy.vercel.app');
+    expect(response.headers.get('access-control-allow-methods')).toContain('GET');
+    expect(response.headers.get('access-control-allow-headers')).toContain('Authorization');
+    expect(response.headers.get('access-control-allow-headers')).toContain('Content-Type');
   });
 
   it('does not grant CORS access to arbitrary origins', async () => {
@@ -91,9 +119,60 @@ describe('API HTTP conventions', () => {
     expect(verifiedTokens).toEqual(['verified-test-token']);
     expect(await response.json()).toEqual({
       user: { id: 'user-1', email: 'recruiter@example.com' },
-      profile: { id: 'user-1', display_name: 'Recruiter', role: 'recruiter', approval_status: 'pending' },
+      profile: { id: 'user-1', display_name: 'Recruiter', phone_number: null, company_name: null, job_title: null, company_website: null, location_city: null, location_country: null, role: 'recruiter', approval_status: 'pending' },
       emailConfirmed: true,
     });
+  });
+
+  it('updates only the authenticated caller profile and returns the saved data', async () => {
+    const response = await fetch(`${authOrigin}/api/auth/me`, {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer verified-test-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Updated Recruiter', phoneNumber: '+1 555 123 4567', companyName: 'Northwind', jobTitle: 'Talent Partner', companyWebsite: 'https://northwind.example', locationCity: 'Seattle', locationCountry: 'USA' }),
+    });
+    expect(response.status).toBe(200);
+    expect(profileUpdates).toEqual([{ token: 'verified-test-token', userId: 'user-1', fields: { displayName: 'Updated Recruiter', phoneNumber: '+1 555 123 4567', companyName: 'Northwind', jobTitle: 'Talent Partner', companyWebsite: 'https://northwind.example', locationCity: 'Seattle', locationCountry: 'USA' } }]);
+    expect(await response.json()).toEqual({
+      user: { id: 'user-1', email: 'recruiter@example.com' },
+      profile: { id: 'user-1', display_name: 'Updated Recruiter', phone_number: '+1 555 123 4567', company_name: 'Northwind', job_title: 'Talent Partner', company_website: 'https://northwind.example', location_city: 'Seattle', location_country: 'USA', role: 'recruiter', approval_status: 'pending' },
+      emailConfirmed: true,
+    });
+    const reload = await fetch(`${authOrigin}/api/auth/me`, { headers: { Authorization: 'Bearer verified-test-token' } });
+    expect(reload.status).toBe(200);
+    expect(await reload.json()).toMatchObject({ profile: { display_name: 'Updated Recruiter', company_name: 'Northwind', role: 'recruiter', approval_status: 'pending' } });
+  });
+
+  it('rejects invalid profile updates and requires authentication', async () => {
+    const invalid = await fetch(`${authOrigin}/api/auth/me`, {
+      method: 'PATCH', headers: { Authorization: 'Bearer verified-test-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: '  ', phoneNumber: null, companyName: null, jobTitle: null, companyWebsite: null, locationCity: null, locationCountry: null }),
+    });
+    expect(invalid.status).toBe(400);
+    expect(profileUpdates).toHaveLength(1);
+    const roleTampering = await fetch(`${authOrigin}/api/auth/me`, {
+      method: 'PATCH', headers: { Authorization: 'Bearer verified-test-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Recruiter', phoneNumber: null, companyName: null, jobTitle: null, companyWebsite: null, locationCity: null, locationCountry: null, role: 'admin', approval_status: 'approved' }),
+    });
+    expect(roleTampering.status).toBe(400);
+    expect(profileUpdates).toHaveLength(1);
+    const unauthenticated = await fetch(`${authOrigin}/api/auth/me`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: 'Intruder' }),
+    });
+    expect(unauthenticated.status).toBe(401);
+    expect(profileUpdates).toHaveLength(1);
+  });
+
+  it('returns structured database and unapplied-migration errors for profile updates', async () => {
+    const request = (companyName: string) => fetch(`${authOrigin}/api/auth/me`, {
+      method: 'PATCH', headers: { Authorization: 'Bearer verified-test-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Recruiter', phoneNumber: null, companyName, jobTitle: null, companyWebsite: null, locationCity: null, locationCountry: null }),
+    });
+    const migration = await request('Missing schema');
+    expect(migration.status).toBe(503);
+    expect(await migration.json()).toMatchObject({ error: { code: 'PROFILE_SCHEMA_MIGRATION_REQUIRED' } });
+    const database = await request('Database failure');
+    expect(database.status).toBe(503);
+    expect(await database.json()).toMatchObject({ error: { code: 'PROFILE_UPDATE_UNAVAILABLE' } });
   });
 
   it('uses the shared error shape for unknown routes', async () => {

@@ -9,19 +9,31 @@ import { apiRouter } from './routes/index.js';
 import { candidatesRouter } from './routes/candidates.js';
 import { githubRouter } from './routes/github.js';
 import { evaluationsRouter } from './routes/evaluations.js';
+import { insightsRouter } from './routes/insights.js';
+import { screeningsRouter } from './routes/screenings.js';
+import { googleDriveRouter } from './routes/google-drive.js';
 
 export const app = express();
 app.disable('x-powered-by');
 app.use(cors({
-  origin: (origin, callback) => callback(null, isCorsOriginAllowed(origin, env.NODE_ENV, env.WEB_ORIGIN) ? origin : false),
+  origin: (origin, callback) => callback(null, isCorsOriginAllowed(
+    origin,
+    env.NODE_ENV,
+    env.WEB_ORIGIN,
+    (env.WEB_ORIGINS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+  ) ? origin : false),
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
+  exposedHeaders: ['Retry-After'],
   optionsSuccessStatus: 204,
 }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api', apiRouter);
 app.use('/api/candidates', candidatesRouter);
 app.use('/api/evaluations', evaluationsRouter);
+app.use('/api', insightsRouter);
+app.use('/api/screenings', screeningsRouter);
+app.use('/api/google-drive', googleDriveRouter);
 app.use('/api/github', githubRouter);
 // Keep the original scaffold health path available while clients move to /api/health.
 app.get('/health', healthController);

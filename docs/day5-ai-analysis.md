@@ -2,7 +2,7 @@
 
 ## Scoring contract
 
-AI analysis uses the persisted deterministic evaluation and the existing six scoring categories. The deterministic scorer remains the only author of scores, category weights, scoring version, and evaluation status. AI provides a separate explanation and does not write to the evaluation record. Missing category evidence remains missing; it is not treated as zero.
+AI analysis uses a persisted deterministic evaluation under the active five-category scoring v2 contract. The deterministic scorer remains the only author of scores, category weights, scoring version, and evaluation status. AI provides a separate explanation and does not write to the evaluation record. AI failures do not alter the persisted result. Missing category evidence remains missing; it is not treated as zero. Historical six-category v1 snapshots are not sent to the active v2 analysis path.
 
 ## Endpoint
 

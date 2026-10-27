@@ -56,6 +56,12 @@ function configureList(response: unknown) {
   return query;
 }
 
+function configureImportPreview(response: unknown) {
+  const rpc = vi.fn(async () => ({ data: response, error: null }));
+  mockGetSupabaseClient.mockReturnValue({ rpc });
+  return rpc;
+}
+
 describe('candidate repository failure diagnostics', () => {
   let log: ReturnType<typeof vi.spyOn>;
 
@@ -149,5 +155,57 @@ describe('candidate repository failure diagnostics', () => {
       ],
     });
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/Candidate Value Must Not Be Logged|private@example\.com|not-a-timestamp/);
+  });
+});
+
+describe('candidate import preview RPC contract', () => {
+  let log: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  it('maps the exact JSONB envelope returned by the preview RPC to the public rows contract', async () => {
+    const rpcResponse = {
+      results: Array.from({ length: 5 }, (_, index) => ({
+        rowNumber: index + 2,
+        status: 'ready',
+        potentialDuplicate: false,
+        candidateId: null,
+      })),
+      createdCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+    };
+    const rpc = configureImportPreview(rpcResponse);
+    const rows = rpcResponse.results.map(({ rowNumber }) => ({ rowNumber, candidate: { name: `Candidate ${rowNumber}` } }));
+
+    await expect(candidateRepository.previewImport(auth, rows)).resolves.toEqual({ rows: rpcResponse.results });
+    expect(rpc).toHaveBeenCalledWith('candidate_bulk_import', {
+      p_rows: rows,
+      p_idempotency_key: null,
+      p_skip_duplicates: true,
+      p_preview: true,
+    });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed RPC preview envelopes and logs only validation codes', async () => {
+    configureImportPreview({
+      results: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null, candidateEmail: 'private@example.invalid' }],
+      createdCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      privateValue: 'must-not-be-logged',
+    });
+
+    await expect(candidateRepository.previewImport(auth, [{ rowNumber: 2, candidate: { name: 'Private candidate name' } }]))
+      .rejects.toMatchObject({ statusCode: 500, code: 'INVALID_DATABASE_RESPONSE' } satisfies Partial<HttpError>);
+    expect(log).toHaveBeenCalledWith('Candidate import database response validation failed', {
+      operation: 'preview candidate import',
+      issueCodes: ['unrecognized_keys', 'unrecognized_keys'],
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/private@example|Private candidate|must-not-be-logged|DO_NOT_LOG_ACCESS_TOKEN/);
   });
 });

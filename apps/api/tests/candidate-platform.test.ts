@@ -2,7 +2,7 @@ import { once } from 'node:events';
 import type { Server } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { CandidatePlatformResponse, GitHubSyncResponse } from '@devrank/contracts';
+import type { CandidatePlatformResponse, GitHubSyncResponse, LeetCodeSyncResponse } from '@devrank/contracts';
 import { createCandidatePlatformController } from '../src/controllers/candidate-platform-controller.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
 import { HttpError } from '../src/middleware/http-error.js';
@@ -28,6 +28,10 @@ function closeServer(server: Server): Promise<void> {
 
 function createRepository(): CandidatePlatformRepository {
   return {
+    getLatest: vi.fn(async (auth, id) => {
+      if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+      return { items: [] };
+    }),
     submit: vi.fn(async (auth, id, input) => {
       if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       if (auth.userId === otherOwnerId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
@@ -50,6 +54,8 @@ function createRepository(): CandidatePlatformRepository {
     syncGitHub: vi.fn(async (auth, id, profile): Promise<GitHubSyncResponse> => {
       if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
       if (profile === 'missing-profile') throw new HttpError(404, 'GITHUB_USER_NOT_FOUND', 'GitHub user was not found');
+      if (profile === 'database-permission') throw new HttpError(403, 'GITHUB_DATABASE_PERMISSION_DENIED', 'The database denied saving GitHub data.');
+      if (profile === 'database-write-failed') throw new HttpError(503, 'GITHUB_DATA_SAVE_FAILED', 'GitHub data was retrieved, but the database could not save it.');
       return {
         id: 'ea574cd8-8d21-4586-a887-dc2a6fc7ba08', candidateId: id, source: 'github',
         availability: 'available', provenance: 'github_api', syncedAt: '2026-10-11T12:00:00.000Z',
@@ -57,6 +63,19 @@ function createRepository(): CandidatePlatformRepository {
           username: 'octocat', profileUrl: 'https://github.com/octocat', publicRepositoryCount: 8,
           followers: 10, following: 5, repositories: [], repositoriesReturned: 0, repositoriesTruncated: false,
         },
+      };
+    }),
+    syncLeetCode: vi.fn(async (auth, id, profile): Promise<LeetCodeSyncResponse> => {
+      if (auth.userId !== ownerId || id !== candidateId) throw new HttpError(404, 'NOT_FOUND', 'Candidate not found');
+      if (profile === 'missing-profile') throw new HttpError(404, 'LEETCODE_USER_NOT_FOUND', 'LeetCode user was not found');
+      if (profile === 'provider-failed') throw new HttpError(503, 'LEETCODE_PROVIDER_UNAVAILABLE', 'LeetCode statistics provider is temporarily unavailable');
+      if (profile === 'save-failed') throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to save LeetCode profile data right now');
+      const handle = profile.startsWith('https://') ? new URL(profile).pathname.split('/').filter(Boolean).at(-1)! : profile;
+      return {
+        id: 'ea574cd8-8d21-4586-a887-dc2a6fc7ba08', candidateId: id, platform: 'leetcode', availability: 'available',
+        provenance: 'alfa_leetcode_api', provider: 'alfa-leetcode-api', handle,
+        profileUrl: `https://leetcode.com/u/${handle}/`, statistics: { problemsSolved: 12, easySolved: 0 },
+        syncedAt: '2026-10-15T12:00:00.000Z',
       };
     }),
   };
@@ -108,6 +127,13 @@ describe('candidate platform data API', () => {
     });
   }
 
+  async function syncLeetCode(body: unknown, token?: string) {
+    return fetch(`${origin}/api/candidates/${candidateId}/platform-data/leetcode-sync`, {
+      method: 'POST', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
   it('syncs GitHub profile data for an approved recruiter and reports source failures', async () => {
     const success = await syncGitHub({ profile: 'octocat' }, 'owner-token');
     expect(success.status).toBe(201);
@@ -122,6 +148,41 @@ describe('candidate platform data API', () => {
     const missing = await syncGitHub({ profile: 'missing-profile' }, 'owner-token');
     expect(missing.status).toBe(404);
     expect(await missing.json()).toMatchObject({ error: { code: 'GITHUB_USER_NOT_FOUND' } });
+
+    const permissionDenied = await syncGitHub({ profile: 'database-permission' }, 'owner-token');
+    expect(permissionDenied.status).toBe(403);
+    expect(await permissionDenied.json()).toMatchObject({ error: { code: 'GITHUB_DATABASE_PERMISSION_DENIED' } });
+
+    const saveFailure = await syncGitHub({ profile: 'database-write-failed' }, 'owner-token');
+    expect(saveFailure.status).toBe(503);
+    expect(await saveFailure.json()).toMatchObject({ error: { code: 'GITHUB_DATA_SAVE_FAILED' } });
+  });
+
+  it('syncs LeetCode only for an authenticated approved recruiter and handles provider/storage errors', async () => {
+    const success = await syncLeetCode({ profile: 'https://leetcode.com/u/example/' }, 'owner-token');
+    expect(success.status).toBe(201);
+    expect(await success.json()).toMatchObject({
+      candidateId, platform: 'leetcode', availability: 'available', provenance: 'alfa_leetcode_api',
+      provider: 'alfa-leetcode-api', handle: 'example', statistics: { problemsSolved: 12, easySolved: 0 },
+    });
+    expect(repository.syncLeetCode).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: ownerId, accessToken: 'owner-token' }), candidateId, 'https://leetcode.com/u/example/',
+    );
+    expect((await syncLeetCode({ profile: 'missing-profile' }, 'owner-token')).status).toBe(404);
+    expect((await syncLeetCode({ profile: 'provider-failed' }, 'owner-token')).status).toBe(503);
+    expect((await syncLeetCode({ profile: 'save-failed' }, 'owner-token')).status).toBe(503);
+    expect((await syncLeetCode({ profile: 'example' })).status).toBe(401);
+    expect((await syncLeetCode({ profile: 'example' }, 'other-owner-token')).status).toBe(404);
+    expect((await syncLeetCode({ profile: '' }, 'owner-token')).status).toBe(400);
+    expect((await syncLeetCode({ profile: 'example', unexpected: true }, 'owner-token')).status).toBe(400);
+  });
+
+  it('returns persisted platform data only for the authorized candidate', async () => {
+    const response = await fetch(`${origin}/api/candidates/${candidateId}/platform-data`, { headers: { Authorization: 'Bearer owner-token' } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ items: [] });
+    expect(repository.getLatest).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId }), candidateId);
+    expect((await fetch(`${origin}/api/candidates/${candidateId}/platform-data`)).status).toBe(401);
   });
 
   it('requires approval and rejects malformed GitHub sync requests', async () => {
@@ -130,6 +191,13 @@ describe('candidate platform data API', () => {
     const invalid = await syncGitHub({ profile: '' }, 'owner-token');
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+
+    const invalidCandidateId = await fetch(`${origin}/api/candidates/invalid-id/platform-data/github-sync`, {
+      method: 'POST', headers: { Authorization: 'Bearer owner-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: 'octocat' }),
+    });
+    expect(invalidCandidateId.status).toBe(400);
+    expect(await invalidCandidateId.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
   });
 
   it('accepts candidate-provided LeetCode data and preserves an actual zero', async () => {

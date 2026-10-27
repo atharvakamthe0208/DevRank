@@ -23,6 +23,8 @@ scripts/              Repository automation
 ```
 
 See [docs/setup.md](docs/setup.md) for setup and [docs/team-workflow.md](docs/team-workflow.md) for ownership and collaboration.
+For production frontend configuration and the current demo limitations, see [Day 8 deployment and demo](docs/day8-frontend-deployment-demo.md).
+For Google Forms CSV candidate import, optional Google Drive OAuth, and resume screening, see [CSV import and Drive setup](docs/csv-import.md). Google Drive access requires server-side OAuth configuration and the documented Supabase migration before it is available.
 
 ## Prerequisites
 
@@ -36,7 +38,7 @@ See [docs/setup.md](docs/setup.md) for setup and [docs/team-workflow.md](docs/te
 npm install
 ```
 
-Copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env`. The API loads its own workspace `.env` regardless of the shell's current directory; Vite loads the web workspace `.env`. Root `.env` is not used by the workspace servers. Replace placeholders locally; never commit populated environment files. Start both development servers with:
+Copy `.env.example` to `.env` for the API and to `apps/web/.env` for Vite. Replace placeholders locally; never commit populated environment files. Start both development servers with:
 
 ```sh
 npm run dev
@@ -53,4 +55,4 @@ The web app is served at `http://localhost:5173`; the API health endpoint is `ht
 
 ## Current scope and next steps
 
-The repository includes recruiter Supabase Auth flows, an API-backed candidate list/create/details workflow, a token-verifying API with recruiter approval gates, candidate CRUD, and migrations for approved-recruiter RLS and admin-managed applications. Candidate scores and role assignments are not part of the candidate CRUD model yet; scoring and AI remain in progress. Migrations are not applied automatically; configure Supabase using [docs/authentication.md](docs/authentication.md). See [docs/setup.md](docs/setup.md) for candidate routes and [docs/architecture.md](docs/architecture.md) for system boundaries.
+The repository includes the Day 1 React dashboard and candidate UI, recruiter Supabase Auth flows, an Express token-verification gate, and migration proposals for approved-recruiter RLS plus admin-managed applications. Candidate/evaluation APIs, scoring, and AI remain unimplemented. Supabase migrations are not applied automatically; configure the project using [docs/authentication.md](docs/authentication.md). See [docs/architecture.md](docs/architecture.md) for boundaries and [docs/team-workflow.md](docs/team-workflow.md) for Git conventions.

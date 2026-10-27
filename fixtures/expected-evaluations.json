@@ -1,7 +1,77 @@
 [
-  { "candidateId": "synthetic-candidate-001", "targetRole": "software_developer", "scoringVersion": "1.0.0", "evaluationStatus": "completed", "overallScore": 78.1, "categoryScores": { "technical_skills": 80, "problem_solving_dsa": 75, "relevant_project_experience": 78, "practical_assessment_performance": 82, "communication_skills": 80, "learning_adaptability": 72 } },
-  { "candidateId": "synthetic-candidate-002", "targetRole": "ai_ml_engineer", "scoringVersion": "1.0.0", "evaluationStatus": "completed", "overallScore": 83.4, "categoryScores": { "technical_skills": 86, "problem_solving_dsa": 70, "relevant_project_experience": 90, "practical_assessment_performance": 88, "communication_skills": 76, "learning_adaptability": 84 } },
-  { "candidateId": "synthetic-candidate-003", "targetRole": "data_analyst", "scoringVersion": "1.0.0", "evaluationStatus": "completed", "overallScore": 83.2, "categoryScores": { "technical_skills": 82, "problem_solving_dsa": 74, "relevant_project_experience": 88, "practical_assessment_performance": 84, "communication_skills": 92, "learning_adaptability": 78 } },
-  { "candidateId": "synthetic-candidate-004", "targetRole": "software_developer", "scoringVersion": "1.0.0", "evaluationStatus": "insufficient_evidence", "categoryScores": { "technical_skills": 70, "problem_solving_dsa": 62, "relevant_project_experience": 68, "practical_assessment_performance": 58, "learning_adaptability": 80 }, "missingEvidence": ["communication_skills"] },
-  { "candidateId": "synthetic-candidate-005", "targetRole": "ai_ml_engineer", "scoringVersion": "1.0.0", "evaluationStatus": "insufficient_evidence", "categoryScores": {}, "missingEvidence": ["technical_skills", "problem_solving_dsa", "relevant_project_experience", "practical_assessment_performance", "communication_skills", "learning_adaptability"] }
+  {
+    "candidateId": "synthetic-candidate-001",
+    "targetRole": "software_developer",
+    "scoringVersion": "3.0.0",
+    "evaluationStatus": "completed",
+    "overallScore": 78.1,
+    "categoryScores": {
+      "technical_skills": 80,
+      "problem_solving_dsa": 75,
+      "project_portfolio": 78,
+      "development_activity": 82,
+      "collaboration": 80,
+      "current_year_contributions": 72
+    }
+  },
+  {
+    "candidateId": "synthetic-candidate-002",
+    "targetRole": "ai_ml_engineer",
+    "scoringVersion": "3.0.0",
+    "evaluationStatus": "completed",
+    "overallScore": 83.8,
+    "categoryScores": {
+      "technical_skills": 86,
+      "problem_solving_dsa": 70,
+      "project_portfolio": 90,
+      "development_activity": 88,
+      "collaboration": 80,
+      "current_year_contributions": 84
+    }
+  },
+  {
+    "candidateId": "synthetic-candidate-003",
+    "targetRole": "data_analyst",
+    "scoringVersion": "3.0.0",
+    "evaluationStatus": "completed",
+    "overallScore": 81.4,
+    "categoryScores": {
+      "technical_skills": 82,
+      "problem_solving_dsa": 74,
+      "project_portfolio": 88,
+      "development_activity": 84,
+      "collaboration": 80,
+      "current_year_contributions": 78
+    }
+  },
+  {
+    "candidateId": "synthetic-candidate-004",
+    "targetRole": "software_developer",
+    "scoringVersion": "3.0.0",
+    "evaluationStatus": "completed",
+    "overallScore": 68.2,
+    "categoryScores": {
+      "technical_skills": 70,
+      "problem_solving_dsa": 62,
+      "project_portfolio": 68,
+      "development_activity": 58,
+      "collaboration": 80,
+      "current_year_contributions": 80
+    }
+  },
+  {
+    "candidateId": "synthetic-candidate-005",
+    "targetRole": "ai_ml_engineer",
+    "scoringVersion": "3.0.0",
+    "evaluationStatus": "insufficient_evidence",
+    "categoryScores": {},
+    "missingEvidence": [
+      "technical_skills",
+      "problem_solving_dsa",
+      "project_portfolio",
+      "development_activity",
+      "collaboration",
+      "current_year_contributions"
+    ]
+  }
 ]

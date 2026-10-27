@@ -1,11 +1,18 @@
 import { Router } from 'express';
 import {
   candidateCreateSchema,
+  candidateBulkImportRequestSchema,
+  candidateImportRowsSchema,
   candidateIdParamsSchema,
   candidateListQuerySchema,
   candidatePlatformSubmissionSchema,
   candidateUpdateSchema,
   githubSyncRequestSchema,
+  leetCodeSyncRequestSchema,
+  unifiedAssessmentCreateRequestSchema,
+  unifiedAssessmentRankingQuerySchema,
+  unifiedReportQuerySchema,
+  unifiedReportResumeLinkRequestSchema,
 } from '@devrank/contracts';
 import { createCandidateController } from '../controllers/candidate-controller.js';
 import { authenticate, requireApprovedRecruiter } from '../middleware/authenticate.js';
@@ -14,6 +21,7 @@ import { validateParams, validateQuery } from '../middleware/validate-request.js
 import { createCandidatePlatformController } from '../controllers/candidate-platform-controller.js';
 import { createEvaluationController } from '../controllers/evaluation-controller.js';
 import { evaluationRequestSchema } from '@devrank/contracts';
+import { createUnifiedReportController } from '../controllers/unified-report-controller.js';
 
 export function createCandidatesRouter(
   controller = createCandidateController(),
@@ -22,8 +30,11 @@ export function createCandidatesRouter(
   evaluationController = createEvaluationController(),
 ) {
   const router = Router();
+  const unifiedReportController = createUnifiedReportController();
   router.use(authMiddleware, requireApprovedRecruiter);
   router.get('/', validateQuery(candidateListQuerySchema), controller.list);
+  router.post('/bulk-import/preview', validateBody(candidateImportRowsSchema), controller.previewImport);
+  router.post('/bulk-import', validateBody(candidateBulkImportRequestSchema), controller.bulkImport);
   router.post('/', validateBody(candidateCreateSchema), controller.create);
   router.post(
     '/:id/evaluations',
@@ -31,21 +42,34 @@ export function createCandidatesRouter(
     validateBody(evaluationRequestSchema),
     evaluationController.create,
   );
+  router.get('/:id/evaluations', validateParams(candidateIdParamsSchema), evaluationController.listForCandidate);
   router.post(
     '/:id/platform-data',
     validateParams(candidateIdParamsSchema),
     validateBody(candidatePlatformSubmissionSchema),
     platformController.submit,
   );
+  router.get('/:id/platform-data', validateParams(candidateIdParamsSchema), platformController.getLatest);
+  router.get('/:id/unified-report', validateParams(candidateIdParamsSchema), validateQuery(unifiedReportQuerySchema), unifiedReportController.get);
+  router.post('/:id/unified-report/resume', validateParams(candidateIdParamsSchema), validateBody(unifiedReportResumeLinkRequestSchema), unifiedReportController.linkResume);
+  router.post('/:id/unified-report/resume/replace', validateParams(candidateIdParamsSchema), validateBody(unifiedReportResumeLinkRequestSchema), unifiedReportController.replaceResume);
+  router.post('/:id/unified-report/assessment', validateParams(candidateIdParamsSchema), validateBody(unifiedAssessmentCreateRequestSchema), unifiedReportController.assess);
+  router.get('/:id/unified-report/assessment', validateParams(candidateIdParamsSchema), validateQuery(unifiedAssessmentRankingQuerySchema), unifiedReportController.getAssessment);
   router.post(
     '/:id/platform-data/github-sync',
     validateParams(candidateIdParamsSchema),
     validateBody(githubSyncRequestSchema),
     platformController.syncGitHub,
   );
+  router.post(
+    '/:id/platform-data/leetcode-sync',
+    validateParams(candidateIdParamsSchema),
+    validateBody(leetCodeSyncRequestSchema),
+    platformController.syncLeetCode,
+  );
   router.get('/:id', validateParams(candidateIdParamsSchema), controller.get);
   router.patch('/:id', validateParams(candidateIdParamsSchema), validateBody(candidateUpdateSchema), controller.update);
-  router.delete('/:id', validateParams(candidateIdParamsSchema), controller.archive);
+  router.delete('/:id', validateParams(candidateIdParamsSchema), controller.delete);
   return router;
 }
 

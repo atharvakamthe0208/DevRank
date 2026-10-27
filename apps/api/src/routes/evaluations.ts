@@ -9,6 +9,7 @@ export function createEvaluationsRouter(controller = createEvaluationController(
   const router = Router();
   router.use(authMiddleware, approvalMiddleware);
   router.get('/roles', controller.listRoles);
+  router.get('/role-profiles', controller.listRoleProfiles);
   router.post('/', validateBody(evaluationRunRequestSchema), controller.run);
   router.get('/:id', validateParams(evaluationIdParamsSchema), controller.get);
   router.post('/:id/ai-analysis', validateParams(evaluationIdParamsSchema), validateBody(aiAnalysisRequestSchema), controller.analyze);

@@ -1,65 +1,207 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import devrankMark from '../../assets/devrank-mark.svg';
+import type { AdminRecruiterDetails } from '@devrank/contracts';
+import { AnimatedMetric } from '../../components/metrics/KpiCards';
 import { useAuth } from '../auth/AuthProvider';
 import { apiRequest } from '../../lib/api/client';
+import {
+  filterRecruiterApplications,
+  searchRecruiterApplications,
+  summarizeRecruiterApplications,
+  type RecruiterApplication,
+  type RecruiterFilter,
+} from './recruiter-application-presentation';
+import { RecruiterApplicationsList } from './RecruiterApplicationsList';
+import { AdminRecruiterDetailsModal } from './AdminRecruiterDetailsModal';
+import './admin-recruiters-page.css';
 
-type RecruiterApplication = { user_id: string; email: string; display_name: string | null; registered_at: string; approval_status: 'pending' | 'approved' | 'rejected' };
-type Filter = 'all' | RecruiterApplication['approval_status'];
+type RecruiterDecision = { row: RecruiterApplication; decision: 'approved' | 'rejected' };
+type RecruiterDetailsState = 'loading' | 'error' | 'ready';
 
 export function AdminRecruitersPage() {
   const { session, profile, signOut } = useAuth();
   const navigate = useNavigate();
-  const [filter,setFilter] = useState<Filter>('pending');
-  const [rows,setRows] = useState<RecruiterApplication[]>([]);
-  const [busy,setBusy] = useState(true);
-  const [activeId,setActiveId] = useState('');
-  const [error,setError] = useState('');
-  const [notice,setNotice] = useState('');
-  const [logoutError,setLogoutError] = useState('');
+  const [filter, setFilter] = useState<RecruiterFilter>('pending');
+  const [search, setSearch] = useState('');
+  const [rows, setRows] = useState<RecruiterApplication[]>([]);
+  const [selectedRecruiter, setSelectedRecruiter] = useState<RecruiterApplication | null>(null);
+  const [recruiterDetails, setRecruiterDetails] = useState<AdminRecruiterDetails | null>(null);
+  const [detailsState, setDetailsState] = useState<RecruiterDetailsState>('loading');
+  const [detailsError, setDetailsError] = useState('');
+  const [busy, setBusy] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [activeId, setActiveId] = useState('');
+  const [activeDecision, setActiveDecision] = useState<'approved' | 'rejected' | ''>('');
+  const [pendingDecision, setPendingDecision] = useState<RecruiterDecision | null>(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [logoutError, setLogoutError] = useState('');
+  const decisionDialog = useRef<HTMLDialogElement>(null);
+  const detailsRequest = useRef(0);
+  const detailsTrigger = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     if (!session) return;
-    setBusy(true); setError('');
+    setBusy(true);
+    setError('');
     try {
-      const result = await apiRequest<{ recruiters: RecruiterApplication[] }>(`/admin/recruiters?status=${filter}`, undefined, session.access_token);
+      // Fetch the existing admin-only list once; use it for both summary counts and filters.
+      const result = await apiRequest<{ recruiters: RecruiterApplication[] }>(
+        '/admin/recruiters?status=all',
+        undefined,
+        session.access_token,
+      );
       setRows(result.recruiters);
+      setHasLoaded(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Recruiter applications could not be loaded.');
-    } finally { setBusy(false); }
-  }, [filter,session]);
+    } finally {
+      setBusy(false);
+    }
+  }, [session]);
+
+  async function loadDetails(row: RecruiterApplication) {
+    if (!session) return;
+    const requestId = ++detailsRequest.current;
+    setSelectedRecruiter(row);
+    setDetailsState('loading');
+    setDetailsError('');
+    setRecruiterDetails(null);
+    try {
+      const result = await apiRequest<{ details: AdminRecruiterDetails }>(
+        `/admin/recruiters/${row.user_id}/details`,
+        undefined,
+        session.access_token,
+      );
+      if (requestId !== detailsRequest.current) return;
+      setRecruiterDetails(result.details);
+      setDetailsState('ready');
+    } catch (cause) {
+      if (requestId !== detailsRequest.current) return;
+      setDetailsError(cause instanceof Error ? cause.message : 'Recruiter details could not be loaded.');
+      setDetailsState('error');
+    }
+  }
+
+  function closeDetails() {
+    detailsRequest.current += 1;
+    setSelectedRecruiter(null);
+    setRecruiterDetails(null);
+    setDetailsError('');
+    window.requestAnimationFrame(() => detailsTrigger.current?.focus());
+  }
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    const dialog = decisionDialog.current;
+    if (pendingDecision && dialog && !dialog.open) {
+      dialog.showModal();
+      dialog.querySelector<HTMLButtonElement>('[data-dialog-cancel]')?.focus();
+    } else if (!pendingDecision && dialog?.open) {
+      dialog.close();
+    }
+  }, [pendingDecision]);
+
   async function decide(row: RecruiterApplication, decision: 'approved' | 'rejected') {
-    const label = decision === 'approved' ? 'approve' : 'reject';
-    if (!window.confirm(`Are you sure you want to ${label} ${row.display_name || row.email}?`)) return;
     if (!session) return;
-    setActiveId(row.user_id); setError(''); setNotice('');
+    setActiveId(row.user_id);
+    setActiveDecision(decision);
+    setError('');
+    setNotice('');
     try {
-      await apiRequest(`/admin/recruiters/${row.user_id}/decision`, { method: 'PATCH', body: JSON.stringify({ decision }) }, session.access_token);
-      setNotice(`${row.display_name || row.email} was ${decision}.`);
+      await apiRequest(
+        `/admin/recruiters/${row.user_id}/decision`,
+        { method: 'PATCH', body: JSON.stringify({ decision }) },
+        session.access_token,
+      );
+      setNotice(`${row.display_name || row.email || 'Recruiter'} was ${decision}.`);
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The recruiter application could not be updated.');
-    } finally { setActiveId(''); }
+    } finally {
+      setActiveId('');
+      setActiveDecision('');
+    }
   }
 
   async function logout() {
     setLogoutError('');
-    try { await signOut(); navigate('/login',{replace:true}); }
-    catch { setLogoutError('Could not sign out. Check your connection and try again.'); }
+    try {
+      await signOut();
+      navigate('/login', { replace: true });
+    } catch {
+      setLogoutError('Could not sign out. Check your connection and try again.');
+    }
   }
 
+  const counts = summarizeRecruiterApplications(rows);
+  const visibleRows = searchRecruiterApplications(filterRecruiterApplications(rows, filter), search);
+  const pendingName = pendingDecision?.row.display_name || pendingDecision?.row.email || 'this recruiter';
+
   return <div className="admin-page">
-    <header className="admin-topbar"><Link to="/admin/recruiters" className="brand"><span className="brand-mark">d.</span><span>devrank<span className="brand-period">.</span></span></Link><div className="admin-account"><span>{profile?.display_name || 'Administrator'}</span><button className="logout-button" onClick={() => void logout()}>Log out</button></div></header>
+    <header className="admin-topbar">
+      <Link to="/admin/recruiters" className="brand admin-brand"><img src={devrankMark} alt=""/><span>devrank<span className="brand-period">.</span></span></Link>
+      <div className="admin-account"><span>{profile?.display_name || 'Administrator'}</span><span className="admin-header-badge">Administrator</span><button className="logout-button" type="button" onClick={() => void logout()}>Log out</button></div>
+    </header>
     <main className="admin-content">
-      <div className="admin-heading"><div><div className="eyebrow"><span className="eyebrow-line"/> ADMINISTRATION</div><h1>Recruiter applications</h1><p className="page-subtitle">Review recruiter accounts before they can access DevRank.</p></div><span className="admin-role-badge">Project administrator</span></div>
-      <section className="admin-panel">
-        <div className="admin-panel-head"><div><h2>Recruiter accounts</h2><p>Approval decisions are recorded in the audit log.</p></div><label className="admin-filter">Status <select value={filter} onChange={(event)=>setFilter(event.target.value as Filter)}><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="all">All statuses</option></select></label></div>
-        {error&&<p className="form-feedback form-feedback-error" role="alert">{error}</p>}{notice&&<p className="form-feedback" role="status">{notice}</p>}{logoutError&&<p className="form-feedback form-feedback-error" role="alert">{logoutError}</p>}
-        {busy?<p className="admin-empty" role="status">Loading recruiter accounts…</p>:rows.length===0?<p className="admin-empty">No {filter==='all'?'recruiter':filter} applications to show.</p>:<div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Recruiter</th><th>Work email</th><th>Registered</th><th>Status</th><th>Decision</th></tr></thead><tbody>{rows.map((row)=><tr key={row.user_id}><td>{row.display_name||'Name not provided'}</td><td>{row.email}</td><td>{row.registered_at?new Date(row.registered_at).toLocaleDateString(): '—'}</td><td><span className={`admin-status status-${row.approval_status}`}>{row.approval_status}</span></td><td>{row.approval_status==='pending'?<div className="admin-actions"><button className="approve-button" disabled={Boolean(activeId)} onClick={()=>void decide(row,'approved')}>{activeId===row.user_id?'Saving…':'Approve'}</button><button className="reject-button" disabled={Boolean(activeId)} onClick={()=>void decide(row,'rejected')}>Reject</button></div>:'—'}</td></tr>)}</tbody></table></div>}
+      <div className="admin-heading">
+        <div><div className="eyebrow"><span className="eyebrow-line"/> ADMINISTRATION</div><h1>Recruiter applications</h1><p className="page-subtitle">Review recruiter accounts before they can access DevRank.</p></div>
+        <span className="admin-role-badge">Project administrator</span>
+      </div>
+
+      <section className="admin-summary" aria-label={busy && !hasLoaded ? "Loading recruiter application counts" : "Recruiter application counts"} aria-busy={busy && !hasLoaded}>
+        {(['pending', 'approved', 'rejected'] as const).map((status, index) => <article className={'admin-summary-card status-' + status} key={status} style={{ '--admin-card-index': index } as CSSProperties}>
+          <span className="admin-summary-icon" aria-hidden="true">{status === 'pending' ? '◷' : status === 'approved' ? '✓' : '×'}</span>
+          <span className="admin-summary-label">{status === 'pending' ? 'Pending recruiters' : status === 'approved' ? 'Approved recruiters' : 'Rejected recruiters'}</span>
+          <strong>{hasLoaded ? <AnimatedMetric value={counts[status]}/> : busy ? <span className="admin-summary-value-skeleton" aria-hidden="true"/> : '—'}</strong>
+        </article>)}
       </section>
-      <p className="admin-security-note"><span>ⓘ</span> Only project-owner-provisioned administrators can review these applications. Recruiter accounts cannot grant themselves administrator access.</p>
+
+      <section className="admin-panel" aria-labelledby="recruiter-accounts-heading">
+        <div className="admin-panel-head">
+          <div><h2 id="recruiter-accounts-heading">Recruiter accounts</h2><p>Approval decisions are recorded in the audit log.</p></div>
+          <div className="admin-panel-controls">
+            <label className="admin-search"><span aria-hidden="true">⌕</span><span className="sr-only">Search recruiter name or email</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search recruiters…"/></label>
+            <label className="admin-filter">Status <select value={filter} onChange={(event) => setFilter(event.target.value as RecruiterFilter)}>
+              <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="all">All statuses</option>
+            </select></label>
+            <button className="secondary-button" type="button" onClick={() => void load()} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
+          </div>
+        </div>
+        {notice && <p className="form-feedback" role="status">{notice}</p>}
+        {logoutError && <p className="form-feedback form-feedback-error" role="alert">{logoutError}</p>}
+        <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} searchQuery={search} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onViewDetails={(row) => { detailsTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; void loadDetails(row); }} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
+      </section>
+
+      {selectedRecruiter && <AdminRecruiterDetailsModal
+        name={selectedRecruiter.display_name || selectedRecruiter.email || 'Recruiter'}
+        recruiterId={selectedRecruiter.user_id}
+        state={detailsState}
+        details={recruiterDetails}
+        error={detailsError}
+        onRetry={() => void loadDetails(selectedRecruiter)}
+        onClose={closeDetails}
+      />}
+
+      <p className="admin-security-note"><span aria-hidden="true">ⓘ</span> Only project-owner-provisioned administrators can review these applications. Recruiter accounts cannot grant themselves administrator access.</p>
     </main>
+
+    <dialog ref={decisionDialog} className="admin-confirmation" aria-labelledby="admin-confirmation-title" aria-describedby="admin-confirmation-description" onClose={() => setPendingDecision(null)}>
+      <span className="admin-confirmation-kicker">RECRUITER ACCESS</span>
+      <h2 id="admin-confirmation-title">{pendingDecision?.decision === 'approved' ? 'Approve recruiter?' : 'Reject recruiter?'}</h2>
+      <p className="admin-confirmation-name">{pendingName}</p>
+      <p id="admin-confirmation-description">{pendingDecision?.decision === 'approved' ? 'This gives the recruiter access to the protected DevRank workspace.' : 'This blocks the recruiter from accessing the protected DevRank workspace.'} The decision will be recorded in the admin audit log.</p>
+      <div className="admin-confirmation-actions">
+        <button className="secondary-button" type="button" data-dialog-cancel onClick={() => setPendingDecision(null)}>Cancel</button>
+        <button className={pendingDecision?.decision === 'rejected' ? 'reject-button' : 'approve-button'} type="button" disabled={Boolean(activeId)} onClick={() => {
+          if (!pendingDecision) return;
+          const { row, decision } = pendingDecision;
+          setPendingDecision(null);
+          void decide(row, decision);
+        }}>{pendingDecision?.decision === 'approved' ? 'Approve recruiter' : 'Reject recruiter'}</button>
+      </div>
+    </dialog>
   </div>;
 }

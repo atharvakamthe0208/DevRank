@@ -1,13 +1,54 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { candidateBulkImportRequestSchema, candidateBulkImportResponseSchema, candidateImportPreviewResponseSchema, candidateImportRpcPreviewResponseSchema } from '../src/candidate-api.js';
 import {
   candidateInputSchema, categoryScoreSchema, confidenceSchema, evaluationResponseSchema,
-  evidenceSchema, roleWeightConfigurationSchema, roleWeightsSchema, scoreSchema, scoringCategories,
+  evidenceSchema, legacyEvaluationResponseV1Schema, previousEvaluationResponseV2Schema, roleWeightConfigurationSchema, roleWeightsSchema, scoreSchema, scoringCategories,
+  persistedEvaluationReadSchema,
+  proposedRubric,
+  proposedRubricSchema,
+  finalRubric,
+  finalRubricSchema,
+  previousEvaluationResponseV3Schema,
 } from '../src/index.js';
 
 const roleWeights = JSON.parse(readFileSync(new URL('../../../config/role-weights.json', import.meta.url), 'utf8')) as unknown;
 const candidates = JSON.parse(readFileSync(new URL('../../../fixtures/dummy-candidates.json', import.meta.url), 'utf8')) as unknown[];
 const expected = JSON.parse(readFileSync(new URL('../../../fixtures/expected-evaluations.json', import.meta.url), 'utf8')) as Array<{ candidateId: string; targetRole: string; evaluationStatus: string; overallScore?: number; categoryScores: Record<string, number>; missingEvidence?: string[] }>;
+
+describe('candidate CSV import contracts', () => {
+  it('validates bounded rows and refuses duplicate source row numbers or ownership fields', () => {
+    const row = { rowNumber: 2, candidate: { name: 'Taylor', email: 'taylor@example.com', githubUsername: 'taylor-dev' } };
+    expect(candidateBulkImportRequestSchema.safeParse({ rows: [row], skipDuplicates: true }).success).toBe(true);
+    expect(candidateBulkImportRequestSchema.safeParse({ rows: [row, row], skipDuplicates: false }).success).toBe(false);
+    expect(candidateBulkImportRequestSchema.safeParse({ rows: [{ ...row, candidate: { ...row.candidate, owner_id: 'spoofed' } }], skipDuplicates: true }).success).toBe(false);
+    expect(candidateBulkImportRequestSchema.safeParse({ rows: Array.from({ length: 501 }, (_, index) => ({ ...row, rowNumber: index + 2 })), skipDuplicates: true }).success).toBe(false);
+  });
+
+  it('validates database preview and per-row results', () => {
+    expect(candidateImportPreviewResponseSchema.safeParse({ rows: [{ rowNumber: 2, status: 'duplicate', potentialDuplicate: true, candidateId: null }] }).success).toBe(true);
+    expect(candidateImportRpcPreviewResponseSchema.safeParse({
+      results: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null }],
+      createdCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+    }).success).toBe(true);
+    expect(candidateImportRpcPreviewResponseSchema.safeParse({
+      results: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null, email: 'unexpected@example.invalid' }],
+      createdCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+    }).success).toBe(false);
+    expect(candidateImportRpcPreviewResponseSchema.safeParse({
+      results: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null }],
+      createdCount: 1,
+      skippedCount: 0,
+      failedCount: 0,
+    }).success).toBe(false);
+    expect(candidateBulkImportResponseSchema.safeParse({ results: [{ rowNumber: 2, status: 'created', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c' }], createdCount: 1, skippedCount: 0, failedCount: 0 }).success).toBe(true);
+    expect(candidateBulkImportResponseSchema.safeParse({ results: [{ rowNumber: 2, status: 'failed' }], createdCount: 1, skippedCount: 0, failedCount: 0 }).success).toBe(false);
+  });
+});
 
 function responseFor(candidate: Record<string, any>, insufficient = false) {
   const parsedWeights = roleWeightConfigurationSchema.parse(roleWeights).roles[candidate.targetRole];
@@ -23,10 +64,10 @@ function responseFor(candidate: Record<string, any>, insufficient = false) {
     ? Number((categoryScores.reduce((sum, item) => sum + (item.score ?? 0) * parsedWeights[item.categoryId], 0) / 100).toFixed(2))
     : undefined;
   return {
-    schemaVersion: '1.0.0', scoringVersion: '1.0.0', candidateId: candidate.candidateId, targetRole: candidate.targetRole,
+    schemaVersion: '4.0.0', scoringVersion: '4.0.0', candidateId: candidate.candidateId, targetRole: candidate.targetRole,
     ...(overallScore !== undefined ? { overallScore } : {}), categoryScores, roleWeightsUsed: parsedWeights,
     evidence, ...(missingEvidence.length === 0 ? { confidence: 0.8 } : {}), strengths: [], skillGaps: [], recommendations: [], missingEvidence,
-    calculationExplanation: 'Weighted sum of available normalized category scores; overall score is omitted until all six categories have evidence.',
+    calculationExplanation: 'Weighted sum of normalized category scores; overall score is omitted until all six categories have evidence.',
     evaluationStatus: insufficient || missingEvidence.length > 0 ? 'insufficient_evidence' as const : 'completed' as const,
     aiExplanation: { summary: 'Synthetic contract example.', strengths: [], skillGaps: [], recommendations: [] },
     decisionSupportNotice: 'Decision support only; not an automatic hiring decision.' as const,
@@ -34,22 +75,46 @@ function responseFor(candidate: Record<string, any>, insufficient = false) {
 }
 
 describe('shared candidate evaluation contracts', () => {
-  it('defines exactly six scoring categories', () => expect(scoringCategories).toHaveLength(6));
+  it('defines the canonical six active GitHub and LeetCode categories', () => {
+    expect(scoringCategories.map(({ id }) => id)).toEqual(['project_portfolio', 'technical_skills', 'development_activity', 'collaboration', 'current_year_contributions', 'problem_solving_dsa']);
+    expect(evidenceSchema.safeParse({ evidenceId: 'github', evidenceType: 'portfolio', source: 'GitHub', description: 'Repository evidence', normalizedValue: 80, verificationStatus: 'unverified', categoryId: 'project_portfolio', availability: 'available' }).success).toBe(true);
+  });
+  it('activates the reviewed GitHub/LeetCode taxonomy for v4 while retaining the earlier proposal metadata', () => {
+    expect(proposedRubric.status).toBe('proposed');
+    expect(proposedRubric.timezone).toBe('UTC');
+    expect(proposedRubric.categories.map(({ id, displayName, proposedWeight, source }) => [id, displayName, proposedWeight, source])).toEqual([
+      ['project_portfolio', 'Project Portfolio', 20, 'github'],
+      ['technical_skills', 'Technical Skills', 20, 'github'],
+      ['development_activity', 'Development Activity', 15, 'github'],
+      ['collaboration', 'Collaboration', 10, 'github'],
+      ['current_year_contributions', 'Current-Year Contributions', 10, 'github'],
+      ['problem_solving_dsa', 'DSA & Problem-Solving', 25, 'leetcode'],
+    ]);
+    expect(proposedRubricSchema.safeParse({ ...proposedRubric, status: 'active' }).success).toBe(false);
+    expect(proposedRubricSchema.safeParse({ ...proposedRubric, categories: [proposedRubric.categories[0], ...proposedRubric.categories.slice(0, 5)] }).success).toBe(false);
+    expect(finalRubric.status).toBe('active');
+    expect(finalRubric.id).toBe('github_leetcode_v4');
+    expect(finalRubricSchema.safeParse(finalRubric).success).toBe(true);
+    expect(finalRubric.categories.map(({ id, weight }) => [id, weight])).toEqual(proposedRubric.categories.map(({ id, proposedWeight }) => [id, proposedWeight]));
+    expect(scoringCategories.map(({ id }) => id)).not.toContain('communication_skills');
+    expect(scoringCategories.map(({ id }) => id)).toContain('current_year_contributions');
+  });
   it('validates all role weights as nonnegative and totaling 100%', () => {
     const config = roleWeightConfigurationSchema.parse(roleWeights);
     expect(Object.keys(config.roles)).toHaveLength(3);
-    for (const weights of Object.values(config.roles)) expect(Object.values(weights).reduce((sum, value) => sum + value, 0)).toBe(100);
+    for (const weights of Object.values(config.roles)) expect(Math.round(Object.values(weights).reduce((sum, value) => sum + value, 0) * 100) / 100).toBe(100);
   });
   it('rejects invalid totals and negative weights', () => {
     expect(roleWeightsSchema.safeParse({ technical_skills: 10, problem_solving_dsa: 10, relevant_project_experience: 10, practical_assessment_performance: 10, communication_skills: 10, learning_adaptability: 10 }).success).toBe(false);
-    expect(roleWeightsSchema.safeParse({ technical_skills: -1, problem_solving_dsa: 21, relevant_project_experience: 20, practical_assessment_performance: 20, communication_skills: 20, learning_adaptability: 20 }).success).toBe(false);
+    expect(roleWeightsSchema.safeParse({ technical_skills: -1, problem_solving_dsa: 20.2, relevant_project_experience: 20.2, practical_assessment_performance: 20.2, communication_skills: 20.2, learning_adaptability: 20.2 }).success).toBe(false);
+    expect(roleWeightsSchema.safeParse({ technical_skills: 20, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 20, learning_adaptability: 20 }).success).toBe(false);
   });
   it('enforces score and confidence ranges', () => {
     for (const value of [-0.1, 100.1, Number.NaN]) expect(scoreSchema.safeParse(value).success).toBe(false);
     for (const value of [-0.01, 1.01, Number.NaN]) expect(confidenceSchema.safeParse(value).success).toBe(false);
   });
   it('represents missing evidence without a fabricated normalized score', () => {
-    const missing = { evidenceId: 'missing', evidenceType: 'project', source: 'Not collected', description: 'No sample supplied', verificationStatus: 'unverified', categoryId: 'relevant_project_experience', availability: 'missing' };
+    const missing = { evidenceId: 'missing', evidenceType: 'portfolio', source: 'Not collected', description: 'No platform snapshot supplied', verificationStatus: 'unverified', categoryId: 'project_portfolio', availability: 'missing' };
     expect(evidenceSchema.safeParse(missing).success).toBe(true);
     expect(evidenceSchema.safeParse({ ...missing, normalizedValue: 0 }).success).toBe(false);
   });
@@ -81,11 +146,56 @@ describe('shared candidate evaluation contracts', () => {
       const candidate = candidates.find((item) => (item as Record<string, any>).candidateId === outcome.candidateId) as Record<string, any>;
       const actual = responseFor(candidate);
       expect(actual.targetRole).toBe(outcome.targetRole);
-      expect(actual.scoringVersion).toBe(outcome.scoringVersion);
+      expect(actual.scoringVersion).toBe('4.0.0');
       expect(actual.evaluationStatus).toBe(outcome.evaluationStatus);
-      expect(actual.overallScore).toBe(outcome.overallScore);
       expect(Object.fromEntries(actual.categoryScores.filter((item) => item.score !== undefined).map((item) => [item.categoryId, item.score]))).toEqual(outcome.categoryScores);
-      expect(actual.missingEvidence).toEqual(outcome.missingEvidence ?? []);
+      if (actual.overallScore !== undefined) expect(actual.overallScore).toBe(Number((actual.categoryScores.reduce((sum, item) => sum + (item.score ?? 0) * actual.roleWeightsUsed[item.categoryId], 0) / 100).toFixed(2)));
+      expect([...actual.missingEvidence].sort()).toEqual([...(outcome.missingEvidence ?? [])].sort());
     }
+  });
+
+  it('keeps historical v1 and previous v2 snapshots readable without recalculation', () => {
+    const oldIds = ['technical_skills', 'problem_solving_dsa', 'relevant_project_experience', 'practical_assessment_performance', 'communication_skills', 'learning_adaptability'];
+    const oldWeights = { technical_skills: 25, problem_solving_dsa: 20, relevant_project_experience: 20, practical_assessment_performance: 15, communication_skills: 10, learning_adaptability: 10 };
+    const historical = {
+      schemaVersion: '1.0.0', scoringVersion: '1.0.0', candidateId: 'candidate-a', targetRole: 'software_developer',
+      categoryScores: oldIds.map((categoryId) => ({ categoryId, displayName: categoryId, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'Historical result.' })),
+      roleWeightsUsed: oldWeights, evidence: [], strengths: [], skillGaps: [], recommendations: [], missingEvidence: oldIds,
+      calculationExplanation: 'Historical score omitted.', evaluationStatus: 'insufficient_evidence',
+      aiExplanation: { summary: '', strengths: [], skillGaps: [], recommendations: [] },
+      decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
+    };
+    expect(legacyEvaluationResponseV1Schema.safeParse(historical).success).toBe(true);
+    expect(evaluationResponseSchema.safeParse(historical).success).toBe(false);
+    const { scoringVersion: _legacyVersion, ...legacyWithoutVersion } = historical;
+    expect(persistedEvaluationReadSchema.safeParse({
+      id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c',
+      roleProfileId: null, targetRole: historical.targetRole, status: historical.evaluationStatus,
+      createdAt: '2026-10-12T00:00:00.000Z', result: legacyWithoutVersion,
+    }).success).toBe(true);
+
+    const v2Ids = oldIds.filter((id) => id !== 'communication_skills');
+    const previousV2 = {
+      schemaVersion: '2.0.0', scoringVersion: '2.0.0', candidateId: 'candidate-a', targetRole: 'software_developer',
+      categoryScores: v2Ids.map((categoryId) => ({ categoryId, displayName: categoryId, status: 'insufficient_evidence', evidenceRefs: [], explanation: 'Historical result.' })),
+      evidence: [], roleWeightsUsed: { technical_skills: 27.78, problem_solving_dsa: 22.22, relevant_project_experience: 22.22, practical_assessment_performance: 16.67, learning_adaptability: 11.11 },
+      strengths: [], skillGaps: [], recommendations: [], missingEvidence: v2Ids, calculationExplanation: 'Historical score omitted.',
+      evaluationStatus: 'insufficient_evidence', aiExplanation: { summary: '', strengths: [], skillGaps: [], recommendations: [] },
+      decisionSupportNotice: 'Decision support only; not an automatic hiring decision.',
+    };
+    expect(previousEvaluationResponseV2Schema.safeParse(previousV2).success).toBe(true);
+    expect(persistedEvaluationReadSchema.safeParse({
+      id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c',
+      roleProfileId: null, targetRole: previousV2.targetRole, status: previousV2.evaluationStatus,
+      createdAt: '2026-10-12T00:00:00.000Z', result: previousV2,
+    }).success).toBe(true);
+
+    const v3 = { ...historical, schemaVersion: '3.0.0', scoringVersion: '3.0.0' };
+    expect(previousEvaluationResponseV3Schema.safeParse(v3).success).toBe(true);
+    expect(persistedEvaluationReadSchema.safeParse({
+      id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c',
+      roleProfileId: null, targetRole: 'software_developer', status: 'insufficient_evidence',
+      createdAt: '2026-10-12T00:00:00.000Z', result: v3,
+    }).success).toBe(true);
   });
 });

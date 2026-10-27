@@ -3,8 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "description": "AI-powered technical candidate evaluation and ranking system",
-  "engines": { "node": ">=20.0.0 <25" },
-  "workspaces": ["apps/web", "apps/api", "packages/contracts"],
+  "engines": {
+    "node": ">=20.0.0 <25"
+  },
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/contracts"
+  ],
   "scripts": {
     "dev": "npm run build --workspace @devrank/contracts && concurrently -k -n web,api -c cyan,green \"npm run dev --workspace @devrank/web\" \"npm run dev --workspace @devrank/api\"",
     "dev:web": "npm run build --workspace @devrank/contracts && npm run dev --workspace @devrank/web",
@@ -12,9 +18,17 @@
     "build": "npm run build --workspace @devrank/contracts && npm run build --workspace @devrank/api && npm run build --workspace @devrank/web",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run build --workspace @devrank/contracts && npm run typecheck --workspace @devrank/api && npm run typecheck --workspace @devrank/web"
+    "typecheck": "npm run build --workspace @devrank/contracts && npm run typecheck --workspace @devrank/api && npm run typecheck --workspace @devrank/web",
+    "test:recruiter-approval:db": "node scripts/test-recruiter-approval-db.mjs",
+    "test:admin-recruiter-details:db": "node scripts/test-admin-recruiter-details-db.mjs",
+    "test:candidate-import:db": "node scripts/test-candidate-import-db.mjs",
+    "test:candidate-import:local": "node scripts/test-candidate-import-local.mjs",
+    "test:migration:acl": "node scripts/test-evaluation-acl-migration.mjs",
+    "test:migration:integration": "node scripts/test-evaluation-migration.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@electric-sql/pglite": "0.5.9",
+    "concurrently": "^9.1.2",
+    "supabase": "^2.121.0"
   }
 }

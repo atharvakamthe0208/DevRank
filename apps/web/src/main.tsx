@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { createAppRouter } from './app/router';
 import { Providers } from './app/providers';
 import './styles.css';
+import './workspace-refinement.css';
 
 const router = createAppRouter();
 

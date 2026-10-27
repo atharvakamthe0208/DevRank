@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { validateCandidateForm, type CandidateFormValues } from './candidate-form-validation';
 
 const blank: CandidateFormValues = {
-  name: '', email: '', githubUsername: '', leetcodeUsername: '', hackerrankUsername: '',
+  name: '', email: '', githubUsername: '', leetcodeUsername: '',
 };
 
 describe('candidate form validation', () => {
