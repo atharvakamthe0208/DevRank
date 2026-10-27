@@ -12,12 +12,15 @@ import { createUserSessionCache } from './screening-navigation-cache';
 import { isValidScreeningSessionId } from './screening-restore';
 import { SessionDraftNotice } from '../../lib/forms/SessionDraftNotice';
 import { useSessionDraft } from '../../lib/forms/useSessionDraft';
+import { pollScreeningUntilSettled } from './screening-polling';
+import { screeningErrorMessage } from './screening-errors';
 import './resume-screening-page.css';
 
 const MAX_FILES = 20;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx'];
 const SCREENING_POLL_MS = 1000;
+const SCREENING_MAX_POLL_ATTEMPTS = 10;
 const SCREENING_SESSION_STORAGE_KEY = 'devrank.resume-screening.session-id';
 const UNIFIED_ROLE_IDS = ['software_developer', 'ai_ml_engineer', 'data_analyst'] as const;
 
@@ -149,12 +152,17 @@ export function ResumeScreeningPage() {
       if (!isCurrent()) return;
       setDetails(current);
     }
-    while (current.status === 'processing' && waitForCompletion) {
-      await waitForScreeningPoll();
-      if (!isCurrent()) return;
-      current = screeningDetailsResponseSchema.parse(await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}`, {}, accessToken));
-      if (!isCurrent()) return;
-      setDetails(current);
+    if (current.status === 'processing' && waitForCompletion) {
+      const latest = await pollScreeningUntilSettled(current, async () => screeningDetailsResponseSchema.parse(
+        await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}`, {}, accessToken),
+      ), {
+        wait: waitForScreeningPoll,
+        maxAttempts: SCREENING_MAX_POLL_ATTEMPTS,
+        isCurrent,
+        onUpdate: setDetails,
+      });
+      if (!latest || !isCurrent()) return;
+      current = latest;
     }
     if (!isCurrent()) return;
     const rankingResult = await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}/ranking`, {}, accessToken);
@@ -166,7 +174,10 @@ export function ResumeScreeningPage() {
     let active = true;
     if (!session?.access_token || !isValidScreeningSessionId(storedSessionId)) return;
     if (cachedNavigation?.details.sessionId === storedSessionId) {
-      if (cachedNavigation.details.status === 'processing' || !cachedNavigation.rankingData) void loadScreeningResults(storedSessionId, session.access_token, cachedNavigation.details.status === 'processing', () => active, cachedNavigation.details);
+      if (cachedNavigation.details.status === 'processing' || !cachedNavigation.rankingData) {
+        void loadScreeningResults(storedSessionId, session.access_token, cachedNavigation.details.status === 'processing', () => active, cachedNavigation.details)
+          .catch((cause) => { if (active) setError(screeningErrorMessage(cause, 'Could not refresh screening results.')); });
+      }
       return () => { active = false; };
     }
     void (async () => {
@@ -182,7 +193,7 @@ export function ResumeScreeningPage() {
         if (!active) return;
         await loadScreeningResults(initial.sessionId, session.access_token, true, () => active, initial);
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : 'Could not restore screening progress.');
+        if (active) setError(screeningErrorMessage(cause, 'Could not restore screening progress.'));
       }
     })();
     return () => { active = false; };
@@ -263,6 +274,7 @@ export function ResumeScreeningPage() {
     }
 
     setSubmitting(true);
+    let submissionAccepted = false;
     try {
       const body = new FormData();
       body.set('jobTitle', jobTitle.trim());
@@ -283,6 +295,7 @@ export function ResumeScreeningPage() {
       clearDraft(jobDraft);
       try { sessionStorage.setItem(SCREENING_SESSION_STORAGE_KEY, parsed.sessionId); } catch { /* session persistence is optional when storage is unavailable */ }
       setSubmitted(parsed);
+      submissionAccepted = true;
       await loadScreeningResults(parsed.sessionId, session.access_token, true);
       setSelectedIds([]);
       setComparison(null);
@@ -293,13 +306,9 @@ export function ResumeScreeningPage() {
         const details = cause.details && typeof cause.details === 'object' ? cause.details as { candidateIds?: unknown } : {};
         setDuplicateCandidateIds(Array.isArray(details.candidateIds) ? details.candidateIds.filter((id): id is string => typeof id === 'string') : []);
       }
-      if (cause instanceof Error && cause.name === 'ApiNetworkError') {
-        setError(cause.message);
-      } else if (cause instanceof ApiRequestError) {
-        setError(cause.message);
-      } else {
-        setError(cause instanceof Error && cause.message ? cause.message : 'The screening response could not be verified. No results are shown.');
-      }
+      setError(submissionAccepted
+        ? `Screening was accepted, but its results could not be loaded yet. Your session is saved. ${screeningErrorMessage(cause, 'Try loading the results again.')}`
+        : screeningErrorMessage(cause, 'The screening response could not be verified. No results are shown.'));
     } finally {
       setSubmitting(false);
     }
@@ -313,9 +322,9 @@ export function ResumeScreeningPage() {
     setSubmitting(true);
     setError('');
     try {
-      await loadScreeningResults(submitted.sessionId, session.access_token, true);
+      await loadScreeningResults(submitted.sessionId, session.access_token, false);
     } catch (cause) {
-      setError(cause instanceof ApiRequestError || cause instanceof Error ? cause.message : 'Could not load screening results.');
+      setError(screeningErrorMessage(cause, 'Could not load screening results.'));
     } finally {
       setSubmitting(false);
     }
@@ -350,7 +359,7 @@ export function ResumeScreeningPage() {
       }, session.access_token);
       setComparison(screeningComparisonResponseSchema.parse(value));
     } catch (cause) {
-      setReviewError(cause instanceof Error ? cause.message : 'Could not compare the saved screening results.');
+      setReviewError(screeningErrorMessage(cause, 'Could not compare the saved screening results.'));
       setComparison(null);
     } finally { setReviewBusy(false); }
   }
@@ -365,7 +374,7 @@ export function ResumeScreeningPage() {
       }, session.access_token);
       setReport(screeningReportResponseSchema.parse(value));
     } catch (cause) {
-      setReviewError(cause instanceof Error ? cause.message : 'Could not generate a report from saved screening results.');
+      setReviewError(screeningErrorMessage(cause, 'Could not generate a report from saved screening results.'));
       setReport(null);
     } finally { setReviewBusy(false); }
   }
@@ -379,7 +388,7 @@ export function ResumeScreeningPage() {
       screeningRetryResponseSchema.parse(result);
       await loadScreeningResults(submitted.sessionId, session.access_token, true);
     } catch (cause) {
-      setReviewError(cause instanceof Error ? cause.message : 'Could not retry this resume evaluation.');
+      setReviewError(screeningErrorMessage(cause, 'Could not retry this resume evaluation.'));
     } finally { setRetryingResumeId(null); }
   }
 
@@ -494,7 +503,7 @@ export function ResumeScreeningPage() {
           <p className="screening-session-status" role="status">Session {submitted.sessionId} · {details?.status ?? submitted.status}</p>
           {details?.status === 'processing' && <p className="screening-progress" role="status">{screeningProgressLabel(details.resumes)}</p>}
           <ScreeningResultList resumes={details?.resumes ?? submitted.resumes.map((resume) => ({ ...resume, candidate: null, evaluation: null, error: undefined }))} />
-          {!details && <button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Loading results…' : 'Retry loading results'}</button>}
+          {(!details || details.status === 'processing' || !rankingData) && <button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Loading results…' : details?.status === 'processing' ? 'Refresh results' : 'Retry loading results'}</button>}
           {details && details.resumes.every((resume) => resume.status === 'failed') && <p className="screening-empty-results">No resumes produced a usable evaluation. Review each processing error and retry with supported text-based files.</p>}
           {details && <div className="screening-review-tools">
             <h3>Compare candidates and rank saved results</h3>
