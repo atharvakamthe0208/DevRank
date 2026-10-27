@@ -9,11 +9,13 @@ const ids = ['a7e7b1b7-61d9-48b9-bd7d-31b8b52bd83d', 'b8e8c2c8-72ea-49ca-ae8e-42
 const unscoredId = 'd0d0d0d0-0000-4000-8000-000000000000';
 const higherScoreId = 'e1e1e1e1-1111-4111-8111-111111111111';
 const noScoreId = 'f2f2f2f2-2222-4222-8222-222222222222';
+const associatedCandidateId = 'e5a5f5f0-fd65-4c13-9378-5a4377dcd1e2';
 const preliminary = { rubricVersion: 'resume-document-match-1.0.0' as const, score: 62, evidenceCoverage: 40, criteria: [{
   id: 'req-tech', categoryId: 'required_technical_skills' as const, description: 'TypeScript and API design', importance: 'required' as const,
   status: 'supported' as const, matchedTerms: ['typescript'], matchPercentage: 50, evidenceExcerpt: 'Built TypeScript services',
 }] };
 const auth = { userId: ownerId, email: 'recruiter@example.test', emailConfirmed: true, accessToken: 'jwt', profile: { id: ownerId, display_name: 'Recruiter', role: 'recruiter' as const, approval_status: 'approved' as const } };
+const selectedResumeColumns = vi.fn();
 const score = (value: number): ScreeningScore => ({
   rubricVersion: 'resume-job-match-1.0.0', scoreType: 'resume_job_match', status: 'complete', score: value, evidenceCoverage: 100,
   categories: [
@@ -25,7 +27,7 @@ const score = (value: number): ScreeningScore => ({
   ], requirements: [],
 });
 const dbRows = [
-  { id: ids[0], original_filename: 'alpha.pdf', status: 'completed', extracted_data: { candidate: { name: 'Alpha' } }, evaluation: score(80), safe_error_message: null },
+  { id: ids[0], candidate_id: associatedCandidateId, original_filename: 'alpha.pdf', status: 'completed', extracted_data: { candidate: { name: 'Alpha' } }, evaluation: score(80), safe_error_message: null },
   { id: ids[1], original_filename: 'beta.pdf', status: 'completed', extracted_data: { candidate: { name: 'Beta' } }, evaluation: score(80), safe_error_message: null },
   { id: ids[2], original_filename: 'failed.pdf', status: 'failed', extracted_data: null, evaluation: null, safe_error_message: 'Could not extract text.' },
   { id: unscoredId, original_filename: 'partial.pdf', status: 'completed', extracted_data: { candidate: { name: 'Partial' } }, evaluation: null, preliminary_evaluation: preliminary, safe_error_message: null },
@@ -34,9 +36,9 @@ const dbRows = [
 ];
 const clientFactory = vi.fn(() => ({
   from: (table: string) => ({
-    select: () => table === 'screening_sessions'
+    select: (columns: string) => table === 'screening_sessions'
       ? { eq: () => ({ single: async () => ({ data: { id: sessionId, job_title: 'Engineer', status: 'partial' }, error: null }) }) }
-      : { eq: () => ({ order: async () => ({ data: dbRows, error: null }) }) },
+      : (selectedResumeColumns(columns), { eq: () => ({ order: async () => ({ data: dbRows, error: null }) }) }),
   }),
 })) as never;
 
@@ -53,9 +55,12 @@ async function invoke(name: 'get' | 'compare' | 'report' | 'ranking', idsToSelec
 }
 
 describe('screening comparison and report endpoints', () => {
-  it('returns the persisted verified candidate name through screening details', async () => {
-    const result = await invoke('get') as { resumes: Array<{ id: string; candidate: { name: string } | null; preliminaryEvaluation: typeof preliminary | null }> };
+  it('returns the persisted candidate association and verified candidate name through screening details', async () => {
+    selectedResumeColumns.mockClear();
+    const result = await invoke('get') as { resumes: Array<{ id: string; candidateId: string | null; candidate: { name: string } | null; preliminaryEvaluation: typeof preliminary | null }> };
     expect(result.resumes.find((resume) => resume.id === ids[0])?.candidate).toEqual({ name: 'Alpha' });
+    expect(result.resumes.find((resume) => resume.id === ids[0])?.candidateId).toBe(associatedCandidateId);
+    expect(selectedResumeColumns).toHaveBeenCalledWith(expect.stringContaining('candidate_id'));
     expect(result.resumes.find((resume) => resume.id === ids[2])?.candidate).toBeNull();
     expect(result.resumes.find((resume) => resume.id === unscoredId)?.preliminaryEvaluation).toEqual(preliminary);
   });
