@@ -67,7 +67,7 @@
 .candidate-api-detail .candidate-profile-actions :is(a, button) { min-height: 40px; font-size: var(--type-control); }
 
 .older-evaluations { margin-top: 11px; border-top: 1px solid #f0f0ed; padding-top: 11px; }
-.older-evaluations > summary { width: fit-content; color: #477457; font-size: 10px; font-weight: 600; cursor: pointer; }
+.older-evaluations > summary { width: fit-content; color: #000000; font-size: 10px; font-weight: 600; cursor: pointer; }
 .older-evaluations .evaluation-history-list { margin-top: 8px; }
 .latest-evaluation-list { border-bottom: 1px solid #f0f0ed; }
 
@@ -95,7 +95,7 @@
 .candidate-import-resume-notice { display: grid; gap: 6px; margin-top: 14px; border: 1px solid #e7d8b5; border-radius: 6px; padding: 12px 14px; color: #66532f; background: #fffaf0; font-size: 11px; line-height: 1.55; }
 .candidate-import-resume-notice p { margin: 0; }
 .candidate-import-resume-notice > button { justify-self: start; min-height: 34px; padding: 0 12px; font-size: 10px; }
-.candidate-import-resume-notice a { color: #315f4c; font-weight: 700; text-decoration: underline; }
+.candidate-import-resume-notice a { color: #000000; font-weight: 700; text-decoration: underline; }
 .candidate-import-resume-state { min-width: 210px; color: #806321; line-height: 1.5; }
 .candidate-import-file { display: grid; gap: 7px; }
 .candidate-import-file-label,.candidate-import-mapping label { color: #55574f; font-size: 11px; font-weight: 600; }
@@ -116,7 +116,7 @@
 .candidate-import-table-wrap td { min-width: 125px; padding: 7px 8px; border-top: 1px solid #f0f0ed; vertical-align: top; }
 .candidate-import-table-wrap td:first-child { min-width: 60px; white-space: nowrap; }
 .candidate-import-table-wrap input { width: 100%; min-width: 110px; height: 32px; padding: 0 7px; border: 1px solid #e8e9e4; border-radius: 4px; color: #34362f; font-size: 10px; }
-.candidate-import-table-wrap details summary { color: #477457; cursor: pointer; white-space: nowrap; }
+.candidate-import-table-wrap details summary { color: #000000; cursor: pointer; white-space: nowrap; }
 .candidate-import-table-wrap details dl { position: relative; z-index: 2; width: 250px; max-height: 200px; overflow: auto; margin: 6px 0; padding: 8px; border: 1px solid #ededeb; border-radius: 5px; background: #fff; white-space: normal; }
 .candidate-import-table-wrap details dl div { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; border-bottom: 1px solid #f0f0ed; padding: 4px 0; }
 .candidate-import-table-wrap details dt { color: #73766d; }
@@ -145,8 +145,8 @@
 .candidate-import-results { border: 1px solid #e4e8df; border-radius: 6px; padding: 14px; background: #f7faf7; }
 .candidate-import-results p { margin: 5px 0; }
 .candidate-import-results ul { display: grid; gap: 7px; max-height: 260px; overflow: auto; padding-left: 18px; color: #55574f; font-size: 10px; }
-.candidate-import-results li a { display: block; margin-top: 3px; color: #477457; }
-.candidate-import-retry-resume { margin-left: 8px; border: 0; padding: 0; color: #315f4c; background: transparent; font-size: 10px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.candidate-import-results li a { display: block; margin-top: 3px; color: #000000; }
+.candidate-import-retry-resume { margin-left: 8px; border: 0; padding: 0; color: #000000; background: transparent; font-size: 10px; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .candidate-import-sync-actions { display: grid; gap: 10px; margin-top: 14px; border-top: 1px solid #e4e8df; padding-top: 12px; }
 .candidate-import-sync-actions > p,.candidate-import-sync-platform > p { margin: 0; }
 .candidate-import-sync-platform { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: 7px 12px; border: 1px solid #e4e8df; border-radius: 6px; padding: 10px; background: #fff; }
