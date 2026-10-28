@@ -7,12 +7,14 @@ export const dashboardEvaluationStatusSchema = z.enum([
 
 export const dashboardResponseSchema = z.object({
   candidateCount: z.number().int().nonnegative(),
+  evaluatedCandidateIds: z.array(z.string().uuid()),
   evaluationCount: z.number().int().nonnegative(),
   statusCounts: z.record(dashboardEvaluationStatusSchema, z.number().int().nonnegative()),
   recentEvaluations: z.array(z.object({
     id: z.string().uuid(),
     candidateId: z.string().uuid(),
     candidateName: z.string().min(1),
+    targetRole: z.string().nullable().optional(),
     status: dashboardEvaluationStatusSchema,
     createdAt: z.string().datetime({ offset: true }),
     score: z.number().finite().min(0).max(100).optional(),

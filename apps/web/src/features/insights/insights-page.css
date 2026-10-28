@@ -52,6 +52,16 @@
 .insights-draft-disclosure > summary small { color: #85877f; font-size: 10px; line-height: 1.5; }
 .insights-draft-content { padding: 0 14px 14px; }
 .insights-draft-content > * { margin-top: 0; }
+.insights-draft-toolbar { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.insights-draft-search { display: flex; flex: 1 1 360px; align-items: center; gap: 9px; min-width: 0; min-height: 40px; padding: 0 12px; border: 1px solid #dce4f1; border-radius: 8px; background: #fff; color: #74839a; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.insights-draft-search:focus-within { border-color: #8098ea; box-shadow: 0 0 0 3px #4269e21c; }
+.insights-draft-search svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.insights-draft-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #26354f; font: 500 var(--type-control) var(--font-family-base); }
+.insights-draft-search input::placeholder { color: #8491a5; opacity: 1; }
+.insights-draft-status select { min-height: 40px; max-width: 210px; padding: 0 30px 0 11px; border: 1px solid #dce4f1; border-radius: 8px; background: #fff; color: #35435b; font: 500 var(--type-control) var(--font-family-base); }
+.insights-draft-toolbar :is(input, select):focus-visible { outline: 2px solid #2864f0; outline-offset: 2px; }
+.insights-draft-count { flex: 0 0 auto; color: #71809a; font-size: var(--type-metadata); white-space: nowrap; }
+.insights-draft-empty { margin: 0; padding: 14px 2px; color: #71809a; font-size: var(--type-supporting); }
 .insights-page :is(a, button, select, input):focus-visible { outline: 3px solid #8db69a; outline-offset: 2px; }
 .insights-heading h1 { font: 700 var(--type-page-heading)/1.15 var(--font-family-base); }
 .insights-panel-heading h2 { font: 700 var(--type-section-heading)/1.25 var(--font-family-base); }
@@ -90,4 +100,9 @@
   .insights-draft-disclosure { padding: 0; }
   .insights-draft-disclosure > summary { padding: 13px 12px; align-items: flex-start; }
   .insights-draft-content { padding: 0 8px 8px; }
+  .insights-draft-toolbar { flex-wrap: wrap; gap: 8px; }
+  .insights-draft-search { flex-basis: 100%; }
+  .insights-draft-status { flex: 1 1 150px; }
+  .insights-draft-status select { width: 100%; max-width: none; }
+  .insights-draft-count { margin-left: auto; }
 }
