@@ -213,17 +213,68 @@ describe('evaluation run result', () => {
     expect(html).toContain('Not scored');
   });
 
-  it('shows a concise cited summary with a route to the detailed report', () => {
+  it('shows the concise insights summary without rendering supporting references', () => {
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisSummary, { response: completedAnalysis() })));
     expect(html).toContain('Executive Summary');
+    expect(html).toContain('The saved evidence shows experience across the listed source categories.');
     expect(html).toContain('Key Strengths');
     expect(html).toContain('Areas to Improve');
     expect(html).toContain('Recommended Next Steps');
     expect(html).toContain('Strength 3 grounded in saved evidence.');
-    expect(html).not.toContain('Strength 4 grounded in saved evidence.');
-    expect(html).toContain('Supporting references (1)');
-    expect(html).not.toContain('Improvement area 3 grounded in saved evidence.');
-    expect(html).not.toContain('Recommendation 4 grounded in saved evidence.');
+    expect(html).toContain('Strength 4 grounded in saved evidence.');
+    expect(html).toContain('Overall Score');
+    expect(html).toContain('>78</strong>');
+    expect(html).toContain('4</span>');
+    expect(html).not.toContain('Supporting references');
+    expect(html).not.toContain('evidence-project_portfolio');
+    expect(html).not.toContain('Saved source evidence for Project Portfolio.');
+    expect(html).toContain('Improvement area 3 grounded in saved evidence.');
+    expect(html).toContain('Recommendation 4 grounded in saved evidence.');
+  });
+
+  it('uses the persisted overall score and handles a missing score without fabricating one', () => {
+    const response = completedAnalysis();
+    const { overallScore: _savedScore, ...scorelessResult } = response.evaluation.result;
+    const scorelessResponse = aiAnalysisResponseSchema.parse({
+      ...response,
+      evaluation: { ...response.evaluation, result: scorelessResult },
+    });
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisSummary, { response: scorelessResponse })));
+    expect(html).toContain('Overall score unavailable');
+    expect(html).toContain('Not available');
+    expect(html).not.toContain('>78</strong>');
+  });
+
+  it('keeps the insights actions and generating state visible with completed analysis data', () => {
+    const analysis = completedAnalysis();
+    const base = runResult();
+    const result = evaluationRunResponseSchema.parse({
+      ...base,
+      status: 'completed',
+      evaluation: analysis.evaluation.result,
+    });
+    const html = renderEvaluationRunResult({
+      result, analysis, analysisLoading: false, analysisError: '',
+      onAnalyze: () => undefined,
+    });
+    expect(html).toContain('AI Candidate Insights');
+    expect(html).toContain('Evidence-based');
+    expect(html).toContain('Strengths and improvement opportunities from the available evaluation evidence.');
+    expect(html).toContain('Regenerate Analysis');
+    expect(html).toContain('View full analysis');
+    const loadingHtml = renderEvaluationRunResult({
+      result, analysis, analysisLoading: true, analysisError: '', onAnalyze: () => undefined,
+    });
+    expect(loadingHtml).toContain('role="status"');
+    expect(loadingHtml).toContain('Analyzing');
+    const errorHtml = renderEvaluationRunResult({
+      result, analysis: null, analysisLoading: false, analysisError: 'AI analysis is temporarily unavailable.',
+      onAnalyze: () => undefined,
+    });
+    expect(errorHtml).toContain('role="alert"');
+    expect(errorHtml).toContain('AI analysis is temporarily unavailable.');
+    expect(errorHtml).toContain('Try again');
+    expect(errorHtml).toContain('View full analysis');
   });
 
   it('shows a neutral insufficient-evidence summary and keeps the full report link', () => {

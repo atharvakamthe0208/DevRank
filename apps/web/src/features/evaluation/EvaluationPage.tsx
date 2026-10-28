@@ -18,7 +18,7 @@ import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { useUnsavedChangesBlocker } from '../../app/useUnsavedChangesBlocker';
-import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
+import { aiAnalysisErrorMessage, analysisEmptyMessage } from './ai-analysis-presentation';
 import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 import { acquireEvaluationRun, ALL_CANDIDATES_ID, bulkEvaluationStatusLabel, bulkEvaluationSummary, candidateOptions, runBulkEvaluations, type BulkEvaluationItem, type BulkEvaluationSnapshot } from './bulk-evaluation';
 import { SessionDraftNotice } from '../../lib/forms/SessionDraftNotice';
@@ -684,10 +684,19 @@ export function EvaluationRunResult({
 
       <section className="ai-analysis" aria-labelledby="ai-analysis-title">
         <div className="ai-analysis-heading">
+          <div className="ai-analysis-heading-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m12 3 1.35 5.65L19 10l-5.65 1.35L12 17l-1.35-5.65L5 10l5.65-1.35L12 3Z" />
+              <path d="m19 16 .65 2.35L22 19l-2.35.65L19 22l-.65-2.35L16 19l2.35-.65L19 16Z" />
+            </svg>
+          </div>
           <div>
-            <span className="eyebrow"><span className="eyebrow-line" /> EVIDENCE-GROUNDED EXPLANATION</span>
-            <h3 id="ai-analysis-title">AI Candidate Insights</h3>
-            <p>Key strengths and recommended next steps.</p>
+            <div className="ai-analysis-title-row">
+              <h3 id="ai-analysis-title">AI Candidate Insights</h3>
+              <span className="ai-analysis-evidence-badge">Evidence-based</span>
+            </div>
+            <p>Strengths and improvement opportunities from the available evaluation evidence.</p>
+            <p className="ai-analysis-authority-note">AI explanations are separate from the saved deterministic scores.</p>
           </div>
           <div className="ai-analysis-actions">
             <AiAnalysisRetryButton
@@ -839,34 +848,59 @@ export function AiAnalysisSummary({ response }: { response: AiAnalysisResponse }
     );
   }
   const { analysis } = response;
+  const overallScore = response.evaluation.result.overallScore;
   return (
     <div className="ai-analysis-content">
       <article className="ai-analysis-summary">
-        <h4>Executive Summary</h4>
-        <p>{analysis.summary}</p>
-        <AnalysisReferences evaluation={response.evaluation} references={analysis.summaryEvidenceReferences} />
+        <div className="ai-analysis-summary-copy">
+          <div className="ai-analysis-card-heading">
+            <span className="ai-analysis-card-icon" aria-hidden="true"><InsightGlyph kind="summary" /></span>
+            <div>
+              <h4>Executive Summary</h4>
+              <p className="ai-analysis-card-subtitle">A concise view of the available evidence</p>
+            </div>
+          </div>
+          <p className="ai-analysis-summary-text">{analysis.summary}</p>
+        </div>
+        <div className="ai-analysis-score-card" aria-label={overallScore === undefined ? 'Overall score unavailable' : `Overall score ${overallScore} out of 100`}>
+          <span>Overall Score</span>
+          <strong>{overallScore === undefined ? '—' : overallScore}</strong>
+          <small>{overallScore === undefined ? 'Not available' : 'out of 100'}</small>
+        </div>
       </article>
       <div className="ai-analysis-preview-grid">
         <article className="ai-insight-strengths">
-          <h4>Key Strengths</h4>
+          <div className="ai-analysis-card-heading">
+            <span className="ai-analysis-card-icon" aria-hidden="true"><InsightGlyph kind="strength" /></span>
+            <div><h4>Key Strengths</h4><p className="ai-analysis-card-subtitle">Evidence-backed strengths</p></div>
+            <span className="ai-analysis-count">{analysis.strengths.length}</span>
+          </div>
           {analysis.strengths.length ? (
-            <ul>{analysis.strengths.slice(0, 3).map((item, index) => <li key={index}>{item.text}</li>)}</ul>
+            <ul className="ai-analysis-items">{analysis.strengths.map((item, index) => <li key={index}><span className="ai-analysis-item-marker" aria-hidden="true"><InsightGlyph kind="strength" /></span><span>{item.text}</span></li>)}</ul>
           ) : (
             <p className="ai-analysis-empty">No strengths were returned from the supplied evidence.</p>
           )}
         </article>
         <article className="ai-insight-improvements">
-          <h4>Areas to Improve</h4>
+          <div className="ai-analysis-card-heading">
+            <span className="ai-analysis-card-icon" aria-hidden="true"><InsightGlyph kind="improvement" /></span>
+            <div><h4>Areas to Improve</h4><p className="ai-analysis-card-subtitle">Constructive development opportunities</p></div>
+            <span className="ai-analysis-count">{analysis.weaknesses.length}</span>
+          </div>
           {analysis.weaknesses.length ? (
-            <ul>{analysis.weaknesses.slice(0, 2).map((item, index) => <li key={index}>{item.text}</li>)}</ul>
+            <ul className="ai-analysis-items">{analysis.weaknesses.map((item, index) => <li key={index}><span className="ai-analysis-item-number" aria-hidden="true">{index + 1}</span><span>{item.text}</span></li>)}</ul>
           ) : (
             <p className="ai-analysis-empty">No improvement areas were identified from the available evidence.</p>
           )}
         </article>
         <article className="ai-insight-next-steps">
-          <h4>Recommended Next Steps</h4>
+          <div className="ai-analysis-card-heading">
+            <span className="ai-analysis-card-icon" aria-hidden="true"><InsightGlyph kind="next-step" /></span>
+            <div><h4>Recommended Next Steps</h4><p className="ai-analysis-card-subtitle">Actionable steps grounded in current evidence</p></div>
+            <span className="ai-analysis-count">{analysis.recommendations.length}</span>
+          </div>
           {analysis.recommendations.length ? (
-            <ul>{analysis.recommendations.slice(0, 3).map((item, index) => <li key={index}>{item.text}</li>)}</ul>
+            <ul className="ai-analysis-items">{analysis.recommendations.map((item, index) => <li key={index}><span className="ai-analysis-item-number" aria-hidden="true">{index + 1}</span><span>{item.text}</span></li>)}</ul>
           ) : (
             <p className="ai-analysis-empty">No recommendations were returned.</p>
           )}

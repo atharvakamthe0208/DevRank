@@ -102,4 +102,23 @@ describe('candidate removal UI', () => {
     expect(html).toContain('candidate-add-action');
     expect(html).toContain('href="/candidates/new"');
   });
+
+  it('offers page selection and requires a clear confirmation before bulk deletion', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('aria-label="Select all candidates on this page"');
+    expect(html).toContain('aria-label="Select Taylor Example"');
+    expect(html).toContain('This permanently removes the selected candidate profiles');
+    expect(html).toContain('saved GitHub and LeetCode evidence, evaluation history');
+    expect(html).toContain('>Cancel</button>');
+    expect(html).toContain('Delete permanently');
+  });
+
+  it('renders loaded candidate rows with initialized selection state', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('aria-label="Select Taylor Example"');
+    expect(html).not.toContain('candidate-row-selected');
+    expect(html).toContain('class="candidate-management-table"');
+  });
 });

@@ -86,9 +86,14 @@ describe('candidate API authorization and CRUD', () => {
   let server: Server;
   let origin: string;
   let repository: CandidateRepository;
+  let verifyPlatform: ReturnType<typeof vi.fn>;
 
   beforeAll(async () => {
     repository = createTestRepository();
+    verifyPlatform = vi.fn(async (platform: 'github' | 'leetcode', username: string) => {
+      if (username === 'missing') throw new HttpError(404, platform === 'github' ? 'GITHUB_USER_NOT_FOUND' : 'LEETCODE_USER_NOT_FOUND', `${platform} user was not found`);
+      if (username === 'temporary') throw new HttpError(platform === 'github' ? 429 : 503, platform === 'github' ? 'GITHUB_RATE_LIMITED' : 'LEETCODE_PROVIDER_UNAVAILABLE', 'Provider is temporarily unavailable');
+    });
     const application = express();
     application.use(express.json());
     const auth = createAuthenticate(async (token) => {
@@ -104,7 +109,7 @@ describe('candidate API authorization and CRUD', () => {
       if (token === 'auth-provider-failure') throw new Error('sensitive provider response');
       return null;
     });
-    application.use('/api/candidates', createCandidatesRouter(createCandidateController(repository), auth));
+    application.use('/api/candidates', createCandidatesRouter(createCandidateController(repository, verifyPlatform), auth));
     application.use(errorHandler);
     ({ server, origin } = await startServer(application));
   });
@@ -171,6 +176,93 @@ describe('candidate API authorization and CRUD', () => {
       expect.objectContaining({ userId: ownerId, accessToken: 'valid-owner-token' }),
       { name: 'Taylor Example', email: 'taylor@example.com', githubUsername: 'taylor-dev' },
     );
+    expect(verifyPlatform).toHaveBeenCalledWith('github', 'taylor-dev');
+  });
+
+  it('verifies a normalized platform username through the authenticated API', async () => {
+    const response = await fetch(`${origin}/api/candidates/verify-platform`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: 'github', username: ' @taylor-dev ' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ platform: 'github', username: 'taylor-dev', verified: true });
+    expect(verifyPlatform).toHaveBeenCalledWith('github', 'taylor-dev');
+
+    const leetcode = await fetch(`${origin}/api/candidates/verify-platform`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: 'leetcode', username: ' @example ' }),
+    });
+    expect(leetcode.status).toBe(200);
+    expect(await leetcode.json()).toEqual({ platform: 'leetcode', username: 'example', verified: true });
+
+    const pending = await fetch(`${origin}/api/candidates/verify-platform`, {
+      method: 'POST', headers: { Authorization: 'Bearer pending-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: 'leetcode', username: 'example' }),
+    });
+    expect(pending.status).toBe(403);
+
+    const unauthenticated = await fetch(`${origin}/api/candidates/verify-platform`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: 'github', username: 'octocat' }),
+    });
+    expect(unauthenticated.status).toBe(401);
+  });
+
+  it.each([
+    ['github', { name: 'Candidate', githubUsername: 'missing' }, 'GITHUB_USER_NOT_FOUND'],
+    ['leetcode', { name: 'Candidate', leetcodeUsername: 'missing' }, 'LEETCODE_USER_NOT_FOUND'],
+  ] as const)('does not persist a candidate when the %s profile is not found', async (_platform, body, code) => {
+    const before = vi.mocked(repository.create).mock.calls.length;
+    const response = await fetch(`${origin}/api/candidates`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code } });
+    expect(repository.create).toHaveBeenCalledTimes(before);
+  });
+
+  it('requires both supplied profiles to verify and treats provider failures as retryable', async () => {
+    const before = vi.mocked(repository.create).mock.calls.length;
+    const both = await fetch(`${origin}/api/candidates`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Candidate', githubUsername: 'taylor-dev', leetcodeUsername: 'missing' }),
+    });
+    expect(both.status).toBe(404);
+    expect(verifyPlatform).toHaveBeenCalledWith('github', 'taylor-dev');
+    expect(verifyPlatform).toHaveBeenCalledWith('leetcode', 'missing');
+    expect(repository.create).toHaveBeenCalledTimes(before);
+
+    const temporary = await fetch(`${origin}/api/candidates`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Candidate', githubUsername: 'temporary' }),
+    });
+    expect(temporary.status).toBe(429);
+    expect(await temporary.json()).toMatchObject({ error: { code: 'GITHUB_RATE_LIMITED' } });
+    expect(repository.create).toHaveBeenCalledTimes(before);
+  });
+
+  it('preserves creation when optional platform usernames are empty', async () => {
+    const before = verifyPlatform.mock.calls.length;
+    const response = await fetch(`${origin}/api/candidates`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Candidate' }),
+    });
+    expect(response.status).toBe(201);
+    expect(verifyPlatform).toHaveBeenCalledTimes(before);
+  });
+
+  it('creates only after all supplied platform usernames pass and stores normalized usernames', async () => {
+    const response = await fetch(`${origin}/api/candidates`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid-owner-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Candidate', githubUsername: ' @taylor-dev ', leetcodeUsername: ' @example ' }),
+    });
+    expect(response.status).toBe(201);
+    expect(verifyPlatform).toHaveBeenCalledWith('github', 'taylor-dev');
+    expect(verifyPlatform).toHaveBeenCalledWith('leetcode', 'example');
+    expect(repository.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userId: ownerId }),
+      { name: 'Candidate', githubUsername: 'taylor-dev', leetcodeUsername: 'example' },
+    );
   });
 
   it('returns a safe database failure when candidate creation cannot be persisted', async () => {
@@ -186,6 +278,7 @@ describe('candidate API authorization and CRUD', () => {
   it.each([
     { name: 'Candidate', email: 'not-an-email' },
     { name: 'Candidate', githubUsername: 'https://github.com/name' },
+    { name: 'Candidate', githubUsername: 'taylor-dev', verified: true },
     { name: 'Candidate', owner_id: otherUserId },
     { name: '   ' },
   ])('rejects unsupported or invalid create fields: %j', async (body) => {

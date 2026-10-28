@@ -9,7 +9,7 @@ vi.mock('../auth/AuthProvider', () => ({
 }));
 
 import { AppShell } from '../../components/layout/AppShell';
-import { ExistingCandidateResumeLinks, refreshLinkedCandidateAssessments, ResumeScreeningPage } from './ResumeScreeningPage';
+import { ExistingCandidateResumeLinks, refreshLinkedCandidateAssessments, ResumeScreeningPage, ScreeningProgressSummary, ScreeningRankingGuidance } from './ResumeScreeningPage';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
 import { screeningProgress, screeningProgressLabel } from './screening-progress';
 
@@ -83,6 +83,28 @@ describe('screening progress label', () => {
       { status: 'completed' }, { status: 'failed' }, { status: 'queued' }, { status: 'processing' }, { status: 'uploaded' },
     ])).toEqual({ total: 5, resolved: 2, percent: 40 });
     expect(screeningProgress([])).toEqual({ total: 0, resolved: 0, percent: 0 });
+  });
+});
+
+describe('screening presentation', () => {
+  it('keeps ranking explanation available in a collapsed disclosure instead of inline copy', () => {
+    const html = renderToStaticMarkup(createElement(ScreeningRankingGuidance));
+    expect(html).toContain('<details class="screening-ranking-help">');
+    expect(html).toContain('About candidate ranking');
+    expect(html).toContain('Preliminary resume matches reflect text overlap');
+  });
+
+  it('shows progress without exposing the session id/status line', () => {
+    const html = renderToStaticMarkup(createElement(ScreeningProgressSummary, {
+      status: 'processing',
+      resumes: [
+        { id: 'one', status: 'completed', candidateId: null, filename: 'one.pdf', candidate: null, evaluation: null },
+        { id: 'two', status: 'processing', candidateId: null, filename: 'two.pdf', candidate: null, evaluation: null },
+      ],
+    }));
+    expect(html).toContain('Evaluated 1 of 2 candidates');
+    expect(html).not.toContain('Session');
+    expect(renderToStaticMarkup(createElement(ScreeningProgressSummary, { status: 'completed', resumes: [] }))).toBe('');
   });
 });
 
