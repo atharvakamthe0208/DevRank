@@ -10,6 +10,7 @@ import {
   candidateUpdateSchema,
   githubSyncRequestSchema,
   leetCodeSyncRequestSchema,
+  unifiedCandidateReportQuerySchema,
 } from '@devrank/contracts';
 import { createCandidateController } from '../controllers/candidate-controller.js';
 import { authenticate, requireApprovedRecruiter } from '../middleware/authenticate.js';
@@ -48,7 +49,7 @@ export function createCandidatesRouter(
     platformController.submit,
   );
   router.get('/:id/platform-data', validateParams(candidateIdParamsSchema), platformController.getLatest);
-  router.get('/:id/unified-report', validateParams(candidateIdParamsSchema), unifiedReportController.get);
+  router.get('/:id/unified-report', validateParams(candidateIdParamsSchema), validateQuery(unifiedCandidateReportQuerySchema), unifiedReportController.get);
   router.post('/:id/unified-report/resume', validateParams(candidateIdParamsSchema), unifiedReportController.linkResume);
   router.post(
     '/:id/platform-data/github-sync',

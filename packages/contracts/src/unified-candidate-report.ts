@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { candidateSchema } from './candidate.js';
 import { finalReportCategorySchema } from './proposed-report.js';
+import { roleIdSchema } from './scoring.js';
 
 export const unifiedReportSourceSchema = z.object({
   status: z.enum(['available', 'partial', 'unavailable', 'not_evaluated']),
@@ -40,5 +41,6 @@ export const unifiedCandidateReportSchema = z.object({
 }).strict();
 
 export const unifiedReportResumeLinkRequestSchema = z.object({ resumeId: z.string().uuid() }).strict();
+export const unifiedCandidateReportQuerySchema = z.object({ roleId: roleIdSchema.optional() }).strict();
 
 export type UnifiedCandidateReport = z.infer<typeof unifiedCandidateReportSchema>;

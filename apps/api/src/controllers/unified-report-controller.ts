@@ -2,6 +2,7 @@ import {
   candidateEvaluationsResponseSchema,
   candidatePlatformDataResponseSchema,
   candidateIdParamsSchema,
+  unifiedCandidateReportQuerySchema,
   unifiedReportResumeLinkRequestSchema,
   evaluationResponseSchema,
   unifiedCandidateReportSchema,
@@ -28,13 +29,14 @@ export function createUnifiedReportController(
   const get = asyncHandler(async (request, response) => {
     const auth = authContext(request);
     const { id: candidateId } = candidateIdParamsSchema.parse(request.params);
+    const { roleId } = unifiedCandidateReportQuerySchema.parse(request.query);
     const candidate = await candidates.get(auth, candidateId);
     const [evaluationResponse, platformResponse] = await Promise.all([
       evaluations.listForCandidate(auth, candidateId),
       platforms.getLatest(auth, candidateId),
     ]);
     const savedEvaluations = candidateEvaluationsResponseSchema.parse(evaluationResponse).items;
-    const latest = savedEvaluations[0];
+    const latest = roleId ? savedEvaluations.find((item) => item.targetRole === roleId) : savedEvaluations[0];
     const current = latest ? evaluationResponseSchema.safeParse(latest.result) : undefined;
     const sourceSnapshots = current?.success ? current.data.platformEvidence ?? [] : [];
     const savedPlatforms = candidatePlatformDataResponseSchema.parse(platformResponse).items;
@@ -137,13 +139,20 @@ export function createUnifiedReportController(
         const preliminary = linkedResume.preliminary_evaluation && typeof linkedResume.preliminary_evaluation === 'object' ? linkedResume.preliminary_evaluation as Record<string, unknown> : {};
         const extraction = linkedResume.extracted_data && typeof linkedResume.extracted_data === 'object' ? linkedResume.extracted_data as Record<string, unknown> : {};
         const requirements = Array.isArray(evaluation.requirements) ? evaluation.requirements as Array<Record<string, unknown>> : [];
+        const evaluationScore = typeof evaluation.score === 'number' && Number.isFinite(evaluation.score) && evaluation.score >= 0 && evaluation.score <= 100
+          ? evaluation.score : null;
+        const validatedScore = linkedResume.status === 'completed' && evaluation.status === 'complete' ? evaluationScore : null;
+        const preliminaryScore = linkedResume.status === 'completed' && evaluation.status === 'provisional'
+          ? evaluationScore
+          : typeof preliminary.score === 'number' && Number.isFinite(preliminary.score) && preliminary.score >= 0 && preliminary.score <= 100
+            ? preliminary.score : null;
         return {
           status: 'available', message: `${String(linkedResume.original_filename)} · ${String(extraction.candidate && typeof extraction.candidate === 'object' ? (extraction.candidate as Record<string, unknown>).name ?? 'Name not identified' : 'Name not identified')}`,
           jobTitle: session?.job_title ?? null,
           jobDescription: session?.job_description ?? null,
           evaluatedAt: typeof linkedResume.processed_at === 'string' ? linkedResume.processed_at : null,
-          validatedScore: typeof evaluation.score === 'number' ? evaluation.score : null,
-          preliminaryScore: typeof preliminary.score === 'number' ? preliminary.score : null,
+          validatedScore,
+          preliminaryScore,
           statusLabel: typeof evaluation.status === 'string' ? evaluation.status : typeof linkedResume.status === 'string' ? linkedResume.status : null,
           evidence: requirements.flatMap((item) => Array.isArray(item.evidence) ? item.evidence.flatMap((piece) => piece && typeof piece === 'object' && typeof (piece as Record<string, unknown>).excerpt === 'string' ? [(piece as Record<string, unknown>).excerpt as string] : []) : []),
           limitations: ['Resume job-match score uses a different rubric from the GitHub and LeetCode v4 evidence index.', 'Preliminary matches are not validated evaluation scores.', ...(typeof linkedResume.safe_error_message === 'string' ? [linkedResume.safe_error_message] : [])],

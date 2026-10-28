@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createUserSessionCache } from './screening-navigation-cache';
+import { clearSessionScopedState } from '../../lib/session-scoped-state';
 
 describe('screening navigation cache', () => {
   it('preserves in-memory view state for the owning account and session only', () => {
@@ -14,6 +15,13 @@ describe('screening navigation cache', () => {
     const cache = createUserSessionCache<string>();
     cache.set('recruiter-a', 'screening-1', 'view');
     cache.delete('recruiter-a', 'screening-1');
+    expect(cache.get('recruiter-a', 'screening-1')).toBeUndefined();
+  });
+
+  it('clears cached resume details when the recruiter session ends', () => {
+    const cache = createUserSessionCache<{ resumeText: string }>();
+    cache.set('recruiter-a', 'screening-1', { resumeText: 'private resume content' });
+    clearSessionScopedState();
     expect(cache.get('recruiter-a', 'screening-1')).toBeUndefined();
   });
 });

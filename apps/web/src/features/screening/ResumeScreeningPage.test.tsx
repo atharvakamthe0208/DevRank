@@ -9,9 +9,10 @@ vi.mock('../auth/AuthProvider', () => ({
 }));
 
 import { AppShell } from '../../components/layout/AppShell';
-import { ExistingCandidateResumeLinks, refreshLinkedCandidateAssessments, ResumeScreeningPage, ScreeningProgressSummary, ScreeningRankingGuidance } from './ResumeScreeningPage';
+import { canClearVisibleScreeningResults, clearPendingResumes, ExistingCandidateResumeLinks, refreshLinkedCandidateAssessments, removePendingResume, ResumeScreeningPage, ScreeningProgressSummary, ScreeningRankingGuidance } from './ResumeScreeningPage';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
 import { screeningProgress, screeningProgressLabel } from './screening-progress';
+import { buildScreeningRequest } from './screening-request';
 
 describe('Resume Screening route content', () => {
   it('shows the sidebar link and screening form inside the existing application shell', () => {
@@ -32,10 +33,82 @@ describe('Resume Screening route content', () => {
     expect(html).not.toContain('Specific criteria help');
     expect(html).not.toContain('For best results');
     expect(html).toContain('No screening results yet');
+    expect(html).toContain('Remove All');
+    expect(html).toContain('Remove All from view');
+    expect(html).toMatch(/class="screening-remove-all-button" type="button" disabled="" aria-label="Remove all selected resumes"/);
+    expect(html).toMatch(/aria-label="Remove all screening results from this view"[^>]*disabled=""|disabled=""[^>]*aria-label="Remove all screening results from this view"/);
+    expect(html).toContain('Saved screening records, evaluations, candidates, and files are retained.');
+    expect(html.indexOf('Remove All from view')).toBeGreaterThan(html.indexOf('No screening results yet'));
     expect(html).toContain('disabled=""');
     expect(html).not.toContain('Sort by');
     expect(html).not.toContain('Average available score');
     expect(html).not.toContain('Highest available score');
+  });
+
+  it('does not render a candidate selector beside the selected resume rows', () => {
+    const source = readFileSync(new URL('./ResumeScreeningPage.tsx', import.meta.url), 'utf8');
+    expect(source).not.toContain('screening-candidate-assignment');
+    expect(source).not.toContain('Leave unlinked');
+    expect(source).toContain('candidateId?: string');
+  });
+
+  it('keeps screening session identifiers internal and simplifies the results and print report', () => {
+    const source = readFileSync(new URL('./ResumeScreeningPage.tsx', import.meta.url), 'utf8');
+    expect(source).not.toContain('Session {submitted.sessionId}');
+    expect(source).toContain('Screening {details?.status ?? submitted.status}');
+    expect(source).not.toContain('<th scope="col">Status</th>');
+    expect(source).not.toContain('<small>{presentation.label}</small>');
+    expect(source).not.toContain('<th>Selected for comparison</th>');
+    expect(source).not.toContain('<th>Status</th>');
+    expect(source).not.toContain('Ranking criteria and limitations');
+    expect(source).not.toContain('Preliminary document match:');
+    expect(source).not.toContain('Preliminary match only');
+    expect(source).not.toContain('Insufficient evidence for a validated score.');
+    expect(source).not.toContain('Unverified in resume text');
+  });
+
+  it('allows clearing only a settled visible session and never deletes saved screening data', () => {
+    const settled = { status: 'completed', resumes: [{ status: 'completed' }, { status: 'failed' }] };
+    const processing = { status: 'processing', resumes: [{ status: 'processing' }] };
+    expect(canClearVisibleScreeningResults(settled, settled, false)).toBe(true);
+    expect(canClearVisibleScreeningResults(null, null, false)).toBe(false);
+    expect(canClearVisibleScreeningResults(processing, processing, false)).toBe(false);
+    expect(canClearVisibleScreeningResults({ status: 'completed', resumes: [{ status: 'queued' }] }, null, false)).toBe(false);
+    expect(canClearVisibleScreeningResults(settled, settled, true)).toBe(false);
+    expect(settled.resumes).toEqual([{ status: 'completed' }, { status: 'failed' }]);
+    const source = readFileSync(new URL('./ResumeScreeningPage.tsx', import.meta.url), 'utf8');
+    const clearHandler = source.slice(source.indexOf('function clearVisibleResults()'), source.indexOf('async function startScreening'));
+    expect(clearHandler).toContain('screeningNavigationCache.delete');
+    expect(clearHandler).toContain('setSubmitted(null)');
+    expect(clearHandler).toContain('setDetails(null)');
+    expect(clearHandler).not.toContain('apiRequest(');
+  });
+
+  it('individual Remove only removes the selected pending resume', () => {
+    const selected = [
+      { id: 'resume-1', file: { name: 'one.pdf' } as File, candidateId: 'candidate-1' },
+      { id: 'resume-2', file: { name: 'two.docx' } as File },
+    ];
+    expect(removePendingResume(selected, 'resume-1')).toEqual([selected[1]]);
+    expect(selected).toHaveLength(2);
+  });
+
+  it('Remove All clears only the pending selection without changing saved session data', () => {
+    const savedSession = { sessionId: 'saved-session', status: 'completed' };
+    const selected = [{ id: 'resume-1', file: { name: 'one.pdf' } as File, candidateId: 'candidate-1' }];
+    expect(clearPendingResumes()).toEqual([]);
+    expect(selected).toHaveLength(1);
+    expect(savedSession).toEqual({ sessionId: 'saved-session', status: 'completed' });
+  });
+
+  it('preserves the existing screening request for multiple unlinked uploads', () => {
+    const body = buildScreeningRequest('Engineer', 'A job description with enough content to meet the existing minimum.', [
+      { file: new File(['resume one'], 'one.pdf', { type: 'application/pdf' }) },
+      { file: new File(['resume two'], 'two.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }) },
+    ]);
+    expect(body.get('jobTitle')).toBe('Engineer');
+    expect(body.getAll('resumes')).toHaveLength(2);
+    expect(body.has('candidateIds')).toBe(false);
   });
 
   it('uses the shared workspace rule to hide page-title eyebrows without hiding section labels', () => {

@@ -225,7 +225,13 @@ describe('insights repository', () => {
       evaluation({ id: evaluationC, candidate_id: candidateC, status: 'insufficient_evidence', overall_score: null, evaluation_result: null, created_at: '2026-10-14T00:00:00.000Z' }),
       evaluation({ id: evaluationD, candidate_id: candidateD, scoring_version: '1.0.0', evaluation_result: result(candidateD), created_at: '2026-10-14T00:00:00.000Z' }),
     ];
-    const repo = repository(rows);
+    const repo = repository(rows, [
+      { id: candidateA, full_name: 'Candidate A', github_username: 'github-a', leetcode_username: 'leetcode-a', owner_id: ownerId, archived_at: null },
+      { id: candidateB, full_name: 'Candidate B', github_username: 'github-b', leetcode_username: null, owner_id: ownerId, archived_at: null },
+      { id: candidateC, full_name: 'Candidate C', github_username: null, leetcode_username: null, owner_id: ownerId, archived_at: null },
+      { id: candidateD, full_name: 'Candidate D', github_username: null, leetcode_username: null, owner_id: ownerId, archived_at: null },
+      { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', full_name: 'Other recruiter', github_username: 'private-gh', leetcode_username: null, owner_id: otherOwner, archived_at: null },
+    ]);
     const first = await repo.ranking(auth, { roleId: role, page: 1, pageSize: 1 });
     const second = await repo.ranking(auth, { roleId: role, page: 2, pageSize: 1 });
     expect(first.items[0]?.candidateId).toBe(candidateA);
@@ -234,6 +240,24 @@ describe('insights repository', () => {
     expect(second.items[0]?.rank).toBe(2);
     expect(first.total).toBe(2);
     expect(first.excluded.incomplete).toBe(1);
+    expect(first.candidateRows.map(({ candidateId }) => candidateId)).toEqual([candidateA, candidateB, candidateC, candidateD]);
+    expect(first.candidateRows[0]).toMatchObject({ candidateName: 'Candidate A', githubUsername: 'github-a', leetcodeUsername: 'leetcode-a', rank: 1, finalScore: 90 });
+    expect(first.candidateRows.find(({ candidateId }) => candidateId === candidateC)).toMatchObject({ rank: null, finalScore: null, evaluationStatus: 'insufficient_evidence' });
+    expect(first.candidateRows.map(({ candidateName }) => candidateName)).not.toContain('Other recruiter');
+  });
+
+  it('does not attach an evaluation snapshot to a different candidate ID', async () => {
+    const repo = repository([
+      evaluation({ id: evaluationA, candidate_id: candidateA, evaluation_result: result(candidateB) }),
+    ], [
+      { id: candidateA, full_name: 'Candidate A', owner_id: ownerId, archived_at: null },
+    ]);
+    const response = await repo.ranking(auth, { roleId: role, page: 1, pageSize: 20 });
+    expect(response.items).toEqual([]);
+    expect(response.candidateRows[0]).toMatchObject({
+      candidateId: candidateA, rank: null, finalScore: null, evaluationStatus: 'unavailable',
+      missingEvidence: ['The saved evaluation could not be validated for this role.'],
+    });
   });
 
   it('rejects unsupported scoring versions rather than silently returning another version', async () => {
@@ -248,6 +272,9 @@ describe('insights repository', () => {
     const repo = repository([
       evaluation({ id: evaluationA, candidate_id: candidateA }),
       evaluation({ id: evaluationC, candidate_id: candidateC, evaluation_result: customResult }),
+    ], [
+      { id: candidateA, full_name: 'Candidate A', owner_id: ownerId, archived_at: null },
+      { id: candidateC, full_name: 'Candidate C', owner_id: ownerId, archived_at: null },
     ]);
     await expect(repo.ranking(auth, { roleId: role, page: 1, pageSize: 20 }))
       .rejects.toMatchObject({ statusCode: 409, code: 'ROLE_CONFIGURATION_MISMATCH' });

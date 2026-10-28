@@ -34,14 +34,19 @@ function clearExpiredSession(error: unknown) {
   if (error instanceof ApiRequestError && error.status === 401) void supabase?.auth.signOut({ scope: 'local' });
 }
 
-export function InsightsRankingTable({ ranking, roleDisplayName, candidateNames }: { ranking: RankingResponse; roleDisplayName: string; candidateNames: ReadonlyMap<string, string> }) {
+export function InsightsRankingTable({ ranking, roleDisplayName }: { ranking: RankingResponse; roleDisplayName: string }) {
+  const displayScore = (score: number | null) => score === null ? 'Not available' : `${score}/100`;
   return <div className="insights-table-wrap" role="region" aria-label="Candidate rankings" aria-describedby="insights-ranking-scroll-hint" tabIndex={0}>
     <p className="insights-scroll-hint" id="insights-ranking-scroll-hint">On small screens, scroll horizontally to see all ranking details.</p>
-    <table className="insights-table"><caption className="visually-hidden">Ranked candidate evaluations for {roleDisplayName}</caption><thead><tr><th scope="col">Rank</th><th scope="col">Candidate</th><th scope="col">Score</th><th scope="col">Evaluated</th></tr></thead><tbody>{ranking.items.map((item) => {
-      const candidateName = candidateNames.get(item.candidateId);
-      return <tr key={item.evaluationId}><td>#{item.rank}</td><td><Link aria-label={`Open ${candidateName ?? 'candidate'} profile`} to={`/candidates/${item.candidateId}`}>{candidateName ?? 'View candidate'}</Link></td><td><strong>{item.score}</strong> / 100</td><td><time dateTime={item.evaluatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(item.evaluatedAt))}</time></td></tr>;
-    })}</tbody></table>
-    <p className="insights-footnote">{ranking.total} ranked · {ranking.excluded.incomplete} incomplete excluded · scoring version {ranking.scoringVersion}</p>
+    <table className="insights-table"><caption className="visually-hidden">Candidate platform scores and saved evaluation results for {roleDisplayName}</caption><thead><tr><th scope="col">Rank</th><th scope="col">Candidate</th><th scope="col">GitHub</th><th scope="col">GitHub Score</th><th scope="col">LeetCode</th><th scope="col">LeetCode Score</th><th scope="col">Final Score</th><th scope="col">View Report</th></tr></thead><tbody>{ranking.candidateRows.map((item) => <tr key={item.candidateId}>
+      <td>{item.rank ?? '—'}</td>
+      <td><Link aria-label={`Open ${item.candidateName} profile`} to={`/candidates/${item.candidateId}`}>{item.candidateName}</Link></td>
+      <td>{item.githubUsername ?? 'Not found'}</td><td>{displayScore(item.githubScore)}</td>
+      <td>{item.leetcodeUsername ?? 'Not found'}</td><td>{displayScore(item.leetcodeScore)}</td>
+      <td>{item.finalScore === null ? <><strong>Incomplete</strong>{item.missingEvidence.length > 0 && <small className="insights-missing-evidence">{item.missingEvidence.join(', ')}</small>}</> : <strong>{item.finalScore}/100</strong>}</td>
+      <td><Link className="insights-report-link" to={`/candidates/${item.candidateId}/report?roleId=${encodeURIComponent(ranking.roleId)}`}>View Report</Link></td>
+    </tr>)}</tbody></table>
+    <p className="insights-footnote">{ranking.total} validated platform score{ranking.total === 1 ? '' : 's'} · {ranking.candidateRows.length - ranking.total} incomplete or unavailable · v{ranking.scoringVersion}</p>
   </div>;
 }
 
@@ -149,6 +154,9 @@ export function InsightsPage() {
     : undefined;
   const recentScoreTrend = dashboard?.recentEvaluations.flatMap((item) => item.score === undefined ? [] : [item.score]) ?? [];
   const canCompare = selected.length >= 2 && !comparing;
+  const hasRankingResults = rankingMode === 'github_leetcode'
+    ? Boolean(providerRanking?.items.length)
+    : Boolean(ranking?.candidateRows.length);
 
   function toggleEvaluation(id: string) {
     setComparison(null); setComparisonError('');
@@ -198,10 +206,29 @@ export function InsightsPage() {
         <KpiCard icon="◉" label="Recent average" value={recentAverageProgress} decimals={1} suffix=" / 100" detail={recentScoreSummary.count ? `Across ${recentScoreSummary.count} scored recent evaluations` : 'No scored evaluations yet'} progress={recentAverageProgressBar} trend={recentScoreTrend}/>
       </section>
       <section className="insights-panel" aria-labelledby="ranking-title">
-        <div className="insights-panel-heading"><div><h2 id="ranking-title">Candidate rankings</h2><p>{rankingMode === 'github_leetcode' ? 'GitHub and LeetCode evidence only, weighted equally at 50% each. Resume scores do not affect score or eligibility. Saved snapshot freshness is not assessed.' : 'Official evaluation scores for the selected role. Incomplete or incompatible evaluations are excluded.'}</p></div><div className="insights-ranking-controls">
-          <label htmlFor="ranking-mode">Ranking<select id="ranking-mode" value={rankingMode} onChange={(event) => changeRankingMode(event.target.value as typeof rankingMode)}><option value="evaluation">Official evaluation</option><option value="github_leetcode">GitHub + LeetCode</option></select></label>
-          <label htmlFor="ranking-role">Role<select id="ranking-role" value={roleId} onChange={(event) => changeRole(event.target.value as EvaluationRole['id'])}>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label></div></div>
-        {!roles.length ? <div className="insights-state"><h3>No evaluation roles available</h3><p>Rankings will appear when a supported evaluation role is available.</p></div> : rankingLoading ? <WorkspaceSkeleton variant="ranking"/> : rankingError ? <div className="insights-state" role="alert"><p>{rankingError}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : rankingMode === 'github_leetcode' ? providerRanking && providerRanking.rankedTotal + providerRanking.incompleteTotal > 0 ? <ProviderRankingTable ranking={providerRanking} onPageChange={setProviderPage}/> : <div className="insights-state"><h3>No provider evidence rankings yet</h3><p>Saved evaluations need validated GitHub evidence and provider-synced LeetCode statistics. Candidates without both scores remain incomplete and unranked.</p><Link className="primary-button link-button" to="/evaluations">Run an evaluation</Link></div> : ranking?.items.length ? <InsightsRankingTable ranking={ranking} roleDisplayName={roles.find(({ id }) => id === roleId)?.displayName ?? 'selected role'} candidateNames={new Map(dashboard.recentEvaluations.map(({ candidateId, candidateName }) => [candidateId, candidateName]))}/> : <div className="insights-state"><h3>No comparable rankings yet</h3><p>Complete an evaluation with sufficient evidence for this role to appear here. Missing or incomplete evidence is not assigned a zero score.</p><Link className="primary-button link-button" to="/evaluations">Start an evaluation</Link></div>}
+        <div className="insights-panel-heading">
+          <div>
+            <h2 id="ranking-title">Candidate rankings</h2>
+            <p>{rankingMode === 'github_leetcode'
+              ? 'GitHub and LeetCode scores are weighted equally; resume scores are excluded.'
+              : 'Official six-category evaluation results for the selected role.'}</p>
+          </div>
+          <div className="insights-ranking-controls">
+            <label htmlFor="ranking-mode">Ranking mode<select id="ranking-mode" value={rankingMode} onChange={(event) => changeRankingMode(event.target.value as 'evaluation' | 'github_leetcode')}>
+              <option value="evaluation">Official evaluation</option>
+              <option value="github_leetcode">GitHub + LeetCode</option>
+            </select></label>
+            <label htmlFor="ranking-role">Role<select id="ranking-role" value={roleId} onChange={(event) => changeRole(event.target.value as EvaluationRole['id'])}>{roles.map((role) => <option key={role.id} value={role.id}>{role.displayName}</option>)}</select></label>
+          </div>
+        </div>
+        {!roles.length ? <div className="insights-state"><h3>No evaluation roles available</h3><p>Rankings will appear when a supported evaluation role is available.</p></div>
+          : rankingLoading ? <WorkspaceSkeleton variant="ranking"/>
+            : rankingError ? <div className="insights-state" role="alert"><p>{rankingError}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div>
+              : rankingMode === 'github_leetcode' && providerRanking && hasRankingResults
+                ? <ProviderRankingTable ranking={providerRanking} onPageChange={setProviderPage}/>
+                : rankingMode === 'evaluation' && ranking && hasRankingResults
+                  ? <InsightsRankingTable ranking={ranking} roleDisplayName={roles.find(({ id }) => id === roleId)?.displayName ?? 'selected role'}/>
+                  : <div className="insights-state"><h3>No candidates yet</h3><p>{rankingMode === 'github_leetcode' ? 'No GitHub and LeetCode ranking results are available for this role yet.' : 'Add candidates to this workspace to see saved evaluation evidence.'}</p><Link className="primary-button link-button" to="/dashboard/candidates">View candidates</Link></div>}
       </section>
       <section className="insights-panel" aria-labelledby="comparison-title">
         <div className="insights-panel-heading"><div><h2 id="comparison-title">Compare candidates</h2><p>Select 2–5 recent evaluation runs. The API checks that role and scoring configurations are compatible.</p></div><button className="primary-button" type="button" disabled={!canCompare} onClick={() => void compareSelected()}>{comparing ? 'Comparing…' : `Compare selected (${selected.length})`}</button></div>
