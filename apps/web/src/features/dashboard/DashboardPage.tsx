@@ -9,7 +9,7 @@ import { KpiCard } from '../../components/metrics/KpiCards';
 import { WorkspaceIcon } from '../../components/icons/WorkspaceIcon';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { ActiveDashboardReports } from '../insights/ProposedDashboardReports';
-import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
+import { dashboardEvaluationReportPath, dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
 
 export function DashboardWelcome({ firstName }: { firstName?: string }) {
   return <section className="dashboard-hero">
@@ -24,7 +24,7 @@ export function DashboardEvaluationRow({ item, roleLabel, reportRoleLabel }: { i
     <span className="dashboard-role">{roleLabel}</span>
     <span className={`dashboard-status status-${item.status}`}><i aria-hidden="true" />{dashboardEvaluationStatusLabel(item.status)}</span>
     <span className="dashboard-score">{item.score === undefined ? <span className="dashboard-no-score">{dashboardScoreAvailabilityLabel(item.status)}</span> : <><strong>{item.score}</strong><small>/ 100</small></>}</span>
-    <Link className="dashboard-open-link" to={`/evaluations/${item.id}`} aria-label={`View ${item.candidateName} ${reportRoleLabel} report`}>View report <span aria-hidden="true">↗</span></Link>
+    <Link className="dashboard-open-link" to={dashboardEvaluationReportPath(item.id)} aria-label={`View ${item.candidateName} ${reportRoleLabel} report`}>View report <span aria-hidden="true">↗</span></Link>
   </article>;
 }
 

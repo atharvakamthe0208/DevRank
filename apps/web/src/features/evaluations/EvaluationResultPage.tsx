@@ -8,6 +8,7 @@ import { EvaluationResults } from './EvaluationResults';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { useWorkspaceBreadcrumbLabels } from '../../components/layout/WorkspaceBreadcrumbContext';
 import { LegacyEvaluationResults } from './LegacyEvaluationResults';
+import { EvaluationInsightsSection } from './EvaluationInsightsSection';
 import './evaluation.css';
 
 type Loaded = { candidate: Candidate; evaluation: PersistedEvaluationRead };
@@ -69,7 +70,10 @@ export function EvaluationResultPage() {
   return <>
     <Link className="back-link" to={backPath} replace onClick={backToParent}>← <span>Back</span></Link>
     {state.data.evaluation.result.schemaVersion === '4.0.0'
-    ? <EvaluationResults candidate={state.data.candidate} evaluation={state.data.evaluation as PersistedEvaluation & { result: EvaluationResponse }}/>
+    ? <>
+        <EvaluationResults candidate={state.data.candidate} evaluation={state.data.evaluation as PersistedEvaluation & { result: EvaluationResponse}}/>
+        <EvaluationInsightsSection key={evaluationId} evaluation={state.data.evaluation as PersistedEvaluation}/>
+      </>
     : <LegacyEvaluationResults candidate={state.data.candidate} evaluation={state.data.evaluation as Exclude<PersistedEvaluationRead, PersistedEvaluation>}/>}
   </>;
 }

@@ -1,10 +1,12 @@
 import { createElement } from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { buildFinalEvaluationReport, candidateSchema, evaluationResponseSchema, persistedEvaluationReadSchema, persistedEvaluationSchema, scoringCategories, type EvaluationResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
+import { aiAnalysisResponseSchema, buildFinalEvaluationReport, candidateSchema, evaluationResponseSchema, persistedEvaluationReadSchema, persistedEvaluationSchema, scoringCategories, type EvaluationResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { EvaluationResults } from './EvaluationResults';
 import { LegacyEvaluationResults } from './LegacyEvaluationResults';
+import { EvaluationInsightsPanel } from './EvaluationInsightsSection';
 
 const candidate = candidateSchema.parse({ id: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', name: 'Test Candidate', email: 'test@example.com', createdAt: '2026-10-14T00:00:00.000Z', updatedAt: '2026-10-14T00:00:00.000Z' });
 const weights = { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 };
@@ -58,6 +60,50 @@ describe('evaluation result view', () => {
     expect(html).toContain('data-category="project_portfolio"');
     expect(html.match(/class="evaluation-category-card"/g)).toHaveLength(6);
     expect(html).not.toContain('Communication Skills');
+  });
+
+  it('composes the saved six-category report with AI Candidate Insights for the same evaluation', () => {
+    const saved = evaluation(true);
+    const response = aiAnalysisResponseSchema.parse({
+      status: 'completed',
+      evaluation: saved,
+      analysis: {
+        summary: 'Summary grounded in saved evidence.',
+        summaryEvidenceReferences: ['project_portfolio'],
+        strengths: [{ text: 'A demonstrated strength.', evidenceReferences: ['project_portfolio'] }],
+        weaknesses: [{ text: 'An area to explore.', evidenceReferences: ['technical_skills'] }],
+        roleRelevance: 'The evidence relates to the selected role.',
+        roleRelevanceEvidenceReferences: ['project_portfolio'],
+        recommendations: [{ text: 'Discuss this in an interview.', evidenceReferences: ['project_portfolio'] }],
+      },
+    });
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement('div', null,
+      createElement(EvaluationResults, { candidate, evaluation: saved as PersistedEvaluation & { result: EvaluationResponse } }),
+      createElement(EvaluationInsightsPanel, { evaluationId: saved.id, response, loading: false, onGenerate: () => undefined, analysisAvailable: true }),
+    )));
+    expect(html.match(/class="evaluation-category-card"/g)).toHaveLength(6);
+    expect(html.indexOf('DSA &amp; Problem-Solving')).toBeLessThan(html.indexOf('AI Candidate Insights'));
+    for (const text of ['Executive Summary', 'Key Strengths', 'Areas to Improve', 'Recommended Next Steps', 'Summary grounded in saved evidence.', 'A demonstrated strength.', 'An area to explore.', 'Discuss this in an interview.']) {
+      expect(html).toContain(text);
+    }
+    expect(html).toContain('href="/evaluations/' + saved.id + '/analysis"');
+  });
+
+  it('offers explicit on-demand generation without inventing an analysis, and reports failures clearly', () => {
+    const saved = evaluation(true);
+    const empty = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(EvaluationInsightsPanel, {
+      evaluationId: saved.id, loading: false, onGenerate: () => undefined,
+    })));
+    expect(empty).toContain('AI Candidate Insights');
+    expect(empty).toContain('Generate AI analysis');
+    expect(empty).toContain('Generate insights when you are ready.');
+    expect(empty).not.toContain('Executive Summary');
+    const failed = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(EvaluationInsightsPanel, {
+      evaluationId: saved.id, loading: false, error: 'AI analysis is temporarily unavailable.', onGenerate: () => undefined,
+    })));
+    expect(failed).toContain('role="alert"');
+    expect(failed).toContain('AI analysis is temporarily unavailable.');
+    expect(failed).toContain('Try again');
   });
 
   it('shows missing evidence without a zero score or false overall result', () => {
