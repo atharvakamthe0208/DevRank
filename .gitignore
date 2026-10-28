@@ -29,3 +29,9 @@ Thumbs.db
 
 # Supabase local state
 .supabase/
+
+# Playwright output and local authenticated browser state
+playwright-report/
+test-results/
+visual-screenshots/
+playwright/.auth/

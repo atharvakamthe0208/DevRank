@@ -51,6 +51,18 @@ export function ExistingCandidateResumeLinks({ candidateIds, candidates }: { can
   })}</ul>;
 }
 
+export function ScreeningRankingGuidance() {
+  return <details className="screening-ranking-help">
+    <summary>About candidate ranking</summary>
+    <p>Ranking uses saved scores, with tied scores sharing a rank. Preliminary resume matches reflect text overlap, not verified qualifications. Score colours are visual cues only; use rankings as decision support.</p>
+  </details>;
+}
+
+export function ScreeningProgressSummary({ status, resumes }: Pick<ScreeningDetailsResponse, 'status' | 'resumes'>) {
+  if (status !== 'processing') return null;
+  return <p className="screening-progress" role="status">{screeningProgressLabel(resumes)}</p>;
+}
+
 function storedScreeningSessionId() {
   if (typeof window === 'undefined') return null;
   try { return sessionStorage.getItem(SCREENING_SESSION_STORAGE_KEY); } catch { return null; }
@@ -505,14 +517,12 @@ export function ResumeScreeningPage() {
           <div><h2 id="screening-results-title">Screening status and results</h2></div>
         </div>
           {submitted ? <>
-          <p className="screening-session-status" role="status">Session {submitted.sessionId} · {details?.status ?? submitted.status}</p>
-          {details?.status === 'processing' && <p className="screening-progress" role="status">{screeningProgressLabel(details.resumes)}</p>}
+          {details && <ScreeningProgressSummary status={details.status} resumes={details.resumes} />}
           <ScreeningResultList resumes={details?.resumes ?? submitted.resumes.map((resume) => ({ ...resume, candidate: null, evaluation: null, error: undefined }))} />
           {(!details || details.status === 'processing' || !rankingData) && <button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Loading results…' : details?.status === 'processing' ? 'Refresh results' : 'Retry loading results'}</button>}
           {details && details.resumes.every((resume) => resume.status === 'failed') && <p className="screening-empty-results">No resumes produced a usable evaluation. Review each processing error and retry with supported text-based files.</p>}
           {details && <div className="screening-review-tools">
             <h3>Compare candidates and rank saved results</h3>
-            <p>Select at least two completed resumes from this job. Ranking uses saved deterministic scores; tied scores share a rank. This is decision support, not a hiring decision. Score colours are presentation-only guidance, not validated hiring criteria.</p>
             <div className="screening-review-actions">
               <button type="button" className="primary-button" onClick={() => void compareCandidates()} disabled={reviewBusy || selectedIds.length < 2}>{reviewBusy ? 'Comparing…' : 'Compare selected candidates'}</button>
               <button type="button" className="secondary-button" onClick={() => void generateReport()} disabled={reviewBusy || selectedIds.length < 2}>{reviewBusy ? 'Generating…' : 'Generate Report'}</button>
@@ -523,7 +533,7 @@ export function ResumeScreeningPage() {
           </div>}
           {rankingData && <section className="screening-comparison" aria-label="Candidate comparison">
             <h3>Candidate ranking · {rankingData.jobTitle}</h3>
-            <p>{rankingData.ranking.rankingCriteria} Preliminary document matches measure text overlap; unverified criteria mean no supporting wording was found, not that the candidate lacks the qualification.</p>
+            <ScreeningRankingGuidance />
             {details && (() => {
               const { scored, unscored, rankById } = filterAndSortScreeningResumes(details, rankingData.ranking, candidateSearch);
               const visibleEligibleIds = [...scored, ...unscored].filter((resume) => resume.status === 'completed').map((resume) => resume.id);

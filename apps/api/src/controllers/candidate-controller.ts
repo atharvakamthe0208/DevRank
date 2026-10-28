@@ -4,6 +4,8 @@ import {
   candidateIdParamsSchema,
   candidateImportPreviewResponseSchema,
   candidateBulkImportResponseSchema,
+  candidatePlatformVerificationRequestSchema,
+  candidatePlatformVerificationResponseSchema,
   type CandidateBulkImportRequest,
   type CandidateImportRows,
   candidateListQuerySchema,
@@ -13,6 +15,7 @@ import type { Request, Response } from 'express';
 import { candidateRepository, type CandidateRepository } from '../repositories/candidate-repository.js';
 import { HttpError } from '../middleware/http-error.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { verifyCandidatePlatform, verifyCandidateProfiles, type CandidatePlatformVerifier } from '../services/candidate-profile-verification.js';
 
 const candidateResponseFields = new Set([
   'id', 'name', 'email', 'githubUsername', 'leetcodeUsername', 'hackerrankUsername',
@@ -57,13 +60,23 @@ function listQuery(request: Request): CandidateListQuery {
   return candidateListQuerySchema.parse(request.query);
 }
 
-export function createCandidateController(repository: CandidateRepository = candidateRepository) {
+export function createCandidateController(
+  repository: CandidateRepository = candidateRepository,
+  profileVerifier: CandidatePlatformVerifier = verifyCandidatePlatform,
+) {
   return {
     list: asyncHandler(async (request, response) => {
       response.json(checkedCandidateList(await repository.list(authContext(request), listQuery(request))));
     }),
     create: asyncHandler(async (request, response) => {
-      response.status(201).json(checkedCandidate(await repository.create(authContext(request), request.body)));
+      const input = request.body;
+      await verifyCandidateProfiles(input, profileVerifier);
+      response.status(201).json(checkedCandidate(await repository.create(authContext(request), input)));
+    }),
+    verifyPlatform: asyncHandler(async (request, response) => {
+      const { platform, username } = candidatePlatformVerificationRequestSchema.parse(request.body);
+      await profileVerifier(platform, username);
+      response.json(candidatePlatformVerificationResponseSchema.parse({ platform, username, verified: true }));
     }),
     previewImport: asyncHandler(async (request, response) => {
       const result = await repository.previewImport(authContext(request), (request.body as CandidateImportRows).rows);

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { candidateSchema } from './candidate.js';
 
-const usernameSchema = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/, 'Use a username, not a profile URL');
+const usernameSchema = z.string().trim().transform((value) => value.startsWith('@') ? value.slice(1) : value)
+  .pipe(z.string().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/, 'Use a username, not a profile URL'));
 const emailSchema = z.string().trim().email().max(254);
 
 export const candidateCreateSchema = z.object({
@@ -19,6 +20,17 @@ export const candidateUpdateSchema = z.object({
   leetcodeUsername: usernameSchema.nullable().optional(),
   hackerrankUsername: usernameSchema.nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one supported field is required');
+
+export const candidatePlatformVerificationRequestSchema = z.object({
+  platform: z.enum(['github', 'leetcode']),
+  username: usernameSchema,
+}).strict();
+
+export const candidatePlatformVerificationResponseSchema = z.object({
+  platform: z.enum(['github', 'leetcode']),
+  username: z.string(),
+  verified: z.literal(true),
+}).strict();
 
 export const candidateIdParamsSchema = z.object({ id: z.string().uuid() }).strict();
 
@@ -121,6 +133,7 @@ export const candidateBulkImportResponseSchema = z.object({
 });
 
 export type CandidateCreateInput = z.infer<typeof candidateCreateSchema>;
+export type CandidatePlatformVerificationRequest = z.infer<typeof candidatePlatformVerificationRequestSchema>;
 export type CandidateUpdateInput = z.infer<typeof candidateUpdateSchema>;
 export type CandidateListQuery = z.infer<typeof candidateListQuerySchema>;
 export type CandidateImportRows = z.infer<typeof candidateImportRowsSchema>;
