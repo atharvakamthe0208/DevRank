@@ -819,20 +819,11 @@ function categoryInterpretation(score: CategoryScore, report?: FinalReportCatego
   return score.score === undefined ? 'There is not enough usable evidence to assign a score.' : 'The score reflects the saved evidence.';
 }
 
-function AnalysisReferences({ evaluation, references }: { evaluation: AiAnalysisResponse['evaluation']; references: string[] }) {
-  const descriptions = analysisReferenceDescriptions(evaluation, references);
-  return (
-    <details className="ai-analysis-reference-disclosure">
-      <summary>Supporting references ({descriptions.length})</summary>
-      {descriptions.length > 0 ? (
-        <ul className="ai-analysis-references">
-          {descriptions.map((description) => <li key={description}>{description}</li>)}
-        </ul>
-      ) : (
-        <p className="ai-analysis-no-references">No supporting evidence references were returned for this item.</p>
-      )}
-    </details>
-  );
+function InsightGlyph({ kind }: { kind: 'summary' | 'strength' | 'improvement' | 'next-step' }) {
+  if (kind === 'strength') return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>;
+  if (kind === 'improvement') return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 8v5m0 3h.01" /><path d="M10.3 3.86 2.8 17a2 2 0 0 0 1.74 3h14.92a2 2 0 0 0 1.74-3L13.7 3.86a2 2 0 0 0-3.48 0Z" /></svg>;
+  if (kind === 'next-step') return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" /></svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 3h10l4 4v14H5z" /><path d="M14 3v5h5M8 12h8M8 16h8" /></svg>;
 }
 
 export function AiAnalysisSummary({ response }: { response: AiAnalysisResponse }) {
