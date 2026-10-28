@@ -31,6 +31,8 @@ import {
 } from './candidate-csv-import';
 import { getImportSyncCandidates, getImportSyncRetryCandidates, runImportPlatformSync, type ImportSyncPlatform } from './candidate-csv-import-sync';
 import { CandidateImportPlatformSyncActions, type PlatformSyncState } from './CandidateImportPlatformSyncActions';
+import { CandidateImportFinalActions } from './CandidateImportFinalActions';
+import { acquireCandidateImportRequest, candidateImportEligibility, candidateImportPreviewIsCurrent, canConfirmCandidateImport, getCandidateImportRowsForSubmission, releaseCandidateImportRequest } from './candidate-csv-import-workflow';
 
 const fields: Array<{ key: CsvField; label: string; required?: boolean }> = [
   { key: 'name', label: 'Candidate name', required: true },
@@ -54,6 +56,10 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
   const dialogRef = useRef<HTMLDialogElement>(null);
   const importAttemptRef = useRef<Awaited<ReturnType<typeof getCandidateImportAttempt>> | null>(null);
   const platformSyncInFlight = useRef<Record<ImportSyncPlatform, boolean>>({ github: false, leetcode: false });
+  const previewRequestLock = useRef(false);
+  const importRequestLock = useRef(false);
+  const reviewRevision = useRef(0);
+  const previewRevision = useRef<number | null>(null);
   const drivePopupRef = useRef<Window | null>(null);
   const [parsed, setParsed] = useState<ParsedCsv | null>(null);
   const [mapping, setMapping] = useState<CsvMapping>({ name: null, email: null, githubUsername: null, leetcodeUsername: null });
@@ -61,10 +67,10 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
   const [preview, setPreview] = useState<CandidateImportPreviewResponse | null>(null);
   const [result, setResult] = useState<CandidateBulkImportResponse | null>(null);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
-  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [readingFile, setReadingFile] = useState(false);
   const [error, setError] = useState('');
+  const [importFailed, setImportFailed] = useState(false);
   const [sessionError, setSessionError] = useState('');
   const [platformSync, setPlatformSync] = useState<Record<ImportSyncPlatform, PlatformSyncState>>({ github: emptyPlatformSyncState(), leetcode: emptyPlatformSyncState() });
   const [driveConnection, setDriveConnection] = useState<DriveConnectionStatus & { loading: boolean; error?: string }>({ configured: false, connected: false, loading: false });
@@ -79,6 +85,8 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
   const resumeReferenceColumn = resumeReferenceColumns.length === 1 ? resumeReferenceColumns[0] : null;
   const rows = useMemo(() => parsed ? mapCsvRows(parsed.rows, mapping, edits, googleFormsCsv) : [], [parsed, mapping, edits, googleFormsCsv]);
   const importableRows = rows.filter((row) => row.candidate && !row.errors.length);
+  const previewIsCurrent = candidateImportPreviewIsCurrent(previewRevision.current, reviewRevision.current);
+  const importEligibility = candidateImportEligibility(rows.length, importableRows.length, preview, previewIsCurrent, skipDuplicates);
   const resumeReferenceCounts = rows.reduce((counts, row) => {
     const value = resumeReferenceColumn === null ? '' : row.original[resumeReferenceColumn] ?? '';
     counts[classifyResumeReference(value)] += 1;
@@ -118,10 +126,12 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
   }, [googleFormsCsv, session?.access_token]);
 
   function clearReview() {
+    reviewRevision.current += 1;
+    previewRevision.current = null;
     setPreview(null);
     setResult(null);
-    setConfirming(false);
     setError('');
+    setImportFailed(false);
     setResumeProgress({});
     setScreeningProgress({ running: false, completed: 0, total: 0 });
   }
@@ -151,25 +161,35 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
   }
 
   async function reviewRows() {
+    if (busy) return;
+    if (!acquireCandidateImportRequest(previewRequestLock)) return;
     clearReview();
-    if (!parsed) return;
-    if (mapping.name === null) { setError('Choose the column that contains candidate names.'); return; }
-    if (!importableRows.length) { setError('No valid rows to review. Correct the highlighted rows or upload a corrected CSV.'); return; }
-    if (!session?.access_token) { setSessionError('Your secure session is unavailable. Sign in again to import candidates.'); await supabase?.auth.signOut({ scope: 'local' }); return; }
+    if (!parsed) { releaseCandidateImportRequest(previewRequestLock); return; }
+    if (mapping.name === null) { setError('Choose the column that contains candidate names.'); releaseCandidateImportRequest(previewRequestLock); return; }
+    if (!importableRows.length) { setError('No valid rows to review. Correct the highlighted rows or upload a corrected CSV.'); releaseCandidateImportRequest(previewRequestLock); return; }
+    if (!session?.access_token) {
+      setSessionError('Your secure session is unavailable. Sign in again to import candidates.');
+      try { await supabase?.auth.signOut({ scope: 'local' }); } finally { releaseCandidateImportRequest(previewRequestLock); }
+      return;
+    }
+    const requestRevision = reviewRevision.current;
     setBusy(true);
     setSessionError('');
     try {
       const rowsToCheck = importableRows.map((row) => ({ rowNumber: row.rowNumber, candidate: row.candidate! }));
       const response = await requestCandidateImportPreview(rowsToCheck, session.access_token);
-      setPreview(response);
-      setError('');
+      if (reviewRevision.current === requestRevision) {
+        previewRevision.current = requestRevision;
+        setPreview(response);
+        setError('');
+      }
     } catch (cause) {
       if (cause instanceof ApiRequestError && cause.status === 401) {
         setSessionError('Your session expired. Sign in again to review this import.');
         await supabase?.auth.signOut({ scope: 'local' });
       } else if (cause instanceof ApiRequestError && cause.status === 403) setSessionError('Recruiter access is not approved to import candidates.');
       else setError(cause instanceof Error ? cause.message : 'Could not check this import. Try again.');
-    } finally { setBusy(false); }
+    } finally { releaseCandidateImportRequest(previewRequestLock); setBusy(false); }
   }
 
   async function refreshDriveStatus() {
@@ -319,16 +339,17 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
   }
 
   async function confirmImport() {
-    if (!preview || busy) return;
-    if (!session?.access_token) { setSessionError('Your secure session is unavailable. Sign in again to import candidates.'); return; }
+    if (!preview || !canConfirmCandidateImport(previewIsCurrent, busy, importEligibility.eligibleRows) || previewRevision.current !== reviewRevision.current || !acquireCandidateImportRequest(importRequestLock)) return;
+    if (!session?.access_token) { setSessionError('Your secure session is unavailable. Sign in again to import candidates.'); releaseCandidateImportRequest(importRequestLock); return; }
     if (screenResumes && (resumeReferenceColumn === null || !driveConnection.connected || !screeningJobTitle.trim() || screeningJobDescription.trim().length < 50)) {
-      setError('Connect Google Drive and enter a job title plus a job description of at least 50 characters before importing and screening resumes.'); return;
+      setError('Connect Google Drive and enter a job title plus a job description of at least 50 characters before importing and screening resumes.'); releaseCandidateImportRequest(importRequestLock); return;
     }
     setBusy(true);
     setError('');
+    setImportFailed(false);
     setSessionError('');
     try {
-      const rowsToImport = importableRows.map((row) => ({ rowNumber: row.rowNumber, candidate: row.candidate! }));
+      const rowsToImport = getCandidateImportRowsForSubmission(rows);
       let storage: Storage | null = null;
       try { storage = sessionStorage; } catch { /* Session storage can be disabled by browser policy. */ }
       const attempt = await getCandidateImportAttempt(rowsToImport, skipDuplicates, importAttemptRef.current, storage);
@@ -343,16 +364,16 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
       if (attempt.storageKey) { try { storage?.removeItem(attempt.storageKey); } catch { /* The durable database receipt remains authoritative. */ } }
       importAttemptRef.current = null;
       setResult(validated.data);
-      setConfirming(false);
       onImported();
       if (screenResumes) await screenImportedResumes(validated.data);
     } catch (cause) {
+      setImportFailed(true);
       if (cause instanceof ApiRequestError && cause.status === 401) {
         setSessionError('Your session expired. Sign in again before continuing.');
         await supabase?.auth.signOut({ scope: 'local' });
       } else if (cause instanceof ApiRequestError && cause.status === 403) setSessionError('Recruiter access is not approved to import candidates.');
       else setError(cause instanceof Error ? cause.message : 'The import could not be confirmed. Retry with the same rows.');
-    } finally { setBusy(false); }
+    } finally { releaseCandidateImportRequest(importRequestLock); setBusy(false); }
   }
 
   async function syncPlatform(platform: ImportSyncPlatform) {
@@ -390,14 +411,14 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
   }
 
   function close() {
-    if (Object.values(platformSyncInFlight.current).some(Boolean)) return;
+    if (previewRequestLock.current || importRequestLock.current || Object.values(platformSyncInFlight.current).some(Boolean)) return;
     dialogRef.current?.close();
     onClose();
   }
 
   const anyPlatformSyncRunning = Object.values(platformSync).some((state) => state.running);
   return <dialog className="candidate-import-dialog" ref={dialogRef} aria-labelledby="candidate-import-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <header className="candidate-import-heading"><div><h2 id="candidate-import-title">Import candidates from CSV</h2><p>UTF-8 CSV · up to 1 MB and {CSV_IMPORT_MAX_ROWS} candidate rows. Candidate import remains independent; supported Drive PDFs can be screened after authorization and confirmation.</p></div><button type="button" className="candidate-import-close" aria-label="Close CSV import" onClick={close} disabled={anyPlatformSyncRunning}>×</button></header>
+    <header className="candidate-import-heading"><div><h2 id="candidate-import-title">Import candidates from CSV</h2><p>UTF-8 CSV · up to 1 MB and {CSV_IMPORT_MAX_ROWS} candidate rows. Candidate import remains independent; supported Drive PDFs can be screened after authorization and confirmation.</p></div><button type="button" className="candidate-import-close" aria-label="Close CSV import" onClick={close} disabled={busy || anyPlatformSyncRunning}>×</button></header>
     <section className="candidate-import-file">
       <span className="candidate-import-file-label">CSV file</span>
       <button type="button" className="secondary-button" onClick={onChooseFile} disabled={busy || anyPlatformSyncRunning}>{initialFile ? 'Choose another CSV' : 'Choose CSV file'}</button>
@@ -428,11 +449,7 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
       const mayRetryResume = !!resume?.fileId && ['resume_inaccessible', 'unsupported_file', 'screening_failed'].includes(resume.status);
       return <li key={`${item.rowNumber}-${item.status}`}><span>Row {item.rowNumber}: {title} — {item.status === 'created' ? 'candidate imported' : item.reason === 'potential_duplicate' ? 'skipped as a potential match' : item.status === 'failed' ? 'could not be created' : 'skipped'}{resume && <> · <strong>{driveStatusLabel(resume.status)}</strong>{resume.message ? ` — ${resume.message}` : ''}</>}</span>{mayRetryResume && <button type="button" className="candidate-import-retry-resume" disabled={retryingResumeRows.includes(item.rowNumber)} onClick={() => void retryResume(item.rowNumber)}>{retryingResumeRows.includes(item.rowNumber) ? 'Retrying…' : 'Retry resume'}</button>}{item.status === 'created' && item.candidateId && <Link to={`/candidates/${item.candidateId}`} aria-disabled={anyPlatformSyncRunning} onClick={(event) => { if (Object.values(platformSyncInFlight.current).some(Boolean)) { event.preventDefault(); return; } close(); }}>Open profile</Link>}</li>;
     })}</ul><CandidateImportPlatformSyncActions result={result} rows={rows} stateByPlatform={platformSync} onSync={(platform) => void syncPlatform(platform)}/></section>}
-    {preview && !result && <section className="candidate-import-policy" aria-label="Duplicate handling"><p>Potential matches use exact, case-insensitive email, GitHub username, or LeetCode username matches within your workspace. Candidate names are not treated as unique, and existing records are never overwritten.</p><label><input type="checkbox" checked={skipDuplicates} onChange={(event) => { setSkipDuplicates(event.currentTarget.checked); setConfirming(false); setError(''); }} disabled={busy}/> Skip potential matches (recommended). Uncheck to explicitly import them.</label><p>{preview.rows.filter((row) => row.status === 'ready').length} rows have no potential match; {preview.rows.filter((row) => row.status === 'duplicate').length} potential matches.</p><button type="button" className="primary-button" disabled={busy || !importableRows.length} onClick={() => setConfirming(true)}>Continue to confirmation</button></section>}
-    {confirming && preview && !result && <section className="candidate-import-confirm" aria-labelledby="candidate-import-confirm-title"><h3 id="candidate-import-confirm-title">Confirm candidate import</h3><p>{importableRows.length} valid rows will be submitted. {skipDuplicates ? 'Potential matches will be skipped.' : 'Potential matches will also be created as new records.'} Rows with validation errors will not be sent.</p>
-      {resumeReferenceColumns.length > 0 && <div className="candidate-import-screening-options"><label><input type="checkbox" checked={screenResumes} onChange={(event) => setScreenResumes(event.currentTarget.checked)} disabled={busy || resumeReferenceColumn === null}/> Download and screen supported Drive PDF links after candidates are imported</label><p>Screening starts only after you confirm below. It reuses the existing private resume storage, screening queue, scoring rules, and saved result association.</p>{screenResumes && <><label htmlFor="candidate-import-job-title">Target job title<input id="candidate-import-job-title" value={screeningJobTitle} onChange={(event) => setScreeningJobTitle(event.currentTarget.value)} maxLength={200} disabled={busy}/></label><label htmlFor="candidate-import-job-description">Job description (at least 50 characters)<textarea id="candidate-import-job-description" value={screeningJobDescription} onChange={(event) => setScreeningJobDescription(event.currentTarget.value)} minLength={50} maxLength={30000} rows={5} disabled={busy}/></label>{!driveConnection.connected && <p>Authorize Google Drive before confirming automatic resume screening. CSV-only import remains available by leaving this unchecked.</p>}</>}</div>}
-      <div><button type="button" className="secondary-button" disabled={busy} onClick={() => setConfirming(false)}>Cancel</button><button type="button" className="primary-button" disabled={busy || (screenResumes && (!driveConnection.connected || !screeningJobTitle.trim() || screeningJobDescription.trim().length < 50 || resumeReferenceColumn === null))} onClick={() => void confirmImport()}>{busy ? screenResumes ? 'Importing and queuing resumes…' : 'Importing…' : error ? 'Retry import' : screenResumes ? 'Confirm import and screen resumes' : 'Confirm and import'}</button></div></section>}
-    {parsed?.rows.length ? <section className="candidate-import-preview" aria-labelledby="candidate-import-preview-title"><div className="candidate-import-preview-heading"><div><h3 id="candidate-import-preview-title">Review rows</h3><p>{importableRows.length} valid · {rows.length - importableRows.length} need correction{preview ? ' · duplicate check complete' : ''}</p></div><button type="button" className="secondary-button" disabled={busy || mapping.name === null} onClick={() => void reviewRows()}>{busy && !confirming ? 'Checking…' : preview ? 'Check duplicates again' : 'Check duplicates'}</button></div>
+    {parsed?.rows.length ? <section className="candidate-import-preview" aria-labelledby="candidate-import-preview-title"><div className="candidate-import-preview-heading"><div><h3 id="candidate-import-preview-title">Review rows</h3><p>{importableRows.length} valid · {rows.length - importableRows.length} need correction{previewIsCurrent ? ' · duplicate check complete' : ''}</p></div><button type="button" className="secondary-button" disabled={busy || mapping.name === null || importRequestLock.current} onClick={() => void reviewRows()}>{busy && previewRequestLock.current ? 'Checking duplicates…' : previewIsCurrent ? 'Check duplicates again' : 'Check duplicates'}</button></div>
       <div className="candidate-import-table-wrap" role="region" aria-label="CSV candidate preview" tabIndex={0}><table><thead><tr><th>CSV row</th><th>Name</th><th>Email</th><th>GitHub</th><th>LeetCode</th><th>Status</th>{resumeReferenceColumns.length > 0 && <th>Resume file</th>}<th><span className="sr-only">Original CSV values</span></th></tr></thead><tbody>{rows.map((row) => {
         const checked = previewByRow.get(row.rowNumber);
         const status = row.errors.length ? 'Needs correction' : checked?.status === 'duplicate' ? 'Potential match' : checked ? 'Ready' : row.duplicateInFile ? 'Possible CSV duplicate' : 'Not checked';
@@ -447,6 +464,21 @@ export function CandidateCsvImportDialog({ initialFile, onChooseFile, onClose, o
         </tr>;
       })}</tbody></table></div>
     </section> : null}
-    <footer className="candidate-import-footer"><span>Invalid rows are not discarded silently. Correct their fields or upload a corrected CSV.</span><button type="button" className="secondary-button" onClick={close} disabled={anyPlatformSyncRunning}>Close</button></footer>
+    {parsed?.rows.length && !result && <CandidateImportFinalActions
+      eligibility={importEligibility}
+      previewIsCurrent={previewIsCurrent}
+      skipPotentialMatches={skipDuplicates}
+      onSkipPotentialMatchesChange={setSkipDuplicates}
+      busy={busy || previewRequestLock.current || importRequestLock.current}
+      checkingDuplicates={busy && previewRequestLock.current}
+      importing={busy && importRequestLock.current}
+      importingLabel={screenResumes ? 'Importing and queuing resumes…' : 'Importing…'}
+      importFailed={importFailed}
+      confirmBlocked={screenResumes && (!driveConnection.connected || !screeningJobTitle.trim() || screeningJobDescription.trim().length < 50 || resumeReferenceColumn === null)}
+      onConfirm={() => void confirmImport()}
+      onCancel={close}
+      resumeOptions={resumeReferenceColumns.length > 0 && <div className="candidate-import-screening-options"><label><input type="checkbox" checked={screenResumes} onChange={(event) => setScreenResumes(event.currentTarget.checked)} disabled={busy || resumeReferenceColumn === null}/> Download and screen supported Drive PDF links after candidates are imported</label><p>Screening starts only after import confirmation. It uses the existing private resume storage and screening workflow.</p>{screenResumes && <><label htmlFor="candidate-import-job-title">Target job title<input id="candidate-import-job-title" value={screeningJobTitle} onChange={(event) => setScreeningJobTitle(event.currentTarget.value)} maxLength={200} disabled={busy}/></label><label htmlFor="candidate-import-job-description">Job description (at least 50 characters)<textarea id="candidate-import-job-description" value={screeningJobDescription} onChange={(event) => setScreeningJobDescription(event.currentTarget.value)} minLength={50} maxLength={30000} rows={5} disabled={busy}/></label>{!driveConnection.connected ? <p>Authorize Google Drive before automatic resume screening. You can still import candidates without screening.</p> : (!screeningJobTitle.trim() || screeningJobDescription.trim().length < 50) && <p role="alert">Enter a target job title and a job description of at least 50 characters to screen resumes.</p>}</>}</div>}
+    />}
+    <footer className="candidate-import-footer"><span>Invalid rows are not discarded silently. Correct their fields or upload a corrected CSV.</span>{(!parsed?.rows.length || result) && <button type="button" className="secondary-button" onClick={close} disabled={busy || anyPlatformSyncRunning}>Close</button>}</footer>
   </dialog>;
 }
