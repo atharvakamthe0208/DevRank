@@ -1,5 +1,9 @@
 import type { DashboardResponse } from '@devrank/contracts';
 
+export function dashboardEvaluationReportPath(evaluationId: string): string {
+  return `/evaluations/${evaluationId}`;
+}
+
 export function dashboardRoleLabel(role: string): string {
   const labels: Record<string, string> = {
     software_developer: 'Software Developer',

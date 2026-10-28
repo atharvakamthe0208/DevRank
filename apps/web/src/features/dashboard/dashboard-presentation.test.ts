@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { DashboardWelcome } from './DashboardPage';
-import { dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
+import { dashboardEvaluationReportPath, dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
 
 describe('dashboard presentation', () => {
   it('keeps the welcome and primary action without a date label', () => {
@@ -20,6 +20,10 @@ describe('dashboard presentation', () => {
     expect(dashboardRoleLabel('software_developer')).toBe('Software Developer');
     expect(dashboardRoleLabel('ai_ml_engineer')).toBe('AI/ML Engineer');
     expect(dashboardRoleLabel('data_analyst')).toBe('Data Analyst');
+  });
+
+  it('opens the saved evaluation report by its exact evaluation ID', () => {
+    expect(dashboardEvaluationReportPath('evaluation-123')).toBe('/evaluations/evaluation-123');
   });
 
   it('keeps every evaluation state distinct and does not invent a score', () => {

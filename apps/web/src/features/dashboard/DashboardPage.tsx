@@ -9,7 +9,7 @@ import { KpiCard } from '../../components/metrics/KpiCards';
 import { WorkspaceIcon } from '../../components/icons/WorkspaceIcon';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { ActiveDashboardReports } from '../insights/ProposedDashboardReports';
-import { dashboardEvaluationStatusLabel, dashboardRoleLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
+import { dashboardEvaluationReportPath, dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
 import { searchDashboardCandidates, type CandidateEvaluationFilter } from './dashboard-candidate-search';
 import { parseCandidateListApiResponse } from '../candidates/candidate-response-validation';
 
@@ -25,7 +25,8 @@ export function DashboardEvaluationRow({ item, roleLabel, reportRoleLabel }: { i
     <Link className="dashboard-candidate-link" to={`/candidates/${item.candidateId}`}><span className="dashboard-avatar" aria-hidden="true">{item.candidateName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span><strong>{item.candidateName}</strong></span></Link>
     <span className="dashboard-role">{roleLabel}</span>
     <span className={`dashboard-status status-${item.status}`}><i aria-hidden="true" />{dashboardEvaluationStatusLabel(item.status)}</span>
-    <Link className="dashboard-open-link" to={`/evaluations/${item.id}`} aria-label={`View ${item.candidateName} ${reportRoleLabel} report`}>View report <span aria-hidden="true">↗</span></Link>
+    <span className="dashboard-score">{item.score === undefined ? <span className="dashboard-no-score">{dashboardScoreAvailabilityLabel(item.status)}</span> : <><strong>{item.score}</strong><small>/ 100</small></>}</span>
+    <Link className="dashboard-open-link" to={dashboardEvaluationReportPath(item.id)} aria-label={`View ${item.candidateName} ${reportRoleLabel} report`}>View report <span aria-hidden="true">↗</span></Link>
   </article>;
 }
 
