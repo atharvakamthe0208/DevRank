@@ -32,4 +32,14 @@ describe('candidate CSV duplicate preview request', () => {
       { rowNumber: 2, candidate: { name: 'Ari Stone' } },
     ], 'recruiter-token')).rejects.toThrow(/incomplete import preview/i);
   });
+
+  it('surfaces a failed duplicate check and allows a later retry to validate normally', async () => {
+    const rows = [{ rowNumber: 2, candidate: { name: 'Ari Stone' } }];
+    const validResponse = { rows: [{ rowNumber: 2, status: 'ready', potentialDuplicate: false, candidateId: null }] };
+    vi.mocked(apiRequest).mockRejectedValueOnce(new Error('Preview service unavailable')).mockResolvedValueOnce(validResponse);
+
+    await expect(requestCandidateImportPreview(rows, 'recruiter-token')).rejects.toThrow('Preview service unavailable');
+    await expect(requestCandidateImportPreview(rows, 'recruiter-token')).resolves.toEqual(validResponse);
+    expect(apiRequest).toHaveBeenCalledTimes(2);
+  });
 });
