@@ -9,7 +9,7 @@ vi.mock('../auth/AuthProvider', () => ({
 }));
 
 import { AppShell } from '../../components/layout/AppShell';
-import { canClearVisibleScreeningResults, clearPendingResumes, ExistingCandidateResumeLinks, refreshLinkedCandidateAssessments, removePendingResume, ResumeScreeningPage } from './ResumeScreeningPage';
+import { canClearVisibleScreeningResults, clearPendingResumes, ExistingCandidateResumeLinks, refreshLinkedCandidateAssessments, removePendingResume, ResumeScreeningPage, ScreeningProgressSummary, ScreeningRankingGuidance } from './ResumeScreeningPage';
 import { ScreeningSummaryCards } from './ScreeningSummaryCards';
 import { screeningProgress, screeningProgressLabel } from './screening-progress';
 import { buildScreeningRequest } from './screening-request';
