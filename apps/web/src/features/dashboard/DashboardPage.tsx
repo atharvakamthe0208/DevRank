@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { dashboardResponseSchema, persistedEvaluationReadSchema, type DashboardResponse } from '@devrank/contracts';
+import { dashboardResponseSchema, persistedEvaluationReadSchema, type Candidate, type DashboardResponse } from '@devrank/contracts';
 import { apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { useCandidates } from '../candidates/useCandidates';
@@ -30,13 +30,51 @@ export function DashboardEvaluationRow({ item, roleLabel, reportRoleLabel }: { i
 
 export function DashboardPage() {
   const { profile, session } = useAuth();
-  const { items, loading: candidatesLoading, error: candidatesError, reload } = useCandidates(1, 5);
+  const { items, total: candidateTotal, loading: candidatesLoading, error: candidatesError, reload } = useCandidates(1, 100);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [candidateQuery, setCandidateQuery] = useState('');
+  const [candidateEvaluationFilter, setCandidateEvaluationFilter] = useState<CandidateEvaluationFilter>('all');
+  const [additionalSearchCandidates, setAdditionalSearchCandidates] = useState<Candidate[]>([]);
+  const [candidatePagesLoading, setCandidatePagesLoading] = useState(false);
+  const [candidatePagesLoaded, setCandidatePagesLoaded] = useState(false);
+  const [candidatePagesError, setCandidatePagesError] = useState(false);
+  const searchActive = candidateQuery.trim().length > 0 || candidateEvaluationFilter !== 'all';
+  const accessToken = session?.access_token;
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [evaluationRoles, setEvaluationRoles] = useState<Record<string, string | null>>({});
   const [evaluationRolesLoading, setEvaluationRolesLoading] = useState(false);
+
+  useEffect(() => {
+    setAdditionalSearchCandidates([]);
+    setCandidatePagesLoaded(false);
+    setCandidatePagesError(false);
+    if (!searchActive) return;
+    if (candidatesLoading || candidatesError || !accessToken || candidateTotal <= items.length) return;
+    const controller = new AbortController();
+    let active = true;
+    setCandidatePagesLoading(true);
+    async function loadRemainingCandidatePages() {
+      const remaining: Candidate[] = [];
+      try {
+        const pageCount = Math.ceil(candidateTotal / 100);
+        for (let page = 2; page <= pageCount; page += 1) {
+          const response = await apiRequest<unknown>(`/candidates?page=${page}&pageSize=100`, { signal: controller.signal }, accessToken);
+          const parsed = parseCandidateListApiResponse(response);
+          if (!parsed) throw new Error('Candidate data could not be verified.');
+          remaining.push(...parsed.items);
+        }
+        if (active) { setAdditionalSearchCandidates(remaining); setCandidatePagesLoaded(true); }
+      } catch {
+        if (active && !controller.signal.aborted) setCandidatePagesError(true);
+      } finally {
+        if (active) setCandidatePagesLoading(false);
+      }
+    }
+    void loadRemainingCandidatePages();
+    return () => { active = false; controller.abort(); };
+  }, [searchActive, candidateTotal, items, candidatesLoading, candidatesError, accessToken]);
 
   useEffect(() => {
     let active = true;
@@ -102,11 +140,27 @@ export function DashboardPage() {
     ? { value: recentAverageProgress, max: 100, label: 'Recent scored evaluation average out of 100' }
     : undefined;
   const recentScoreTrend = dashboard?.recentEvaluations.flatMap((item) => item.score === undefined ? [] : [item.score]) ?? [];
+  const searchCandidates = searchActive ? [...items, ...additionalSearchCandidates] : items;
+  const effectiveEvaluationFilter = dashboardError ? 'all' : candidateEvaluationFilter;
+  const searchedCandidates = searchDashboardCandidates(searchCandidates, candidateQuery, effectiveEvaluationFilter, new Set(dashboard?.evaluatedCandidateIds ?? []));
+  const candidateSearchIncomplete = searchActive && candidateTotal > items.length && !candidatePagesLoaded && !candidatePagesError;
 
   if (loading || candidatesLoading) return <div className="dashboard-page"><WorkspaceSkeleton variant="dashboard"/></div>;
 
   return <div className="dashboard-page">
     <DashboardWelcome firstName={firstName}/>
+
+    <section className="dashboard-candidate-search" aria-label="Search candidates">
+      <label className="dashboard-candidate-search-input"><span className="sr-only">Search candidates by name, email or skills</span><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input type="search" value={candidateQuery} onChange={(event) => setCandidateQuery(event.target.value)} placeholder="Search candidates by name, email or skills..." /></label>
+      <label className="dashboard-candidate-search-filter"><span className="sr-only">Filter candidates by evaluation status</span><select value={candidateEvaluationFilter} disabled={dashboardLoading || dashboardError} onChange={(event) => setCandidateEvaluationFilter(event.target.value as CandidateEvaluationFilter)}><option value="all">All candidates</option><option value="evaluated">Evaluated</option><option value="not_evaluated">Not evaluated</option></select></label>
+      {items.length > 0 && <span className="dashboard-candidate-search-count" aria-live="polite">{searchActive ? `${searchedCandidates.length} of ${candidateTotal} candidates` : `${candidateTotal} candidates`}</span>}
+      {candidatesError && !candidatesLoading && <span className="dashboard-candidate-search-note" role="status">Candidate search is unavailable.</span>}
+      {dashboardError && candidateEvaluationFilter !== 'all' && <span className="dashboard-candidate-search-note" role="status">Evaluation status is unavailable; showing text matches only.</span>}
+      {!candidatesLoading && !candidatesError && items.length === 0 && <span className="dashboard-candidate-search-note">No candidates to search yet.</span>}
+      {candidateSearchIncomplete && <span className="dashboard-candidate-search-note" role="status">{candidatePagesLoading ? 'Searching all candidates…' : `Preparing search across ${candidateTotal} candidates…`}</span>}
+      {searchActive && candidatePagesError && <span className="dashboard-candidate-search-note" role="alert">Some candidate records could not be loaded. Try again.</span>}
+      {searchActive && !candidateSearchIncomplete && !candidatePagesError && !candidatesLoading && !candidatesError && items.length > 0 && <div className="dashboard-candidate-search-results" role="region" aria-label="Candidate search results">{searchedCandidates.length ? searchedCandidates.map((candidate) => <Link key={candidate.id} className="dashboard-candidate-search-result" to={`/candidates/${candidate.id}`}><span className="dashboard-avatar" aria-hidden="true">{candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span><strong>{candidate.name}</strong><small>{candidate.email ?? candidate.githubUsername ?? candidate.leetcodeUsername ?? 'Candidate profile'}</small></span>{dashboard && <span className={`dashboard-search-status ${dashboard.evaluatedCandidateIds.includes(candidate.id) ? 'is-evaluated' : ''}`}>{dashboard.evaluatedCandidateIds.includes(candidate.id) ? 'Evaluated' : 'Not evaluated'}</span>}</Link>) : <p>No candidates match your search and filters.</p>}</div>}
+    </section>
 
     {!loading && dashboard && !error && <section className="workspace-kpi-grid" aria-label="Home metrics">
       <KpiCard icon={<WorkspaceIcon name="candidates" size={17}/>} label="Total candidates" value={dashboard.candidateCount} detail="Recruiter home"/>
@@ -124,7 +178,7 @@ export function DashboardPage() {
 
     <section className="dashboard-panel" aria-labelledby="recent-candidates-heading">
       <div className="dashboard-section-heading"><div><span className="dashboard-kicker">CANDIDATE HOME</span><h2 id="recent-candidates-heading">Recently added candidates</h2></div><Link className="dashboard-text-link" to="/dashboard/candidates">Manage candidates <span aria-hidden="true">→</span></Link></div>
-      {candidatesLoading ? <p className="dashboard-state" role="status">Loading candidates…</p> : candidatesError ? <div className="dashboard-state" role="alert"><p>{candidatesError}</p><button className="dashboard-secondary-button" type="button" onClick={reload}>Try again</button></div> : items.length ? <div className="dashboard-candidate-list">{items.map((candidate) => {
+      {candidatesLoading ? <p className="dashboard-state" role="status">Loading candidates…</p> : candidatesError ? <div className="dashboard-state" role="alert"><p>{candidatesError}</p><button className="dashboard-secondary-button" type="button" onClick={reload}>Try again</button></div> : items.length ? <div className="dashboard-candidate-list">{items.slice(0, 5).map((candidate) => {
         const linked = [
           candidate.githubUsername ? { platform: 'github' as const, name: 'GitHub' } : null,
           candidate.leetcodeUsername ? { platform: 'leetcode' as const, name: 'LeetCode' } : null,
@@ -135,7 +189,7 @@ export function DashboardPage() {
 
     <section className="dashboard-panel dashboard-proposal-panel" aria-labelledby="proposal-indexes-title">
       <details>
-        <summary><span><span className="dashboard-kicker">DRAFT EVIDENCE · SEPARATE FROM SCORING</span><strong id="proposal-indexes-title" className="dashboard-platform-title"><span className="platform-heading"><PlatformLogo platform="github"/>GitHub</span><span>+</span><span className="platform-heading"><PlatformLogo platform="leetcode"/>LeetCode</span><span>evidence indexes</span></strong><small>Draft indexes only · not active evaluation scores or rankings</small></span><span className="dashboard-disclosure" aria-hidden="true">＋</span></summary>
+        <summary><span><strong id="proposal-indexes-title" className="dashboard-platform-title"><span className="platform-heading"><PlatformLogo platform="github"/>GitHub</span><span>+</span><span className="platform-heading"><PlatformLogo platform="leetcode"/>LeetCode</span><span>evidence indexes</span></strong></span><span className="dashboard-disclosure" aria-hidden="true">＋</span></summary>
         {loading ? <p className="dashboard-state" role="status">Loading saved proposal indexes…</p> : error ? <div className="dashboard-state" role="alert"><p>Proposal indexes could not be loaded.</p><button className="dashboard-secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : dashboard && <ActiveDashboardReports evaluations={dashboard.recentEvaluations.slice(0, 3)}/>}
       </details>
     </section>

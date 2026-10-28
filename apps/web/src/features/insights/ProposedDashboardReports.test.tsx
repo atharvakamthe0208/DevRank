@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { buildProposedEvaluationReport, type DashboardResponse } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
 import { ProposedDashboardReports } from './ProposedDashboardReports';
+import { DraftEvidenceIndexes } from './DraftEvidenceIndexes';
 
 const report = buildProposedEvaluationReport([]);
 const evaluation: DashboardResponse['recentEvaluations'][number] = {
@@ -12,6 +13,15 @@ const evaluation: DashboardResponse['recentEvaluations'][number] = {
 };
 
 describe('proposed report dashboard section', () => {
+  it('provides compact draft search controls and a separate empty-index state', () => {
+    const html = renderToStaticMarkup(createElement(DraftEvidenceIndexes, { evaluations: [] }));
+    expect(html).toContain('Draft evidence indexes');
+    expect(html).toContain('Search drafts by candidate, role or status...');
+    expect(html).toContain('All drafts');
+    expect(html).toContain('No draft evidence indexes yet.');
+    expect(html).not.toContain('No saved evaluation reports yet.');
+  });
+
   it('renders recent evaluation proposal values while preserving the active scoring version label', () => {
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ProposedDashboardReports, { evaluations: [evaluation] })));
     expect(html).toContain('Candidate Ada');

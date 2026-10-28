@@ -4,6 +4,7 @@ import type { DashboardResponse } from '@devrank/contracts';
 
 const dashboard: DashboardResponse = {
   candidateCount: 2,
+  evaluatedCandidateIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'],
   evaluationCount: 4,
   statusCounts: { pending: 0, in_progress: 0, completed: 2, insufficient_evidence: 1, failed: 1 },
   recentEvaluations: [
