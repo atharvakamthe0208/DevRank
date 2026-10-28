@@ -29,12 +29,13 @@ describe('compact screening results', () => {
     expect(html).toContain('85/100');
     expect(html).toContain('<details class="screening-result-details">');
     expect(html).toContain('View details');
+    expect(html).not.toMatch(/preliminary|provisional|insufficient evidence|demonstrated|not demonstrated|evidence not available/i);
     const summary = html.split('<details')[0];
     expect(summary).not.toContain('TypeScript');
     expect(summary).not.toContain('Explicit resume evidence');
   });
 
-  it('labels provisional scores and keeps unavailable scores distinct from status', () => {
+  it('shows numeric scores without evidence-status labels and retains job-processing status and errors', () => {
     const html = renderToStaticMarkup(createElement(ScreeningResultList, { resumes: [
       resume({ id: '00000000-0000-4000-8000-000000000002', status: 'completed', preliminaryEvaluation: {
         rubricVersion: 'resume-document-match-1.0.0', score: 62, evidenceCoverage: 40,
@@ -45,12 +46,12 @@ describe('compact screening results', () => {
     ] }));
 
     expect(html).toContain('62/100');
-    expect(html).toContain('Provisional');
     expect(html).toContain('Score unavailable');
     expect(html).toContain('Failed');
     expect(html).toContain('Processing');
     expect(html).toContain('Evaluation in progress.');
     expect(html).toContain('Processing failed. View details for the error.');
     expect(html).toContain('PDF text extraction failed.');
+    expect(html).not.toMatch(/preliminary|provisional|insufficient evidence|unverified|supported by/i);
   });
 });

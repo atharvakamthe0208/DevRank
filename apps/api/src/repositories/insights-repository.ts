@@ -21,6 +21,7 @@ type EvaluationRow = {
   scoring_version: string | null; created_at: string; target_role?: string | null;
   evaluation_result?: unknown; role_weights_snapshot?: unknown;
 };
+type CandidateRow = { id: string; full_name: string; github_username: string | null; leetcode_username: string | null };
 
 export interface InsightsRepository {
   dashboard(auth: AuthContext): Promise<DashboardResponse>;
@@ -35,7 +36,7 @@ const statuses = ['pending', 'in_progress', 'completed', 'insufficient_evidence'
 function validResult(row: EvaluationRow) {
   const parsed = evaluationResponseSchema.safeParse(row.evaluation_result);
   const weights = roleWeightsSchema.safeParse(row.role_weights_snapshot);
-  if (!parsed.success || !row.target_role || !row.scoring_version
+  if (!parsed.success || parsed.data.candidateId !== row.candidate_id || !row.target_role || !row.scoring_version
     || !weights.success || parsed.data.targetRole !== row.target_role || parsed.data.scoringVersion !== row.scoring_version
     || weightKey(parsed.data.roleWeightsUsed) !== weightKey(weights.data)) return undefined;
   if (row.status === 'completed' && (parsed.data.evaluationStatus !== 'completed' || parsed.data.overallScore === undefined
@@ -47,6 +48,26 @@ function validResult(row: EvaluationRow) {
 
 function weightKey(weights: Record<string, number>) {
   return scoringCategories.map(({ id }) => weights[id]).join(':');
+}
+
+function validatedPlatformScore(result: ReturnType<typeof evaluationResponseSchema.parse> | undefined, source: 'github' | 'leetcode'): number | null {
+  const categories = result?.finalReport?.categories.filter((item) => item.source === source) ?? [];
+  if (!categories.length || categories.some((item) => item.status !== 'scored' || item.score === undefined)) return null;
+  const totalWeight = categories.reduce((sum, item) => sum + item.weight, 0);
+  if (totalWeight <= 0) return null;
+  return Math.round((categories.reduce((sum, item) => sum + (item.score ?? 0) * item.weight, 0) / totalWeight + Number.EPSILON) * 100) / 100;
+}
+
+function savedUsername(result: ReturnType<typeof evaluationResponseSchema.parse> | undefined, source: 'github' | 'leetcode') {
+  const snapshots = result?.platformEvidence?.filter((item) => item.source === source)
+    .sort((left, right) => right.observedAt.localeCompare(left.observedAt)) ?? [];
+  for (const snapshot of snapshots) {
+    const value = snapshot.normalizedValue;
+    const profile = typeof value.profile === 'object' && value.profile !== null ? value.profile as Record<string, unknown> : {};
+    const username = source === 'github' ? value.username ?? profile.username : value.handle ?? value.username;
+    if (typeof username === 'string' && username.trim()) return username.trim();
+  }
+  return null;
 }
 
 export function createInsightsRepository(getClient = getSupabaseClient): InsightsRepository {
@@ -165,16 +186,24 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
       const version = query.scoringVersion ?? scoringVersion;
       if (version !== scoringVersion) throw new HttpError(409, 'SCORING_VERSION_UNSUPPORTED', `Scoring version ${version} is not supported for live rankings`);
       try {
-        const { data, error } = await client.from('evaluations')
+        const [candidateResult, evaluationResult] = await Promise.all([
+          client.from('candidates').select('id,full_name,github_username,leetcode_username').eq('owner_id', auth.userId).is('archived_at', null),
+          client.from('evaluations')
           .select('id,candidate_id,status,overall_score,scoring_version,created_at,target_role,evaluation_result,role_weights_snapshot')
           .eq('owner_id', auth.userId).eq('target_role', query.roleId)
-          .order('created_at', { ascending: false }).order('id', { ascending: true });
-        if (error) {
-          if (error.code === '42703' || error.code === 'PGRST204' || error.code === 'PGRST205') throw evaluationSchemaUnavailable();
+          .order('created_at', { ascending: false }).order('id', { ascending: true }),
+        ]);
+        if (candidateResult.error) throw databaseUnavailable();
+        if (evaluationResult.error) {
+          if (evaluationResult.error.code === '42703' || evaluationResult.error.code === 'PGRST204' || evaluationResult.error.code === 'PGRST205') throw evaluationSchemaUnavailable();
           throw databaseUnavailable();
         }
+        const candidates = (candidateResult.data ?? []) as CandidateRow[];
+        const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
         const latest = new Map<string, EvaluationRow>();
-        for (const row of (data ?? []) as EvaluationRow[]) if (!latest.has(row.candidate_id)) latest.set(row.candidate_id, row);
+        for (const row of (evaluationResult.data ?? []) as EvaluationRow[]) {
+          if (candidateById.has(row.candidate_id) && !latest.has(row.candidate_id)) latest.set(row.candidate_id, row);
+        }
         const excluded = { incomplete: 0, scoringVersionMismatch: 0, missingScore: 0, invalidSnapshot: 0 };
         const ranked: Array<{ candidateId: string; evaluationId: string; score: number; evaluatedAt: string }> = [];
         const compatibleWeightKeys = new Set<string>();
@@ -194,10 +223,50 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
           || left.evaluatedAt.localeCompare(right.evaluatedAt)
           || left.candidateId.localeCompare(right.candidateId)
           || left.evaluationId.localeCompare(right.evaluationId));
+        const rankByCandidateId = new Map(ranked.map((item, index) => [item.candidateId, index + 1]));
+        const rankedByCandidateId = new Map(ranked.map((item) => [item.candidateId, item]));
+        const latestByCandidateId = new Map(latest);
+        const candidateRows = candidates.map((candidate) => {
+          const row = latestByCandidateId.get(candidate.id);
+          const result = row && row.scoring_version === version && ['completed', 'insufficient_evidence'].includes(row.status)
+            ? validResult(row) : undefined;
+          const rankedItem = rankedByCandidateId.get(candidate.id);
+          const sourceScore = (source: 'github' | 'leetcode') => validatedPlatformScore(result, source);
+          const missingEvidence = !row ? ['No saved evaluation for this role.']
+            : result?.missingEvidence.length ? result.missingEvidence.map((id) => scoringCategories.find((category) => category.id === id)?.displayName ?? id)
+              : rankedItem ? [] : row.status === 'failed' ? ['The saved evaluation failed.']
+                : result ? ['A complete validated score is not available.'] : ['The saved evaluation could not be validated for this role.'];
+          return {
+            candidateId: candidate.id,
+            candidateName: candidate.full_name,
+            rank: rankedItem ? rankByCandidateId.get(candidate.id)! : null,
+            finalScore: rankedItem?.score ?? null,
+            evaluatedAt: rankedItem?.evaluatedAt ?? null,
+            githubUsername: candidate.github_username?.trim() || savedUsername(result, 'github'),
+            githubScore: sourceScore('github'),
+            leetcodeUsername: candidate.leetcode_username?.trim() || savedUsername(result, 'leetcode'),
+            leetcodeScore: sourceScore('leetcode'),
+            evaluationStatus: rankedItem ? 'completed' as const
+              : row?.status === 'insufficient_evidence' ? 'insufficient_evidence' as const
+                : row?.status === 'failed' ? 'failed' as const
+                  : row ? 'unavailable' as const : 'not_evaluated' as const,
+            missingEvidence,
+          };
+        }).sort((left, right) => {
+          const leftRank = rankByCandidateId.get(left.candidateId);
+          const rightRank = rankByCandidateId.get(right.candidateId);
+          if (leftRank !== undefined || rightRank !== undefined) {
+            if (leftRank === undefined) return 1;
+            if (rightRank === undefined) return -1;
+            if (leftRank !== rightRank) return leftRank - rightRank;
+          }
+          return left.candidateName.localeCompare(right.candidateName) || left.candidateId.localeCompare(right.candidateId);
+        });
         const offset = (query.page - 1) * query.pageSize;
         const payload = {
           roleId: query.roleId, scoringVersion: version,
           items: ranked.slice(offset, offset + query.pageSize).map((item, index) => ({ ...item, rank: offset + index + 1 })),
+          candidateRows,
           page: query.page, pageSize: query.pageSize, total: ranked.length, excluded,
         };
         const parsed = rankingResponseSchema.safeParse(payload);

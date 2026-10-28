@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Session } from '@supabase/supabase-js';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { supabase } from '../../lib/supabase/client';
+import { clearSessionScopedState } from '../../lib/session-scoped-state';
 import { clearPasswordRecovery, isPasswordRecoveryForUser, rememberPasswordRecovery } from './password-recovery';
 import { classifyRecruiterAccess, type RecruiterProfile } from './access-state';
 
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setError('');
     setProfile(null);
     if (!nextSession) {
+      clearSessionScopedState();
       setState('signed-out');
       if (inFlightSession.current === sessionKey) inFlightSession.current = null;
       return;
@@ -50,6 +52,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } catch (cause) {
       if (currentVerification !== verificationId.current) return;
       if (cause instanceof ApiRequestError && cause.status === 401) {
+        clearSessionScopedState();
         await supabase?.auth.signOut({ scope: 'local' });
         setSession(null);
         setState('signed-out');
@@ -83,6 +86,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       } else if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         clearPasswordRecovery();
         setPasswordRecovery(false);
+        if (event === 'SIGNED_OUT') clearSessionScopedState();
       }
       // Defer SDK/API work until the Supabase auth callback releases its internal lock.
       queueMicrotask(() => { if (active) void restore(nextSession); });
@@ -110,6 +114,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!supabase) return;
     const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
     if (signOutError) throw signOutError;
+    clearSessionScopedState();
     setSession(null); setProfile(null); setState('signed-out');
     clearPasswordRecovery(); setPasswordRecovery(false);
   }, []);

@@ -1,5 +1,17 @@
 import type { ScreeningReportResponse } from '@devrank/contracts';
 
+export function sortScreeningReportResumes(report: ScreeningReportResponse) {
+  const rankById = new Map(report.ranking.ranked.map((item) => [item.resumeId, item.rank]));
+  return [...report.details.resumes].sort((left, right) => {
+    const leftRank = rankById.get(left.id) ?? Number.POSITIVE_INFINITY;
+    const rightRank = rankById.get(right.id) ?? Number.POSITIVE_INFINITY;
+    return leftRank - rightRank
+      || (left.candidate?.name ?? '').localeCompare(right.candidate?.name ?? '')
+      || left.filename.localeCompare(right.filename)
+      || left.id.localeCompare(right.id);
+  });
+}
+
 export function screeningReportCsv(report: ScreeningReportResponse): string {
   const rankById = new Map(report.ranking.ranked.map((item) => [item.resumeId, item.rank]));
   const escape = (input: unknown) => {
@@ -9,20 +21,18 @@ export function screeningReportCsv(report: ScreeningReportResponse): string {
     return `"${value.replaceAll('"', '""')}"`;
   };
   const rows = [
-    ['Filename', 'Candidate name', 'Processing status', 'Rank', 'Score / 100', 'Score status', 'Matched requirements', 'Missing or unsupported requirements', 'Error'],
-    ...report.details.resumes.map((resume) => {
+    ['Candidate name', 'Resume', 'Rank', 'Score / 100', 'Resume text excerpts', 'Error'],
+    ...sortScreeningReportResumes(report).map((resume) => {
       const requirements = resume.evaluation?.requirements ?? [];
       const preliminary = resume.preliminaryEvaluation;
       const score = resume.evaluation?.score ?? preliminary?.score ?? '';
-      const scoreLabel = resume.evaluation?.score !== undefined ? `Validated ${resume.evaluation.status}` : preliminary ? 'Preliminary match' : '';
-      const matched = requirements.length
-        ? requirements.filter((item) => item.status === 'demonstrated').map((item) => item.description)
-        : preliminary?.criteria.filter((item) => item.status === 'supported').map((item) => item.description) ?? [];
-      const missing = requirements.length
-        ? requirements.filter((item) => item.status !== 'demonstrated').map((item) => `${item.description} (${item.status.replaceAll('_', ' ')})`)
-        : preliminary?.criteria.filter((item) => item.status === 'unverified').map((item) => `${item.description} (unverified in resume text)`) ?? [];
-      return [resume.filename, resume.candidate?.name ?? '', resume.status, rankById.get(resume.id) ?? '', score, scoreLabel,
-        matched.join('; '), missing.join('; '), resume.error ?? ''];
+      const excerpts = requirements.flatMap((item) => item.evidence.map(({ excerpt }) => excerpt));
+      if (!requirements.length && preliminary) excerpts.push(...preliminary.criteria.flatMap((item) => [
+        ...item.matchedTerms,
+        ...(item.evidenceExcerpt ? [item.evidenceExcerpt] : []),
+      ]));
+      return [resume.candidate?.name ?? 'Name not identified', resume.filename, rankById.get(resume.id) ?? '', score,
+        excerpts.join('; '), resume.error ?? ''];
     }),
   ];
   return `\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\r\n')}`;

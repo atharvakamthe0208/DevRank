@@ -29,15 +29,8 @@ export function scoreBand(score: number): 'high' | 'medium' | 'low' {
 }
 
 export function scorePresentation(resume: ScreeningDetailsResponse['resumes'][number]) {
-  if (resume.status === 'completed' && resume.evaluation?.status === 'complete' && resume.evaluation.score !== undefined) return { score: resume.evaluation.score, label: 'Validated score' as const, preliminary: false };
-  if (resume.status === 'completed' && resume.evaluation?.status === 'provisional' && resume.evaluation.score !== undefined) return { score: resume.evaluation.score, label: 'Preliminary match' as const, preliminary: true };
-  if (resume.preliminaryEvaluation) return { score: resume.preliminaryEvaluation.score, label: 'Preliminary match' as const, preliminary: true };
+  if (resume.status === 'completed' && resume.evaluation?.status === 'complete' && resume.evaluation.score !== undefined) return { score: resume.evaluation.score, preliminary: false };
+  if (resume.status === 'completed' && resume.evaluation?.status === 'provisional' && resume.evaluation.score !== undefined) return { score: resume.evaluation.score, preliminary: true };
+  if (resume.preliminaryEvaluation) return { score: resume.preliminaryEvaluation.score, preliminary: true };
   return null;
-}
-
-export function screeningStatusLabel(resume: ScreeningDetailsResponse['resumes'][number]): string {
-  if (resume.status === 'failed') return 'Failed';
-  if (resume.status === 'queued' || resume.status === 'uploaded') return 'Pending';
-  if (resume.status === 'processing') return 'Processing';
-  return resume.evaluation?.status === 'complete' && resume.evaluation.score !== undefined ? 'Scored' : 'Insufficient evidence';
 }

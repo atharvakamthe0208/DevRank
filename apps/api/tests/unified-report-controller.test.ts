@@ -11,7 +11,7 @@ const auth = { userId: recruiterId, email: 'recruiter@example.com', emailConfirm
 function invoke(controller: ReturnType<typeof createUnifiedReportController>, authValue: typeof auth | undefined = auth) {
   const response = { json: vi.fn() } as unknown as Response;
   const next = vi.fn() as NextFunction;
-  controller.get({ auth: authValue, params: { id: candidateId } } as unknown as Request, response, next);
+  controller.get({ auth: authValue, params: { id: candidateId }, query: {} } as unknown as Request, response, next);
   return { response, next };
 }
 
@@ -46,6 +46,42 @@ describe('unified candidate report', () => {
     expect(candidateGet).toHaveBeenCalledWith(auth, candidateId);
     expect(evaluationList).toHaveBeenCalledWith(auth, candidateId);
     expect(platformGet).toHaveBeenCalledWith(auth, candidateId);
+  });
+
+  it('exposes only complete saved resume scores as validated and keeps provisional scores separate', async () => {
+    async function loadResume(evaluation: Record<string, unknown>) {
+      const queries: Array<Record<string, any>> = [];
+      let queryIndex = 0;
+      const linkedResume = {
+        id: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', original_filename: 'resume.pdf', status: 'completed',
+        extracted_data: { candidate: { name: 'Taylor Example' } }, evaluation,
+        preliminary_evaluation: null, safe_error_message: null, processed_at: '2026-10-14T12:00:00.000Z',
+        screening_sessions: { job_title: 'Backend Engineer', job_description: 'Build secure backend services.' },
+      };
+      const getClient = vi.fn(() => ({ from: () => {
+        const current = queryIndex++;
+        const query: Record<string, any> = {};
+        queries.push(query);
+        for (const method of ['select', 'eq', 'is', 'order']) query[method] = vi.fn(() => query);
+        query.maybeSingle = vi.fn(async () => ({ data: current === 0 ? linkedResume : null, error: null }));
+        query.limit = vi.fn(async () => ({ data: [], error: null }));
+        return query;
+      } }) as never);
+      const controller = createUnifiedReportController(
+        { get: vi.fn(async () => candidate) } as never,
+        { listForCandidate: vi.fn(async () => ({ items: [] })) } as never,
+        { getLatest: vi.fn(async () => ({ items: [] })) } as never,
+        getClient as never,
+      );
+      const { response } = invoke(controller);
+      await vi.waitFor(() => expect((response.json as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledOnce());
+      expect(queries[0]?.eq).toHaveBeenCalledWith('owner_id', recruiterId);
+      expect(queries[0]?.eq).toHaveBeenCalledWith('candidate_id', candidateId);
+      return (response.json as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0].resume;
+    }
+
+    expect(await loadResume({ score: 88.89, status: 'provisional' })).toMatchObject({ validatedScore: null, preliminaryScore: 88.89, statusLabel: 'provisional' });
+    expect(await loadResume({ score: 100, status: 'complete' })).toMatchObject({ validatedScore: 100, preliminaryScore: null, statusLabel: 'complete' });
   });
 
   it('rejects a request without recruiter authentication', async () => {

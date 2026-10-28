@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { unifiedCandidateReportSchema, type UnifiedCandidateReport } from '@devrank/contracts';
 import { useAuth } from '../auth/AuthProvider';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
@@ -57,6 +57,8 @@ function AnimatedScore({ value }: { value: number }) {
 }
 export function UnifiedCandidateReportPage() {
   const { id = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const roleId = searchParams.get('roleId');
   const { session } = useAuth();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [selectedResumeId, setSelectedResumeId] = useState('');
@@ -67,13 +69,14 @@ export function UnifiedCandidateReportPage() {
     if (!session?.access_token) { setState({ status: 'error', message: 'Sign in again to view this report.' }); return; }
     setState({ status: 'loading' });
     try {
-      const response = unifiedCandidateReportSchema.parse(await apiRequest<unknown>(`/candidates/${encodeURIComponent(id)}/unified-report`, { signal }, session.access_token));
+      const query = roleId ? `?roleId=${encodeURIComponent(roleId)}` : '';
+      const response = unifiedCandidateReportSchema.parse(await apiRequest<unknown>(`/candidates/${encodeURIComponent(id)}/unified-report${query}`, { signal }, session.access_token));
       if (!signal?.aborted) setState({ status: 'ready', report: response });
     } catch (error) {
       if (signal?.aborted) return;
       setState({ status: 'error', message: error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : 'Could not load the candidate report.' });
     }
-  }, [id, session?.access_token]);
+  }, [id, roleId, session?.access_token]);
   async function linkResume() {
     if (!session?.access_token || !selectedResumeId || state.status !== 'ready' || linking) return;
     setLinking(true); setLinkError('');
@@ -187,7 +190,7 @@ export function UnifiedCandidateReportView({ report, selectedResumeId = '', link
         {report.resume.jobDescription && <details><summary>Job description</summary><p>{report.resume.jobDescription}</p></details>}
         {report.resume.validatedScore !== null && <p>Validated resume score: <strong>{report.resume.validatedScore}/100</strong></p>}
         {report.resume.preliminaryScore !== null && <p>Preliminary match: <strong>{report.resume.preliminaryScore}/100</strong></p>}
-        {report.resume.evidence.length > 0 && <div><h3>Supporting resume evidence</h3><ul>{report.resume.evidence.map((item, index) => <li key={index + '-' + item}>{item}</li>)}</ul></div>}
+        {report.resume.evidence.length > 0 && <details><summary>Supporting resume evidence</summary><ul>{report.resume.evidence.map((item, index) => <li key={index + '-' + item}>{item}</li>)}</ul></details>}
       </div>}
       {report.resume.limitations.map((item) => <small className="unified-resume-limitation" key={item}>{item}</small>)}
       {report.resume.status === 'unlinked' && report.linkableResumes.length > 0 && <div className="resume-link-control">
