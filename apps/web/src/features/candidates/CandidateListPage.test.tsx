@@ -113,4 +113,12 @@ describe('candidate removal UI', () => {
     expect(html).toContain('>Cancel</button>');
     expect(html).toContain('Delete permanently');
   });
+
+  it('renders loaded candidate rows with initialized selection state', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('aria-label="Select Taylor Example"');
+    expect(html).not.toContain('candidate-row-selected');
+    expect(html).toContain('class="candidate-management-table"');
+  });
 });
