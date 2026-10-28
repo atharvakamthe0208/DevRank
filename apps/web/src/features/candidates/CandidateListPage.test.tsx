@@ -24,6 +24,20 @@ describe('candidate removal UI', () => {
     items: [candidate], total: 1, loading: false, error: '', reload: vi.fn(), deleteCandidate: vi.fn(),
   }));
 
+  it('uses a neutral candidate avatar and blue primary action in the empty state', () => {
+    useCandidatesMock.mockReturnValue({ items: [], total: 0, loading: false, error: '', reload: vi.fn(), deleteCandidate: vi.fn() });
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('No candidates yet');
+    expect(html).toContain('class="dashboard-avatar candidate-avatar-placeholder"');
+    expect(html).toContain('<svg aria-hidden="true" focusable="false" width="20"');
+    expect(html).not.toContain('candidate-empty-logo');
+    expect(html).not.toContain('devrank-mark');
+    expect(html).toContain('candidate-add-action');
+    expect(html).toContain('Add your first candidate');
+    expect(html).toContain('href="/candidates/new"');
+  });
+
   it('shows a clearly labelled permanent delete action beside candidate details', () => {
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
 
