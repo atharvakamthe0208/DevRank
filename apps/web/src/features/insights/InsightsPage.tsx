@@ -4,10 +4,12 @@ import {
   candidateComparisonResponseSchema,
   dashboardResponseSchema,
   evaluationRolesResponseSchema,
+  providerRankingResponseSchema,
   rankingResponseSchema,
   type CandidateComparisonResponse,
   type DashboardResponse,
   type EvaluationRole,
+  type ProviderRankingResponse,
   type RankingResponse,
 } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
@@ -48,12 +50,42 @@ export function InsightsRankingTable({ ranking, roleDisplayName }: { ranking: Ra
   </div>;
 }
 
+export function ProviderRankingTable({ ranking, onPageChange }: { ranking: ProviderRankingResponse; onPageChange?: (page: number) => void }) {
+  const displayScore = (score: number) => score.toFixed(2);
+  const total = ranking.rankedTotal + ranking.incompleteTotal;
+  const pageCount = Math.max(1, Math.ceil(total / ranking.pageSize));
+  return <div className="insights-table-wrap" role="region" aria-label="GitHub and LeetCode candidate rankings" aria-describedby="provider-ranking-scroll-hint" tabIndex={0}>
+    <p className="insights-scroll-hint" id="provider-ranking-scroll-hint">On small screens, scroll horizontally to see all ranking details.</p>
+    <table className="insights-table provider-ranking-table"><caption className="visually-hidden">GitHub and LeetCode rankings. Resume scores are not included.</caption>
+      <thead><tr><th scope="col">Rank</th><th scope="col">Candidate</th><th scope="col">GitHub</th><th scope="col">LeetCode</th><th scope="col">Combined score</th><th scope="col">Status</th><th scope="col">Evaluated</th></tr></thead>
+      <tbody>{ranking.items.map((item) => <tr key={item.candidateId}>
+        <td>{item.rank === undefined ? '—' : `#${item.rank}`}</td>
+        <td><Link aria-label={`Open ${item.candidateName} profile`} to={`/candidates/${item.candidateId}`}>{item.candidateName}</Link></td>
+        <td>{item.githubScore === undefined ? 'Unavailable' : <><strong>{displayScore(item.githubScore)}</strong> / 100<br/><small>{item.githubCoverage.availableCategories}/5 categories · {item.githubCoverage.status}</small></>}</td>
+        <td>{item.leetcodeScore === undefined ? 'Unavailable' : <><strong>{displayScore(item.leetcodeScore)}</strong> / 100</>}</td>
+        <td>{item.combinedScore === undefined ? '—' : <><strong>{displayScore(item.combinedScore)}</strong> / 100</>}</td>
+        <td>{item.status === 'ranked' ? 'Ranked' : `Incomplete · missing ${item.missingProviders.join(' and ')}`}</td>
+        <td><time dateTime={item.evaluatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(item.evaluatedAt))}</time></td>
+      </tr>)}</tbody>
+    </table>
+    <p className="insights-footnote">{ranking.rankedTotal} ranked · {ranking.incompleteTotal} incomplete · GitHub and LeetCode weighted equally (50% each). Resume scores are excluded.</p>
+    {pageCount > 1 && onPageChange && <nav className="provider-ranking-pagination" aria-label="Provider ranking pages">
+      <button className="secondary-button" type="button" disabled={ranking.page <= 1} onClick={() => onPageChange(ranking.page - 1)}>Previous</button>
+      <span>Page {ranking.page} of {pageCount}</span>
+      <button className="secondary-button" type="button" disabled={ranking.page >= pageCount} onClick={() => onPageChange(ranking.page + 1)}>Next</button>
+    </nav>}
+  </div>;
+}
+
 export function InsightsPage() {
   const { session } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [roles, setRoles] = useState<EvaluationRole[]>([]);
   const [roleId, setRoleId] = useState<EvaluationRole['id'] | ''>('');
   const [ranking, setRanking] = useState<RankingResponse | null>(null);
+  const [providerRanking, setProviderRanking] = useState<ProviderRankingResponse | null>(null);
+  const [rankingMode, setRankingMode] = useState<'evaluation' | 'github_leetcode'>('evaluation');
+  const [providerPage, setProviderPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
   const [comparison, setComparison] = useState<CandidateComparisonResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +100,7 @@ export function InsightsPage() {
     let active = true;
     async function load() {
       if (!session?.access_token) { setError('Your secure session is unavailable. Sign in again.'); setLoading(false); return; }
-      setLoading(true); setError(''); setRankingError(''); setDashboard(null); setRanking(null); setComparison(null);
+      setLoading(true); setError(''); setRankingError(''); setDashboard(null); setRanking(null); setProviderRanking(null); setComparison(null);
       try {
         const [dashboardResponse, rolesResponse] = await Promise.all([
           apiRequest<unknown>('/dashboard', undefined, session.access_token),
@@ -95,17 +127,24 @@ export function InsightsPage() {
     let active = true;
     async function loadRanking() {
       if (!session?.access_token || !roleId || loading) return;
-      setRankingLoading(true); setRankingError(''); setRanking(null);
+      setRankingLoading(true); setRankingError(''); setRanking(null); setProviderRanking(null);
       try {
-        const response = await apiRequest<unknown>(`/rankings?roleId=${encodeURIComponent(roleId)}&page=1&pageSize=20`, undefined, session.access_token);
-        const parsed = rankingResponseSchema.parse(response);
-        if (active) setRanking(parsed);
+        const endpoint = rankingMode === 'github_leetcode' ? '/rankings/github-leetcode' : '/rankings';
+        const page = rankingMode === 'github_leetcode' ? providerPage : 1;
+        const response = await apiRequest<unknown>(`${endpoint}?roleId=${encodeURIComponent(roleId)}&page=${page}&pageSize=20`, undefined, session.access_token);
+        if (rankingMode === 'github_leetcode') {
+          const parsed = providerRankingResponseSchema.parse(response);
+          if (active) setProviderRanking(parsed);
+        } else {
+          const parsed = rankingResponseSchema.parse(response);
+          if (active) setRanking(parsed);
+        }
       } catch (cause) { if (active) { clearExpiredSession(cause); setRankingError(messageFor(cause)); } }
       finally { if (active) setRankingLoading(false); }
     }
     void loadRanking();
     return () => { active = false; };
-  }, [session?.access_token, roleId, loading, attempt]);
+  }, [session?.access_token, roleId, rankingMode, providerPage, loading, attempt]);
 
   const evaluations = comparableRecentEvaluations(dashboard);
   const recentScoreSummary = recentScoredEvaluationAverage(dashboard?.recentEvaluations ?? []);
@@ -123,9 +162,16 @@ export function InsightsPage() {
 
   function changeRole(nextRoleId: EvaluationRole['id']) {
     setRoleId(nextRoleId);
+    setProviderPage(1);
     setSelected([]);
     setComparison(null);
     setComparisonError('');
+  }
+
+  function changeRankingMode(mode: 'evaluation' | 'github_leetcode') {
+    setRankingMode(mode);
+    setProviderPage(1);
+    setRankingError('');
   }
 
   async function compareSelected() {
@@ -161,13 +207,13 @@ export function InsightsPage() {
         {!roles.length ? <div className="insights-state"><h3>No evaluation roles available</h3><p>Rankings will appear when a supported evaluation role is available.</p></div> : rankingLoading ? <WorkspaceSkeleton variant="ranking"/> : rankingError ? <div className="insights-state" role="alert"><p>{rankingError}</p><button className="secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : ranking?.candidateRows.length ? <InsightsRankingTable ranking={ranking} roleDisplayName={roles.find(({ id }) => id === roleId)?.displayName ?? 'selected role'}/> : <div className="insights-state"><h3>No candidates yet</h3><p>Add candidates to this workspace to see saved evaluation evidence.</p><Link className="primary-button link-button" to="/dashboard/candidates">View candidates</Link></div>}
       </section>
       <section className="insights-panel" aria-labelledby="comparison-title">
-        <div className="insights-panel-heading"><div><h2 id="comparison-title">Compare candidates</h2></div><button className="primary-button" type="button" disabled={!canCompare} onClick={() => void compareSelected()}>{comparing ? 'Comparing…' : `Compare selected (${selected.length})`}</button></div>
+        <div className="insights-panel-heading"><div><h2 id="comparison-title">Compare candidates</h2><p>Select 2–5 recent evaluation runs. The API checks that role and scoring configurations are compatible.</p></div><button className="primary-button" type="button" disabled={!canCompare} onClick={() => void compareSelected()}>{comparing ? 'Comparing…' : `Compare selected (${selected.length})`}</button></div>
         {evaluations.length < 2 ? <div className="insights-state"><p>At least two recent evaluations with supported scoring versions are needed for comparison.</p><Link className="secondary-button" to="/evaluations">Run evaluations</Link></div> : <div className="evaluation-choice-list" aria-label="Recent evaluations available to compare">{evaluations.map((item) => <label key={item.id}><input type="checkbox" checked={selected.includes(item.id)} disabled={comparing || (!selected.includes(item.id) && selected.length >= 5)} onChange={() => toggleEvaluation(item.id)}/><span><strong>{item.candidateName}</strong><small>{item.status === 'completed' ? `Score ${item.score ?? 'unavailable'} / 100` : 'Insufficient evidence · no score'} · {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(item.createdAt))}</small></span></label>)}</div>}
         {comparisonError && <p className="insights-error" role="alert">{comparisonError}</p>}
         {comparison && <div className="comparison-results" role="status"><h3>{roles.find(({ id }) => id === comparison.roleId)?.displayName ?? comparison.roleId} comparison</h3><p>Scoring version {comparison.scoringVersion}. This is decision support, not an automatic hiring decision.</p><div className="comparison-cards">{comparison.items.map((item) => { const record = evaluations.find(({ id }) => id === item.evaluationId); return <article key={item.evaluationId}><span>{record?.candidateName ?? 'Candidate'}</span><strong>{item.result.overallScore ?? '—'}<small>{item.result.overallScore === undefined ? 'insufficient evidence' : '/ 100'}</small></strong><small>{item.result.evaluationStatus.replaceAll('_', ' ')}</small></article>; })}</div></div>}
       </section>
       <details className="insights-panel insights-draft-disclosure">
-        <summary><span><strong>Draft evidence indexes</strong></span></summary>
+        <summary><span><strong>Draft evidence indexes</strong><small>Saved GitHub and LeetCode evidence summaries; separate from official evaluations and rankings.</small></span></summary>
         <div className="insights-draft-content"><ActiveDashboardReports evaluations={dashboard.recentEvaluations}/></div>
       </details>
     </>}

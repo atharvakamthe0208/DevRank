@@ -7,8 +7,15 @@ import {
   roleWeightsSchema,
   scoringCategories,
   scoringVersion,
+  providerRankingResponseSchema,
+  providerRankingMode,
+  providerRankingWeights,
+  combineProviderScores,
+  providerScoresFromEvaluation,
   type CandidateComparison,
   type DashboardResponse,
+  type ProviderRankingQuery,
+  type ProviderRankingResponse,
   type RankingQuery,
   type RankingResponse,
 } from '@devrank/contracts';
@@ -27,6 +34,7 @@ export interface InsightsRepository {
   dashboard(auth: AuthContext): Promise<DashboardResponse>;
   compare(auth: AuthContext, input: CandidateComparison): Promise<unknown>;
   ranking(auth: AuthContext, query: RankingQuery): Promise<RankingResponse>;
+  providerRanking(auth: AuthContext, query: ProviderRankingQuery): Promise<ProviderRankingResponse>;
 }
 
 const databaseUnavailable = () => new HttpError(503, 'DATABASE_UNAVAILABLE', 'Unable to load recruiter insights right now');
@@ -271,6 +279,70 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
         };
         const parsed = rankingResponseSchema.safeParse(payload);
         if (!parsed.success) throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Ranking data could not be processed');
+        return parsed.data;
+      } catch (error) {
+        if (error instanceof HttpError) throw error;
+        throw databaseUnavailable();
+      }
+    },
+
+    async providerRanking(auth, query) {
+      const client = clientFor(auth);
+      try {
+        const { data, error } = await client.from('evaluations')
+          .select('id,candidate_id,status,overall_score,scoring_version,created_at,target_role,evaluation_result,role_weights_snapshot')
+          .eq('owner_id', auth.userId).eq('target_role', query.roleId)
+          .order('created_at', { ascending: false }).order('id', { ascending: true });
+        if (error) {
+          if (error.code === '42703' || error.code === 'PGRST204' || error.code === 'PGRST205') throw evaluationSchemaUnavailable();
+          throw databaseUnavailable();
+        }
+        const latest = new Map<string, EvaluationRow>();
+        for (const row of (data ?? []) as EvaluationRow[]) if (!latest.has(row.candidate_id)) latest.set(row.candidate_id, row);
+        const candidateIds = [...latest.keys()];
+        const candidatesResult = candidateIds.length
+          ? await client.from('candidates').select('id,full_name').eq('owner_id', auth.userId).is('archived_at', null).in('id', candidateIds)
+          : { data: [], error: null };
+        if (candidatesResult.error) throw databaseUnavailable();
+        const names = new Map(((candidatesResult.data ?? []) as Array<{ id: string; full_name: string }>).map(({ id, full_name }) => [id, full_name]));
+        const ranked: Array<{ candidateId: string; candidateName: string; evaluationId: string; evaluatedAt: string; githubScore: number; githubCoverage: ReturnType<typeof providerScoresFromEvaluation>['githubCoverage']; leetcodeScore: number; combinedScore: number }> = [];
+        const incomplete: Array<{ candidateId: string; candidateName: string; evaluationId: string; evaluatedAt: string; githubScore?: number; githubCoverage: ReturnType<typeof providerScoresFromEvaluation>['githubCoverage']; leetcodeScore?: number }> = [];
+        for (const row of latest.values()) {
+          const candidateName = names.get(row.candidate_id);
+          if (!candidateName) continue;
+          const result = row.status === 'completed' || row.status === 'insufficient_evidence' ? validResult(row) : undefined;
+          const scores = result?.candidateId === row.candidate_id
+            ? providerScoresFromEvaluation(result, row.candidate_id)
+            : { githubCoverage: { availableCategories: 0, totalCategories: 5 as const, status: 'unavailable' as const } };
+          const base = { candidateId: row.candidate_id, candidateName, evaluationId: row.id, evaluatedAt: row.created_at,
+            githubCoverage: scores.githubCoverage };
+          const combinedScore = combineProviderScores(scores.githubScore, scores.leetcodeScore);
+          if (combinedScore !== undefined && scores.githubScore !== undefined && scores.leetcodeScore !== undefined) {
+            ranked.push({ ...base, githubScore: scores.githubScore, leetcodeScore: scores.leetcodeScore, combinedScore });
+          } else {
+            incomplete.push({ ...base, ...(scores.githubScore !== undefined ? { githubScore: scores.githubScore } : {}),
+              ...(scores.leetcodeScore !== undefined ? { leetcodeScore: scores.leetcodeScore } : {}) });
+          }
+        }
+        ranked.sort((left, right) => right.combinedScore - left.combinedScore
+          || left.evaluatedAt.localeCompare(right.evaluatedAt)
+          || left.candidateId.localeCompare(right.candidateId)
+          || left.evaluationId.localeCompare(right.evaluationId));
+        incomplete.sort((left, right) => left.candidateId.localeCompare(right.candidateId)
+          || left.evaluationId.localeCompare(right.evaluationId));
+        const rankedItems = ranked.map((item, index) => ({ ...item, rank: index + 1, status: 'ranked' as const, missingProviders: [] as ('github' | 'leetcode')[] }));
+        const incompleteItems = incomplete.map((item) => ({ ...item, status: 'incomplete' as const,
+          missingProviders: [...(item.githubScore === undefined ? ['github' as const] : []), ...(item.leetcodeScore === undefined ? ['leetcode' as const] : [])] }));
+        const items = [...rankedItems, ...incompleteItems];
+        const offset = (query.page - 1) * query.pageSize;
+        const payload = {
+          mode: providerRankingMode, roleId: query.roleId, rubricId: 'github_leetcode_v4', scoringVersion,
+          providerWeights: providerRankingWeights,
+          items: items.slice(offset, offset + query.pageSize), page: query.page, pageSize: query.pageSize,
+          rankedTotal: ranked.length, incompleteTotal: incomplete.length,
+        };
+        const parsed = providerRankingResponseSchema.safeParse(payload);
+        if (!parsed.success) throw new HttpError(500, 'INVALID_DATABASE_RESPONSE', 'Provider ranking data could not be processed');
         return parsed.data;
       } catch (error) {
         if (error instanceof HttpError) throw error;

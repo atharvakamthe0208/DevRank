@@ -21,6 +21,28 @@ function routedFetcher(responses: Record<string, Response | (() => Promise<Respo
 }
 
 describe('LeetCode provider adapter', () => {
+  it('verifies identity using the configured profile endpoint without requiring statistics endpoints', async () => {
+    const fetcher = routedFetcher({ example: jsonResponse(profile) });
+    const adapter = createLeetCodeAdapter(fetcher, 'http://localhost:3001');
+    await expect(adapter.verifyUsername('example')).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(new URL(String(fetcher.mock.calls[0]?.[0])).pathname).toBe('/example');
+  });
+
+  it('rejects missing and unsupported profiles, while preserving retryable provider errors', async () => {
+    const missing = createLeetCodeAdapter(routedFetcher({ example: jsonResponse({}, 404) }), 'http://localhost:3001');
+    await expect(missing.verifyUsername('example')).rejects.toMatchObject({ statusCode: 404, code: 'LEETCODE_USER_NOT_FOUND' });
+    const malformed = createLeetCodeAdapter(routedFetcher({ example: jsonResponse({ unexpected: true }) }), 'http://localhost:3001');
+    await expect(malformed.verifyUsername('example')).rejects.toMatchObject({ statusCode: 502, code: 'LEETCODE_INVALID_RESPONSE' });
+    const rateLimited = createLeetCodeAdapter(routedFetcher({ example: jsonResponse({}, 429) }), 'http://localhost:3001');
+    await expect(rateLimited.verifyUsername('example')).rejects.toMatchObject({ statusCode: 429, code: 'LEETCODE_RATE_LIMITED' });
+    const unavailable = createLeetCodeAdapter(routedFetcher({ example: jsonResponse({}, 503) }), 'http://localhost:3001');
+    await expect(unavailable.verifyUsername('example')).rejects.toMatchObject({ statusCode: 503, code: 'LEETCODE_PROVIDER_UNAVAILABLE' });
+    const timeout = new Error('private timeout detail'); timeout.name = 'TimeoutError';
+    const timedOut = createLeetCodeAdapter(routedFetcher({ example: async () => { throw timeout; } }), 'http://localhost:3001');
+    await expect(timedOut.verifyUsername('example')).rejects.toMatchObject({ statusCode: 504, code: 'LEETCODE_TIMEOUT' });
+  });
+
   it('normalizes supported username and HTTPS profile URL forms', () => {
     expect(normalizeLeetCodeProfile(' example_1 ')).toEqual({
       username: 'example_1', profileUrl: 'https://leetcode.com/u/example_1/',

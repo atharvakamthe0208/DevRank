@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase/client';
 import { SignupFeatureShowcase } from './SignupFeatureShowcase';
 import { DelayedAuthLoadingScreen } from './DelayedAuthLoadingScreen';
 import { AuthLoadingScreen } from './AuthLoadingScreen';
+import { emailConfirmationRedirectTo } from './email-confirmation';
 import devrankMark from '../../assets/devrank-mark.svg';
 import './signup.css';
 
@@ -70,7 +71,7 @@ export function SignupPage() {
     if (!supabase) {setMessage('Authentication is temporarily unavailable because Supabase is not configured.');return;}
     setBusy(true);
     try {
-      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { full_name: fullName.trim() }, emailRedirectTo: `${window.location.origin}/auth/callback` } });
+      const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { full_name: fullName.trim() }, emailRedirectTo: emailConfirmationRedirectTo(window.location.origin) } });
       if (error) { setMessage('We could not create your account. Check your details and try again.'); return; }
       if (data.session) setVerifyAfterSignup(true);
       setMessage(data.session ? 'Account created. Confirm your email; your recruiter access will be available after administrator approval.' : 'If this address can be registered, Supabase will send an email confirmation. After confirmation, an administrator must approve recruiter access.');

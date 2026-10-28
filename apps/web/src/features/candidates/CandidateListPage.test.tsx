@@ -24,6 +24,20 @@ describe('candidate removal UI', () => {
     items: [candidate], total: 1, loading: false, error: '', reload: vi.fn(), deleteCandidate: vi.fn(),
   }));
 
+  it('uses a neutral candidate avatar and blue primary action in the empty state', () => {
+    useCandidatesMock.mockReturnValue({ items: [], total: 0, loading: false, error: '', reload: vi.fn(), deleteCandidate: vi.fn() });
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('No candidates yet');
+    expect(html).toContain('class="dashboard-avatar candidate-avatar-placeholder"');
+    expect(html).toContain('<svg aria-hidden="true" focusable="false" width="20"');
+    expect(html).not.toContain('candidate-empty-logo');
+    expect(html).not.toContain('devrank-mark');
+    expect(html).toContain('candidate-add-action');
+    expect(html).toContain('Add your first candidate');
+    expect(html).toContain('href="/candidates/new"');
+  });
+
   it('shows a clearly labelled permanent delete action beside candidate details', () => {
     const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
 
@@ -87,5 +101,24 @@ describe('candidate removal UI', () => {
     expect(actionsStart).toBeGreaterThan(panelStart);
     expect(html).toContain('candidate-add-action');
     expect(html).toContain('href="/candidates/new"');
+  });
+
+  it('offers page selection and requires a clear confirmation before bulk deletion', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('aria-label="Select all candidates on this page"');
+    expect(html).toContain('aria-label="Select Taylor Example"');
+    expect(html).toContain('This permanently removes the selected candidate profiles');
+    expect(html).toContain('saved GitHub and LeetCode evidence, evaluation history');
+    expect(html).toContain('>Cancel</button>');
+    expect(html).toContain('Delete permanently');
+  });
+
+  it('renders loaded candidate rows with initialized selection state', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(CandidateListPage)));
+
+    expect(html).toContain('aria-label="Select Taylor Example"');
+    expect(html).not.toContain('candidate-row-selected');
+    expect(html).toContain('class="candidate-management-table"');
   });
 });

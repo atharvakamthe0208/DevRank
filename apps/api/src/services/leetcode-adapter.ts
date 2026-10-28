@@ -5,6 +5,7 @@ import { HttpError } from '../middleware/http-error.js';
 
 const usernamePattern = /^[A-Za-z0-9_.-]{1,100}$/;
 const requestTimeoutMs = 30_000;
+const profileVerificationTimeoutMs = 8_000;
 
 const count = z.number().int().nonnegative().nullable().optional();
 const decimal = z.number().finite().nonnegative().nullable().optional();
@@ -97,6 +98,41 @@ export function createLeetCodeAdapter(
   baseUrl: string = env.LEETCODE_API_BASE_URL,
 ) {
   return {
+    async verifyUsername(input: string): Promise<void> {
+      const { username } = normalizeLeetCodeProfile(input);
+      const base = providerBaseUrl(baseUrl);
+      const endpoint = new URL(encodeURIComponent(username), base);
+      let response: Response;
+      try {
+        response = await fetcher(endpoint, {
+          method: 'GET', headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(profileVerificationTimeoutMs), redirect: 'error',
+        });
+      } catch (error) {
+        throw providerError(error);
+      }
+      if (response.status === 404) throw new HttpError(404, 'LEETCODE_USER_NOT_FOUND', 'LeetCode user was not found');
+      if (response.status === 429) throw new HttpError(429, 'LEETCODE_RATE_LIMITED', 'LeetCode statistics provider rate limit reached; retry later');
+      if (!response.ok) {
+        if (response.status >= 500) throw new HttpError(503, 'LEETCODE_PROVIDER_UNAVAILABLE', 'LeetCode statistics provider is temporarily unavailable');
+        throw new HttpError(502, 'LEETCODE_PROVIDER_ERROR', 'LeetCode statistics provider could not complete the request');
+      }
+      let body: unknown;
+      try { body = await response.json() as unknown; }
+      catch { throw new HttpError(502, 'LEETCODE_INVALID_RESPONSE', 'LeetCode statistics provider returned unreadable data'); }
+      const profile = profileResponseSchema.safeParse(body);
+      const profileError = profileProviderError(body);
+      if (profileError) throw profileError;
+      const hasIdentity = profile.success && (
+        Boolean(profile.data.username)
+        || Boolean(profile.data.profile && Object.keys(profile.data.profile).length)
+        || profile.data.ranking !== undefined || profile.data.reputation !== undefined || Boolean(profile.data.avatar)
+      );
+      if (!profile.success || !hasIdentity
+        || (profile.data.username && profile.data.username.toLowerCase() !== username.toLowerCase())) {
+        throw new HttpError(502, 'LEETCODE_INVALID_RESPONSE', 'LeetCode statistics provider returned an unsupported profile response');
+      }
+    },
     async getProfile(input: string): Promise<NormalizedLeetCodeProfile> {
       const { username, profileUrl } = normalizeLeetCodeProfile(input);
       const base = providerBaseUrl(baseUrl);

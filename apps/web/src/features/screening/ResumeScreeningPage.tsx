@@ -62,6 +62,18 @@ export function ExistingCandidateResumeLinks({ candidateIds, candidates }: { can
   })}</ul>;
 }
 
+export function ScreeningRankingGuidance() {
+  return <details className="screening-ranking-help">
+    <summary>About candidate ranking</summary>
+    <p>Ranking uses saved scores, with tied scores sharing a rank. Preliminary resume matches reflect text overlap, not verified qualifications. Score colours are visual cues only; use rankings as decision support.</p>
+  </details>;
+}
+
+export function ScreeningProgressSummary({ status, resumes }: Pick<ScreeningDetailsResponse, 'status' | 'resumes'>) {
+  if (status !== 'processing') return null;
+  return <p className="screening-progress" role="status">{screeningProgressLabel(resumes)}</p>;
+}
+
 function storedScreeningSessionId() {
   if (typeof window === 'undefined') return null;
   try { return sessionStorage.getItem(SCREENING_SESSION_STORAGE_KEY); } catch { return null; }

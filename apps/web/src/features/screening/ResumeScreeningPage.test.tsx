@@ -159,6 +159,28 @@ describe('screening progress label', () => {
   });
 });
 
+describe('screening presentation', () => {
+  it('keeps ranking explanation available in a collapsed disclosure instead of inline copy', () => {
+    const html = renderToStaticMarkup(createElement(ScreeningRankingGuidance));
+    expect(html).toContain('<details class="screening-ranking-help">');
+    expect(html).toContain('About candidate ranking');
+    expect(html).toContain('Preliminary resume matches reflect text overlap');
+  });
+
+  it('shows progress without exposing the session id/status line', () => {
+    const html = renderToStaticMarkup(createElement(ScreeningProgressSummary, {
+      status: 'processing',
+      resumes: [
+        { id: 'one', status: 'completed', candidateId: null, filename: 'one.pdf', candidate: null, evaluation: null },
+        { id: 'two', status: 'processing', candidateId: null, filename: 'two.pdf', candidate: null, evaluation: null },
+      ],
+    }));
+    expect(html).toContain('Evaluated 1 of 2 candidates');
+    expect(html).not.toContain('Session');
+    expect(renderToStaticMarkup(createElement(ScreeningProgressSummary, { status: 'completed', resumes: [] }))).toBe('');
+  });
+});
+
 describe('saved Insights assessment refresh after screening', () => {
   it('refreshes only explicitly linked terminal results using the compatible role and saved resume IDs', async () => {
     const request = vi.fn(async () => ({}));
