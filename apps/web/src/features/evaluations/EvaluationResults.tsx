@@ -1,12 +1,84 @@
 import type { Candidate, EvaluationResponse, PersistedEvaluation } from '@devrank/contracts';
-import { finalRubricId, scoringCategories } from '@devrank/contracts';
-import { categoryEvidenceStatus, EvidenceValue, readableEvidenceLabel, readableProvenance } from '../evaluation/evidence-presentation';
+import { scoringCategories } from '@devrank/contracts';
+import { EvaluationCategoryCard } from './EvaluationCategoryCard';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import { AnimatedMetric } from '../../components/metrics/KpiCards';
 import './evaluation.css';
 
 function displayDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function conciseCategoryDescription(
+  score: EvaluationResponse['categoryScores'][number],
+  evidenceById: Map<string, EvaluationResponse['evidence'][number]>,
+  report?: NonNullable<EvaluationResponse['finalReport']>['categories'][number],
+): string {
+  const dataStatus = report?.metrics.dataStatus;
+  if (score.categoryId === 'problem_solving_dsa' && score.score === undefined
+    && typeof dataStatus === 'string' && /leetcode/i.test(dataStatus)
+    && /(no saved|no usable|snapshot|statistics)/i.test(dataStatus)) {
+    return 'A LeetCode username is configured, but no saved statistics snapshot is available. No zero is inferred.';
+  }
+  if (score.scoreBasis === 'optional_missing_zero') {
+    return 'No LeetCode profile was provided; the rubric applies its optional-profile policy.';
+  }
+  const value = (key: string): number | undefined => {
+    const metric = report?.metrics[key];
+    return typeof metric === 'number' && Number.isFinite(metric) ? metric : undefined;
+  };
+  const text = (key: string): string | undefined => {
+    const metric = report?.metrics[key];
+    return typeof metric === 'string' && metric.trim() ? metric.trim() : undefined;
+  };
+  switch (score.categoryId) {
+    case 'project_portfolio': {
+      const count = value('publicRepositoryCount');
+      if (count !== undefined) return `${count} public ${count === 1 ? 'repository is' : 'repositories are'} included in the saved snapshot.`;
+      break;
+    }
+    case 'technical_skills': {
+      const languages = text('languagesObserved');
+      const analyzed = value('repositoriesAnalyzed');
+      const total = value('totalEligibleRepositories');
+      if (languages && analyzed !== undefined && total !== undefined) return `${languages.split(',').length} detected languages: ${languages}; ${analyzed} of ${total} eligible repositories analyzed.`;
+      if (languages) return `Languages observed: ${languages}.`;
+      break;
+    }
+    case 'development_activity': {
+      const commits = value('commitContributions') ?? value('totalCommitContributions');
+      const days = value('activeCommitDays');
+      if (commits !== undefined) return `${commits} attributable commit contributions${days === undefined ? '' : ` across ${days} active days`} are recorded in the saved evidence.`;
+      break;
+    }
+    case 'collaboration': {
+      const items = ([['pullRequestsOpened', 'pull requests'], ['issuesOpened', 'issues'], ['reviewsSubmitted', 'reviews']] as const)
+        .flatMap(([key, label]) => { const count = value(key); return count === undefined ? [] : [`${count} ${label}`]; });
+      if (items.length) return `Saved GitHub activity includes ${items.join(', ')}.`;
+      break;
+    }
+    case 'current_year_contributions': {
+      const count = value('totalContributions');
+      const year = value('year');
+      if (count !== undefined) return `${count} contributions are recorded${year === undefined ? '' : ` for ${year}`} in the saved UTC calendar evidence.`;
+      break;
+    }
+    case 'problem_solving_dsa': {
+      const counts = ([['easySolved', 'easy'], ['mediumSolved', 'medium'], ['hardSolved', 'hard']] as const)
+        .flatMap(([key, label]) => { const count = value(key); return count === undefined ? [] : [`${count} ${label}`]; });
+      if (counts.length) return `Saved problem-solving evidence includes ${counts.join(', ')} problems.`;
+      break;
+    }
+  }
+  const evidenceDescription = score.evidenceRefs.map((id) => evidenceById.get(id)?.description.trim()).find((description) => description);
+  if (evidenceDescription) {
+    const sentence = evidenceDescription.split(/(?<=[.!?])\s+/)[0];
+    if (!/(arithmetic mean|normalized evidence value|scored\s*[·-]|supporting item|evidence available)/i.test(sentence)) {
+      return sentence.length > 180 ? `${sentence.slice(0, 177).trimEnd()}…` : sentence;
+    }
+  }
+  if (score.score === undefined) return 'No comparable evidence is available; this category is not scored.';
+  return 'Saved evidence is available for this category.';
 }
 
 export function EvaluationResults({ candidate, evaluation }: { candidate: Candidate; evaluation: PersistedEvaluation & { result: EvaluationResponse } }) {
@@ -25,11 +97,9 @@ export function EvaluationResults({ candidate, evaluation }: { candidate: Candid
     <section className="evaluation-report-panel" aria-labelledby="evaluation-categories-title"><div className="evaluation-report-header"><div className="evaluation-report-title"><span className="evaluation-report-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3.75h7l4 4v12.5H7a2 2 0 0 1-2-2v-12.5a2 2 0 0 1-2-2Z"/><path d="M14 4v4h4M8.5 12h7M8.5 15.5h7"/></svg></span><div><h2 id="evaluation-categories-title">Evaluation report</h2><p>Optional missing LeetCode profiles use the rubric-defined DSA zero policy.</p></div></div><details className="evaluation-about-scoring"><summary>About scoring</summary><p>{result.calculationExplanation}</p></details></div><div className="evaluation-report-grid">{scoringCategories.map((category) => {
       const score = result.categoryScores.find((item) => item.categoryId === category.id)!;
       const reportCategory = result.finalReport?.categories.find(({ categoryId }) => categoryId === category.id);
-      return <article className="evaluation-category-card" key={category.id} data-category={category.id} data-score-state={score.score === undefined ? 'unscored' : 'scored'}><div className="evaluation-category-heading"><h3>{category.displayName}</h3>{score.score !== undefined ? <strong><AnimatedMetric value={score.score} decimals={String(score.score).split('.')[1]?.length ?? 0}/><small>/100</small></strong> : <span className="category-unscored">Not scored</span>}</div>{score.score !== undefined && <progress className="evaluation-score-progress" max="100" value={score.score} aria-label={`${category.displayName}: ${score.score} out of 100`}/>}<p>{score.explanation}</p><small>{categoryEvidenceStatus(score, result.evidence, result.platformEvidence, reportCategory)}{score.status === 'scored' && score.evidenceRefs.length > 0 ? ` · ${score.evidenceRefs.length} supporting item${score.evidenceRefs.length === 1 ? '' : 's'}` : ''}</small>{score.evidenceRefs.length > 0 && <details><summary>View evidence ({score.evidenceRefs.length})</summary><ul>{score.evidenceRefs.map((id) => { const item = evidenceById.get(id); return <li key={id}><strong>{readableProvenance(item?.source ?? 'Evidence')}:</strong> {item?.description ?? 'Saved supporting evidence'}{item?.observedAt ? ` · observed ${displayDate(item.observedAt)}` : ''}</li>; })}</ul></details>}</article>;
+      const leetcodeUnavailable = category.id === 'problem_solving_dsa' && score.score === undefined && typeof reportCategory?.metrics.dataStatus === 'string' && /leetcode/i.test(reportCategory.metrics.dataStatus) && /(no saved|no usable|snapshot|statistics)/i.test(reportCategory.metrics.dataStatus);
+      return <EvaluationCategoryCard key={category.id} categoryId={category.id} title={category.displayName} score={score.score} availabilityLabel={score.score === undefined && (reportCategory?.status === 'unavailable' || leetcodeUnavailable) ? 'Unavailable' : undefined} showProgress={score.score !== undefined && score.scoreBasis !== 'optional_missing_zero'} description={conciseCategoryDescription(score, evidenceById, reportCategory)} evidence={score.evidenceRefs.flatMap((id) => { const item = evidenceById.get(id); return item ? [{ label: item.source, description: item.description, observedAt: item.observedAt }] : []; })}/>;
     })}</div></section>
-    {result.platformEvidence && result.platformEvidence.length > 0 && <details className="evaluation-snapshot-disclosure platform-context"><summary>Saved source snapshots ({result.platformEvidence.length})</summary><p>Provider snapshots are unverified inputs. Values retain their source and capture time; they do not add scores beyond the saved evaluation.</p><div className="evaluation-snapshot-grid">{result.platformEvidence.map((item) => <article key={item.evidenceId}><h3><span className="platform-heading"><PlatformLogo platform={item.source}/>{item.source === 'github' ? 'GitHub' : 'LeetCode'}</span> · {readableEvidenceLabel(item.evidenceType)}</h3><p>{readableProvenance(item.provenance)} · {item.availability.replaceAll('_', ' ')} · saved {displayDate(item.observedAt)} · freshness not assessed</p><dl>{Object.entries(item.normalizedValue).filter(([, value]) => value !== undefined).map(([name, value]) => <div key={name}><dt>{readableEvidenceLabel(name)}</dt><dd><EvidenceValue value={value}/></dd></div>)}</dl>{item.categoryMappings.length > 0 && <p>Evidence mapped to {item.categoryMappings.map(({ categoryId, rubricId }) => rubricId === finalRubricId
-      ? scoringCategories.find(({ id }) => id === categoryId)?.displayName ?? categoryId
-      : 'historical proposal context').join(', ')}; no additional score is inferred outside the saved result.</p>}{item.limitations.length > 0 && <ul>{item.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul>}</article>)}</div></details>}
     <p className="evaluation-disclaimer">{result.decisionSupportNotice} Scores describe the saved evidence and do not establish engineering quality or candidate identity.</p>
   </main>;
 }

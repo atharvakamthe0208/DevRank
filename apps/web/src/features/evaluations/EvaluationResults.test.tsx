@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { candidateSchema, evaluationResponseSchema, persistedEvaluationReadSchema, persistedEvaluationSchema, scoringCategories, type EvaluationResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
+import { buildFinalEvaluationReport, candidateSchema, evaluationResponseSchema, persistedEvaluationReadSchema, persistedEvaluationSchema, scoringCategories, type EvaluationResponse, type PersistedEvaluation, type PersistedEvaluationRead } from '@devrank/contracts';
 import { describe, expect, it } from 'vitest';
 import { EvaluationResults } from './EvaluationResults';
 import { LegacyEvaluationResults } from './LegacyEvaluationResults';
@@ -50,8 +50,8 @@ describe('evaluation result view', () => {
     expect(html).not.toContain('Required evidence gaps remain unscored');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     expect(html.match(/<progress/g)).toHaveLength(6);
-    expect(html).toContain('View evidence (1)');
-    expect(html).toContain('<details><summary>View evidence (1)</summary>');
+    expect(html).toContain('View evidence <span aria-hidden="true">→</span>');
+    expect(html).toContain('<details class="evaluation-evidence-disclosure"><summary>View evidence <span aria-hidden="true">→</span></summary>');
     expect(html).toContain('data-score-state="scored"');
     expect(html).not.toContain('AI evidence summary');
     expect(html).toContain('Project Portfolio');
@@ -76,6 +76,49 @@ describe('evaluation result view', () => {
     expect(html).not.toContain('OVERALL SCORE</span><strong class="evaluation-overall-score">0');
   });
 
+  it('keeps internal score explanations out of the default saved category card', () => {
+    const saved = evaluation(true);
+    const result = evaluationResponseSchema.parse({
+      ...saved.result,
+      categoryScores: saved.result.categoryScores.map((item) => item.categoryId === 'project_portfolio'
+        ? { ...item, explanation: 'Arithmetic mean of 1 available normalized evidence value(s), rounded to two decimal places. Scored · evidence available · 1 supporting item' }
+        : item),
+    });
+    const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result } }));
+    const portfolioCard = html.match(/<article class="evaluation-category-card"[^>]*data-category="project_portfolio"[\s\S]*?<\/article>/)?.[0];
+    expect(portfolioCard).toContain('Project Portfolio');
+    expect(portfolioCard).toContain('Evidence for Project Portfolio');
+    expect(portfolioCard).toContain('View evidence <span aria-hidden="true">→</span>');
+    expect(portfolioCard).not.toContain('Arithmetic mean');
+    expect(portfolioCard).not.toContain('Scored · evidence available');
+    expect(portfolioCard).not.toContain('supporting item');
+  });
+
+  it('shows configured but unavailable LeetCode as unscored with its saved-snapshot reason', () => {
+    const saved = evaluation(false);
+    const baseReport = buildFinalEvaluationReport([], { leetcodeUsernameConfigured: true, leetcodeSnapshotPresent: false });
+    const finalReport = {
+      ...baseReport,
+      categories: baseReport.categories.map((category) => category.categoryId === 'problem_solving_dsa'
+        ? { ...category, metrics: { ...category.metrics, dataStatus: 'A LeetCode username is configured, but no saved statistics snapshot is available. No zero is inferred.' } }
+        : category),
+    };
+    const result = evaluationResponseSchema.parse({
+      ...saved.result,
+      categoryScores: saved.result.categoryScores.map((item) => ({ categoryId: item.categoryId, displayName: item.displayName, status: 'insufficient_evidence' as const, evidenceRefs: [], explanation: item.explanation })),
+      evidence: [],
+      missingEvidence: scoringCategories.map(({ id }) => id),
+      finalReport,
+    });
+    const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result } }));
+    const dsaCard = html.match(/<article class="evaluation-category-card"[^>]*data-category="problem_solving_dsa"[\s\S]*?<\/article>/)?.[0];
+    expect(dsaCard).toContain('Not scored');
+    expect(dsaCard).toContain('Unavailable');
+    expect(dsaCard).toContain('A LeetCode username is configured, but no saved statistics snapshot is available. No zero is inferred.');
+    expect(dsaCard).not.toContain('<progress');
+    expect(dsaCard).not.toContain('0 / 100');
+  });
+
   it('shows a policy-defined missing LeetCode value as zero without fabricating supporting evidence', () => {
     const saved = evaluation(true);
     const categories = saved.result.categoryScores.map((item) => item.categoryId === 'problem_solving_dsa'
@@ -86,14 +129,14 @@ describe('evaluation result view', () => {
     const result = evaluationResponseSchema.parse({ ...saved.result, categoryScores: categories, evidence, overallScore });
     const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, status: 'completed', result } }));
     const dsaCard = html.match(/<article class="evaluation-category-card"[^>]*data-category="problem_solving_dsa"[\s\S]*?<\/article>/)?.[0];
-    expect(dsaCard).toContain('aria-label="0" aria-live="off">0</span><small>/100</small>');
-    expect(dsaCard).toContain('LeetCode profile not provided · policy-defined zero');
+    expect(dsaCard).toContain('aria-label="0" aria-live="off">0</span><small> / 100</small>');
+    expect(dsaCard).toContain('No LeetCode profile was provided; the rubric applies its optional-profile policy.');
     expect(dsaCard).not.toContain('supporting item');
     expect(dsaCard).not.toContain('View evidence');
     expect(html).toContain(`aria-label="Overall score ${overallScore} out of 100"`);
   });
 
-  it('labels proposal-only platform context without adding categories or scores', () => {
+  it('hides saved source snapshots while keeping report categories and evidence controls', () => {
     const saved = evaluation(true);
     const result = evaluationResponseSchema.parse({ ...saved.result, platformEvidence: [{
       evidenceId: 'github-row:current-year', candidateId: candidate.id, source: 'github', evidenceType: 'current_year_contributions',
@@ -104,14 +147,14 @@ describe('evaluation result view', () => {
     }] });
     const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result } }));
     expect(html).toContain('Current-Year Contributions');
-    expect(html).toContain('Current-Year Contributions; no additional score is inferred');
-    expect(html).toContain('44');
-    expect(html).toContain('Current-Year Contributions');
-    expect(html).toContain('44');
+    expect(html).not.toContain('Saved source snapshots');
+    expect(html).not.toContain('Provider snapshots are unverified inputs');
+    expect(html.match(/class="evaluation-category-card"/g)).toHaveLength(6);
+    expect(html).toContain('View evidence <span aria-hidden="true">→</span>');
     expect(html).toContain('Overall score');
     expect(html.match(/<progress/g)).toHaveLength(6);
     expect(html).toContain('83.45');
-    expect(html).toContain('Scored · partial source evidence');
+    expect(html).not.toContain('Scored · partial source evidence');
   });
 
   it('renders validated v1 history with all six original categories and no recalculated score', () => {
@@ -141,5 +184,39 @@ describe('evaluation result view', () => {
     expect(v3Html).toContain('HISTORICAL EVALUATION · V3');
     expect(v3Html).toContain('Communication Skills');
     expect(v3Html).not.toContain('Final GitHub + LeetCode evaluation report');
+
+    const historicalWithEvidence = persistedEvaluationReadSchema.parse({
+      ...historical,
+      result: {
+        ...historical.result,
+        categoryScores: historical.result.categoryScores.map((category, index) => index === 0
+          ? { ...category, score: 81.15, status: 'scored' as const, evidenceRefs: ['legacy-evidence'], explanation: 'Arithmetic mean of 1 available normalized evidence value(s), rounded to two decimal places.' }
+          : category),
+        evidence: [{ evidenceId: 'legacy-evidence', evidenceType: 'project', source: 'GitHub', description: 'Six public repositories are included in the saved snapshot.', normalizedValue: 6, verificationStatus: 'verified', categoryId: categories[0], availability: 'available' }],
+        missingEvidence: [...categories.slice(1)],
+      },
+    });
+    const historicalWithEvidenceHtml = renderToStaticMarkup(createElement(LegacyEvaluationResults, { candidate, evaluation: historicalWithEvidence as Exclude<PersistedEvaluationRead, PersistedEvaluation> }));
+    const historicalPortfolio = historicalWithEvidenceHtml.match(/<article class="evaluation-category-card"[^>]*data-category="technical_skills"[\s\S]*?<\/article>/)?.[0];
+    expect(historicalPortfolio).toContain('81.15');
+    expect(historicalPortfolio).toContain('Six public repositories are included in the saved snapshot.');
+    expect(historicalPortfolio).toContain('View evidence <span aria-hidden="true">→</span>');
+    expect(historicalPortfolio).not.toContain('Arithmetic mean');
+
+    const historicalUnavailable = {
+      ...historical,
+      result: {
+        ...historical.result,
+        categoryScores: historical.result.categoryScores.map((category) => category.categoryId === 'problem_solving_dsa'
+          ? { ...category, explanation: 'A LeetCode username is configured, but no saved statistics snapshot is available. No zero is inferred.' }
+          : category),
+      },
+    } as Exclude<PersistedEvaluationRead, PersistedEvaluation>;
+    const historicalUnavailableHtml = renderToStaticMarkup(createElement(LegacyEvaluationResults, { candidate, evaluation: historicalUnavailable }));
+    const historicalDsa = historicalUnavailableHtml.match(/<article class="evaluation-category-card"[^>]*data-category="problem_solving_dsa"[\s\S]*?<\/article>/)?.[0];
+    expect(historicalDsa).toContain('Not scored');
+    expect(historicalDsa).toContain('Unavailable');
+    expect(historicalDsa).toContain('A LeetCode username is configured, but no saved statistics snapshot is available. No zero is inferred.');
+    expect(historicalDsa).not.toContain('<progress');
   });
 });
