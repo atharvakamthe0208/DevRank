@@ -52,5 +52,8 @@ describe('add candidate form', () => {
     expect(html).toContain('value="jlee"');
     expect(html).toContain('Draft restored from this browser tab');
     expect(html).toContain('Discard draft');
+    expect(html).toContain('Verify GitHub username');
+    expect(html).toContain('Enter a username to verify');
+    expect(html).toMatch(/<button class="primary-button" type="submit" disabled=""/);
   });
 });

@@ -1,4 +1,4 @@
-import { candidateComparisonSchema, rankingQuerySchema } from '@devrank/contracts';
+import { candidateComparisonSchema, providerRankingQuerySchema, rankingQuerySchema } from '@devrank/contracts';
 import type { Request } from 'express';
 import { HttpError } from '../middleware/http-error.js';
 import { insightsRepository, type InsightsRepository } from '../repositories/insights-repository.js';
@@ -19,6 +19,10 @@ export function createInsightsController(repository: InsightsRepository = insigh
     ranking: asyncHandler(async (request, response) => {
       const input = rankingQuerySchema.parse(request.query);
       response.json(await repository.ranking(authContext(request), input));
+    }),
+    providerRanking: asyncHandler(async (request, response) => {
+      const input = providerRankingQuerySchema.parse(request.query);
+      response.json(await repository.providerRanking(authContext(request), input));
     }),
   };
 }

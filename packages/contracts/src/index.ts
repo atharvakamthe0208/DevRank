@@ -16,6 +16,7 @@ export * from './platform-data.js';
 export * from './proposed-rubric.js';
 export * from './proposed-report.js';
 export * from './ranking.js';
+export * from './provider-ranking.js';
 export * from './recruiter-profile.js';
 export * from './scoring.js';
 export * from './screening.js';
