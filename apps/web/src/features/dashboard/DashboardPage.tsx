@@ -18,6 +18,16 @@ export function DashboardWelcome({ firstName }: { firstName?: string }) {
   </section>;
 }
 
+export function DashboardEvaluationRow({ item, roleLabel, reportRoleLabel }: { item: DashboardResponse['recentEvaluations'][number]; roleLabel: string; reportRoleLabel: string }) {
+  return <article className="dashboard-evaluation-row">
+    <Link className="dashboard-candidate-link" to={`/candidates/${item.candidateId}`}><span className="dashboard-avatar" aria-hidden="true">{item.candidateName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span><strong>{item.candidateName}</strong></span></Link>
+    <span className="dashboard-role">{roleLabel}</span>
+    <span className={`dashboard-status status-${item.status}`}><i aria-hidden="true" />{dashboardEvaluationStatusLabel(item.status)}</span>
+    <span className="dashboard-score">{item.score === undefined ? <span className="dashboard-no-score">{dashboardScoreAvailabilityLabel(item.status)}</span> : <><strong>{item.score}</strong><small>/ 100</small></>}</span>
+    <Link className="dashboard-open-link" to={`/evaluations/${item.id}`} aria-label={`View ${item.candidateName} ${reportRoleLabel} report`}>View report <span aria-hidden="true">↗</span></Link>
+  </article>;
+}
+
 export function DashboardPage() {
   const { profile, session } = useAuth();
   const { items, loading: candidatesLoading, error: candidatesError, reload } = useCandidates(1, 5);
@@ -108,14 +118,7 @@ export function DashboardPage() {
     <section className="dashboard-panel" aria-labelledby="recent-evaluations-heading">
       <div className="dashboard-section-heading"><div><span className="dashboard-kicker">HOME ACTIVITY</span><h2 id="recent-evaluations-heading">Recent evaluations</h2></div><Link className="dashboard-text-link" to="/evaluations">Run evaluation <span aria-hidden="true">→</span></Link></div>
       {loading ? <p className="dashboard-state" role="status">Loading evaluation activity…</p> : error ? <div className="dashboard-state" role="alert"><p>Evaluation activity could not be loaded.</p><button className="dashboard-secondary-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div> : dashboard?.recentEvaluations.length ? <div className="dashboard-evaluation-list">
-        {dashboard.recentEvaluations.slice(0, 5).map((item) => <article className="dashboard-evaluation-row" key={item.id}>
-          <Link className="dashboard-candidate-link" to={`/candidates/${item.candidateId}`}><span className="dashboard-avatar" aria-hidden="true">{item.candidateName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')}</span><span><strong>{item.candidateName}</strong></span></Link>
-          <span className="dashboard-role">{evaluationRoles[item.id] ?? (evaluationRolesLoading ? 'Loading role…' : 'Role unavailable')}</span>
-          <span className={`dashboard-status status-${item.status}`}><i aria-hidden="true" />{dashboardEvaluationStatusLabel(item.status)}</span>
-          <span className="dashboard-score">{item.score === undefined ? <span className="dashboard-no-score">{dashboardScoreAvailabilityLabel(item.status)}</span> : <><strong>{item.score}</strong><small>/ 100</small></>}</span>
-          <time dateTime={item.createdAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(item.createdAt))}</time>
-          <Link className="dashboard-open-link" to={`/evaluations/${item.id}`} aria-label={`View ${item.candidateName} ${evaluationRoles[item.id] ?? 'evaluation'} report`}>View report <span aria-hidden="true">↗</span></Link>
-        </article>)}
+        {dashboard.recentEvaluations.slice(0, 5).map((item) => <DashboardEvaluationRow key={item.id} item={item} roleLabel={evaluationRoles[item.id] ?? (evaluationRolesLoading ? 'Loading role…' : 'Role unavailable')} reportRoleLabel={evaluationRoles[item.id] ?? 'evaluation'}/>)}
       </div> : <div className="dashboard-state"><h3>No evaluations yet</h3><p>Run an evaluation to see its saved status and score here.</p><Link className="dashboard-secondary-button" to="/evaluations">Start an evaluation</Link></div>}
     </section>
 

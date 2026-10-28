@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   candidateCreateSchema,
+  candidatePlatformVerificationRequestSchema,
   candidateBulkImportRequestSchema,
   candidateImportRowsSchema,
   candidateIdParamsSchema,
@@ -31,6 +32,7 @@ export function createCandidatesRouter(
   router.get('/', validateQuery(candidateListQuerySchema), controller.list);
   router.post('/bulk-import/preview', validateBody(candidateImportRowsSchema), controller.previewImport);
   router.post('/bulk-import', validateBody(candidateBulkImportRequestSchema), controller.bulkImport);
+  router.post('/verify-platform', validateBody(candidatePlatformVerificationRequestSchema), controller.verifyPlatform);
   router.post('/', validateBody(candidateCreateSchema), controller.create);
   router.post(
     '/:id/evaluations',

@@ -20,6 +20,7 @@ describe('dashboard, comparison, and ranking routes', () => {
       dashboard: vi.fn(async () => ({ candidateCount: 0, evaluationCount: 0, statusCounts: { pending: 0, in_progress: 0, completed: 0, insufficient_evidence: 0, failed: 0 }, recentEvaluations: [] })),
       compare: vi.fn(async () => ({ roleId: 'software_developer', scoringVersion: '1.0.0', items: [] })),
       ranking: vi.fn(async () => ({ roleId: 'software_developer', scoringVersion: '1.0.0', items: [], page: 1, pageSize: 20, total: 0, excluded: { incomplete: 0, scoringVersionMismatch: 0, missingScore: 0, invalidSnapshot: 0 } })),
+      providerRanking: vi.fn(async () => ({ mode: 'github_leetcode', roleId: 'software_developer', rubricId: 'github_leetcode_v4', scoringVersion: '4.0.1', providerWeights: { github: 50, leetcode: 50 }, items: [], page: 1, pageSize: 20, rankedTotal: 0, incompleteTotal: 0 })),
     };
     const app = express(); app.use(express.json());
     const authMiddleware: express.RequestHandler = (req, _res, next) => {
@@ -46,10 +47,18 @@ describe('dashboard, comparison, and ranking routes', () => {
       const ranking = await fetch(`${origin}/rankings?roleId=software_developer&page=1&pageSize=20`);
       expect(ranking.status).toBe(200);
       expect(repository.ranking).toHaveBeenCalledWith(expect.anything(), { roleId: 'software_developer', page: 1, pageSize: 20 });
+      const providerRanking = await fetch(`${origin}/rankings/github-leetcode?roleId=software_developer`);
+      expect(providerRanking.status).toBe(200);
+      expect(repository.providerRanking).toHaveBeenCalledWith(expect.anything(), { roleId: 'software_developer', page: 1, pageSize: 20 });
+      const clientScore = await fetch(`${origin}/rankings/github-leetcode?roleId=software_developer&combinedScore=100`);
+      expect(clientScore.status).toBe(400);
+      expect(repository.providerRanking).toHaveBeenCalledTimes(1);
       const unauthenticated = await fetch(`${origin}/dashboard`, { headers: { 'x-test-auth': 'missing' } });
       expect(unauthenticated.status).toBe(401);
       const pending = await fetch(`${origin}/rankings?roleId=software_developer`, { headers: { 'x-test-approval': 'pending' } });
       expect(pending.status).toBe(403);
+      const pendingProvider = await fetch(`${origin}/rankings/github-leetcode?roleId=software_developer`, { headers: { 'x-test-approval': 'pending' } });
+      expect(pendingProvider.status).toBe(403);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }

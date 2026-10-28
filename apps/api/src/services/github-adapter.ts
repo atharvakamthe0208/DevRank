@@ -142,6 +142,14 @@ export function createGitHubAdapter(
   }
 
   return {
+    async verifyUsername(input: string): Promise<void> {
+      const username = normalizeGitHubUsername(input);
+      const profileResponse = await getJson(new URL(`https://api.github.com/users/${encodeURIComponent(username)}`));
+      const profile = z.object({ login: z.string() }).passthrough().safeParse(profileResponse.data);
+      if (!profile.success || profile.data.login.toLowerCase() !== username.toLowerCase()) {
+        throw new HttpError(502, 'GITHUB_INVALID_RESPONSE', 'GitHub returned an unsupported profile response');
+      }
+    },
     async getProfile(profile: string): Promise<GitHubProfileResponse> {
       const username = normalizeGitHubUsername(profile);
       const apiRoot = 'https://api.github.com';

@@ -71,12 +71,18 @@ describe('screening ranking table data', () => {
     expect(scorePresentation(resume)).toEqual({ score: 81.11, label: 'Preliminary match', preliminary: true });
   });
 
-  it('keeps an insufficient-evidence evaluation status visible even when it includes a numeric score', () => {
+  it('does not treat an insufficient-evidence total as a score', () => {
     const insufficient: ScreeningScore = { rubricVersion: 'resume-job-match-1.0.0', scoreType: 'resume_job_match', status: 'insufficient_evidence', score: 54,
       evidenceCoverage: 40, categories: [], requirements: [] } as unknown as ScreeningScore;
     const resume = { ...details.resumes[0], evaluation: insufficient };
     expect(screeningStatusLabel(resume)).toBe('Insufficient evidence');
-    expect(scorePresentation(resume)).toEqual({ score: 54, label: 'Validated score', preliminary: false });
+    expect(scorePresentation(resume)).toBeNull();
+  });
+
+  it('labels a non-complete evaluation score as preliminary rather than validated', () => {
+    const provisional: ScreeningScore = { rubricVersion: 'resume-job-match-1.0.0', scoreType: 'resume_job_match', status: 'provisional', score: 54,
+      evidenceCoverage: 40, categories: [], requirements: [] } as unknown as ScreeningScore;
+    expect(scorePresentation({ ...details.resumes[0], evaluation: provisional })).toEqual({ score: 54, label: 'Preliminary match', preliminary: true });
   });
 
   it('always prefers a validated score when both validated and preliminary results exist', () => {

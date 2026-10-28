@@ -10,6 +10,9 @@
 .insights-panel-heading label { display: grid; gap: 5px; color: #777a70; font-size: 10px; }
 .insights-panel-heading select { min-height: 36px; max-width: 230px; border: 1px solid #e8e9e4; border-radius: 6px; padding: 0 10px; background: #fff; color: #373932; }
 .insights-panel-heading .primary-button { flex: none; }
+.insights-ranking-controls { display: flex; align-items: flex-end; gap: 10px; }
+.insights-ranking-controls label { display: grid; gap: 5px; color: #777a70; font-size: var(--type-supporting); }
+.insights-ranking-controls select { min-height: 40px; max-width: 230px; border: 1px solid #e8e9e4; border-radius: 6px; padding: 0 10px; background: #fff; color: #373932; font: 500 var(--type-control) var(--font-family-base); }
 .insights-state { display: grid; justify-items: center; gap: 9px; min-height: 110px; align-content: center; padding: 22px; text-align: center; color: #777a70; font-size: 11px; }
 .insights-state h3 { margin: 0; color: #34362f; font: 600 15px var(--font-family-base); }
 .insights-state p { margin: 0; max-width: 470px; line-height: 1.6; }
@@ -18,7 +21,7 @@
 .insights-table caption.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .insights-table th { padding: 10px; background: #fafaf8; color: #878980; font-size: 9px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
 .insights-table td { padding: 12px 10px; border-bottom: 1px solid #f0f0ed; color: #6f7269; white-space: nowrap; }
-.insights-table a { color: #477457; }
+.insights-table a { color: #000000; }
 .insights-footnote, .insights-disclaimer { margin: 12px 0 0; color: #85877f; font-size: 10px; line-height: 1.6; }
 .evaluation-choice-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .evaluation-choice-list label { display: flex; min-width: 0; align-items: flex-start; gap: 10px; padding: 11px; border: 1px solid #ededeb; border-radius: 7px; cursor: pointer; }
@@ -34,7 +37,7 @@
 .comparison-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
 .comparison-cards article { display: grid; gap: 7px; min-width: 0; padding: 13px; border: 1px solid #ededeb; border-radius: 7px; }
 .comparison-cards article > span { overflow-wrap: anywhere; color: #55574f; font-size: 10px; }
-.comparison-cards strong { color: #315d48; font: 600 23px var(--font-family-base); }
+.comparison-cards strong { color: #000000; font: 600 23px var(--font-family-base); }
 .comparison-cards strong small { padding-left: 4px; font: 400 9px var(--font-family-base); color: #85877f; }
 .comparison-cards article > small { color: #85877f; font-size: 9px; text-transform: capitalize; }
 .insights-disclaimer { margin: 0; }
@@ -57,6 +60,10 @@
 .insights-table { font-size: var(--type-supporting); }
 .insights-table th { font-size: var(--type-metadata); }
 .insights-table td { padding-block: 14px; }
+.provider-ranking-table { min-width: 850px; }
+.provider-ranking-table td small { color: #777a70; font-size: var(--type-metadata); }
+.provider-ranking-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 12px; color: #596a86; font-size: var(--type-metadata); }
+.provider-ranking-pagination .secondary-button { min-height: 36px; padding-inline: 12px; }
 .insights-footnote, .insights-disclaimer { font-size: var(--type-metadata); }
 .insights-state { font-size: var(--type-supporting); }
 .insights-state h3 { font-size: var(--type-card-heading); font-weight: 700; }
@@ -73,6 +80,8 @@
   .insights-panel { padding: 15px 12px; }
   .insights-panel-heading { flex-direction: column; }
   .insights-panel-heading select, .insights-panel-heading .primary-button { width: 100%; max-width: none; }
+  .insights-ranking-controls { width: 100%; flex-direction: column; align-items: stretch; }
+  .insights-ranking-controls label, .insights-ranking-controls select { width: 100%; max-width: none; }
   .insights-table { min-width: 520px; }
   .insights-scroll-hint { display: block; margin: 0 0 8px; color: #596a86; font-size: var(--type-metadata); line-height: 1.45; }
   .evaluation-choice-list { grid-template-columns: 1fr; }

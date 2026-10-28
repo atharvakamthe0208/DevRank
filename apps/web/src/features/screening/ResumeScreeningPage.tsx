@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
-import { screeningComparisonResponseSchema, screeningDetailsResponseSchema, screeningRankingResponseSchema, screeningReportResponseSchema, screeningRetryableErrorCodes, screeningRetryResponseSchema, screeningSubmissionResponseSchema, type ScreeningComparisonResponse, type ScreeningDetailsResponse, type ScreeningReportResponse } from '@devrank/contracts';
+import { Link } from 'react-router-dom';
+import { candidateListResponseSchema, isResumeRoleCompatible, screeningComparisonResponseSchema, screeningDetailsResponseSchema, screeningRankingResponseSchema, screeningReportResponseSchema, screeningRetryableErrorCodes, screeningRetryResponseSchema, screeningSubmissionResponseSchema, type ScreeningComparisonResponse, type ScreeningDetailsResponse, type ScreeningReportResponse } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { screeningReportCsv } from './report-export';
@@ -9,15 +10,31 @@ import { ScreeningResultList } from './ScreeningResultList';
 import { screeningProgressLabel } from './screening-progress';
 import { createUserSessionCache } from './screening-navigation-cache';
 import { isValidScreeningSessionId } from './screening-restore';
+import { SessionDraftNotice } from '../../lib/forms/SessionDraftNotice';
+import { useSessionDraft } from '../../lib/forms/useSessionDraft';
+import { pollScreeningUntilSettled } from './screening-polling';
+import { buildScreeningRequest } from './screening-request';
+import { screeningErrorMessage } from './screening-errors';
 import './resume-screening-page.css';
 
 const MAX_FILES = 20;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx'];
 const SCREENING_POLL_MS = 1000;
+const SCREENING_MAX_POLL_ATTEMPTS = 10;
 const SCREENING_SESSION_STORAGE_KEY = 'devrank.resume-screening.session-id';
+const UNIFIED_ROLE_IDS = ['software_developer', 'ai_ml_engineer', 'data_analyst'] as const;
+type ScreeningFormDraft = { jobTitle: string; jobDescription: string };
+const emptyScreeningDraft: ScreeningFormDraft = { jobTitle: '', jobDescription: '' };
 
-type SelectedResume = { id: string; file: File };
+function isScreeningDraft(value: unknown): value is ScreeningFormDraft {
+  if (typeof value !== 'object' || value === null || !('jobTitle' in value) || !('jobDescription' in value)) return false;
+  return typeof value.jobTitle === 'string' && value.jobTitle.length <= 200
+    && typeof value.jobDescription === 'string' && value.jobDescription.length <= 30000;
+}
+
+type SelectedResume = { id: string; file: File; candidateId?: string };
+type CandidateOption = { id: string; name: string };
 type SubmittedSession = ReturnType<typeof screeningSubmissionResponseSchema.parse>;
 type ScreeningNavigationSnapshot = {
   submitted: SubmittedSession; details: ScreeningDetailsResponse; selectedIds: string[];
@@ -25,6 +42,27 @@ type ScreeningNavigationSnapshot = {
   report: ScreeningReportResponse | null; candidateSearch: string; expandedDetailsId: string | null;
 };
 const screeningNavigationCache = createUserSessionCache<ScreeningNavigationSnapshot>();
+
+export function ExistingCandidateResumeLinks({ candidateIds, candidates }: { candidateIds: string[]; candidates: CandidateOption[] }) {
+  if (!candidateIds.length) return null;
+  return <ul aria-label="Candidates with saved resume results">{candidateIds.map((candidateId) => {
+    const candidate = candidates.find((item) => item.id === candidateId);
+    return <li key={candidateId}><Link to={`/candidates/${encodeURIComponent(candidateId)}/report`}>{candidate?.name ?? 'Open candidate'} · reuse saved resume result or explicitly replace it</Link></li>;
+  })}</ul>;
+}
+
+export function ScreeningRankingGuidance() {
+  return <details className="screening-ranking-help">
+    <summary>About candidate ranking</summary>
+    <p>Ranking uses saved scores, with tied scores sharing a rank. Preliminary resume matches reflect text overlap, not verified qualifications. Score colours are visual cues only; use rankings as decision support.</p>
+  </details>;
+}
+
+export function ScreeningProgressSummary({ status, resumes }: Pick<ScreeningDetailsResponse, 'status' | 'resumes'>) {
+  if (status !== 'processing') return null;
+  return <p className="screening-progress" role="status">{screeningProgressLabel(resumes)}</p>;
+}
+
 function storedScreeningSessionId() {
   if (typeof window === 'undefined') return null;
   try { return sessionStorage.getItem(SCREENING_SESSION_STORAGE_KEY); } catch { return null; }
@@ -38,6 +76,23 @@ function formatSize(size: number): string {
   return size < 1024 * 1024 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
+export async function refreshLinkedCandidateAssessments(details: ScreeningDetailsResponse, accessToken: string, request: typeof apiRequest = apiRequest) {
+  const roleId = UNIFIED_ROLE_IDS.find((role) => isResumeRoleCompatible(role, details.jobTitle));
+  if (!roleId) return { refreshed: 0, failedCandidateIds: [] as string[] };
+  let refreshed = 0;
+  const failedCandidateIds: string[] = [];
+  for (const resume of details.resumes) {
+    if (!resume.candidateId || !['completed', 'failed'].includes(resume.status)) continue;
+    try {
+      await request(`/candidates/${encodeURIComponent(resume.candidateId)}/unified-report/assessment`, {
+        method: 'POST', body: JSON.stringify({ roleId, resumeId: resume.id }),
+      }, accessToken);
+      refreshed += 1;
+    } catch { failedCandidateIds.push(resume.candidateId); }
+  }
+  return { refreshed, failedCandidateIds };
+}
+
 export function ResumeScreeningPage() {
   const { session } = useAuth();
   const storedSessionId = storedScreeningSessionId();
@@ -45,12 +100,18 @@ export function ResumeScreeningPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const nextFileId = useRef(0);
   const idempotencyKey = useRef<string | null>(null);
-  const [jobTitle, setJobTitle] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
+  const refreshedAssessmentKeys = useRef(new Set<string>());
+  const { value: jobDraft, status: draftStatus, persisted, setValue: setJobDraft, clear: clearDraft } = useSessionDraft(
+    session?.user?.id, 'resume-screening:new', emptyScreeningDraft, isScreeningDraft,
+  );
+  const { jobTitle, jobDescription } = jobDraft;
   const [resumes, setResumes] = useState<SelectedResume[]>([]);
+  const [candidateOptions, setCandidateOptions] = useState<CandidateOption[]>([]);
+  const [candidateOptionsError, setCandidateOptionsError] = useState('');
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [duplicateCandidateIds, setDuplicateCandidateIds] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState<SubmittedSession | null>(cachedNavigation?.submitted ?? null);
   const [details, setDetails] = useState<ScreeningDetailsResponse | null>(cachedNavigation?.details ?? null);
   const [selectedIds, setSelectedIds] = useState<string[]>(cachedNavigation?.selectedIds ?? []);
@@ -64,6 +125,48 @@ export function ResumeScreeningPage() {
   const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(cachedNavigation?.expandedDetailsId ?? null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
+  useEffect(() => {
+    if (!session?.access_token || !details) return;
+    const roleId = UNIFIED_ROLE_IDS.find((role) => isResumeRoleCompatible(role, details.jobTitle));
+    if (!roleId) return;
+    const pending = details.resumes.filter((resume) => resume.candidateId && ['completed', 'failed'].includes(resume.status))
+      .filter((resume) => {
+        const key = `${details.sessionId}:${resume.id}:${JSON.stringify(resume.evaluation)}:${JSON.stringify(resume.preliminaryEvaluation)}`;
+        if (refreshedAssessmentKeys.current.has(key)) return false;
+        refreshedAssessmentKeys.current.add(key);
+        return true;
+      });
+    if (!pending.length) return;
+    let active = true;
+    void (async () => {
+      const result = await refreshLinkedCandidateAssessments({ ...details, resumes: pending }, session.access_token);
+      if (active && result.failedCandidateIds.length) {
+        setReviewError(`Screening results were saved, but ${result.failedCandidateIds.length} linked candidate assessment(s) could not be refreshed. Use Assess All Candidates in Insights to retry.`);
+      }
+    })();
+    return () => { active = false; };
+  }, [details, session?.access_token]);
+
+  useEffect(() => {
+    let active = true;
+    if (!session?.access_token) return () => { active = false; };
+    void (async () => {
+      try {
+        const first = candidateListResponseSchema.parse(await apiRequest<unknown>('/candidates?page=1&pageSize=100', {}, session.access_token));
+        const candidates = [...first.items];
+        for (let page = 2; candidates.length < first.total; page += 1) {
+          const next = candidateListResponseSchema.parse(await apiRequest<unknown>(`/candidates?page=${page}&pageSize=100`, {}, session.access_token));
+          candidates.push(...next.items);
+          if (!next.items.length) break;
+        }
+        if (active) setCandidateOptions(candidates.map(({ id, name }) => ({ id, name })));
+      } catch {
+        if (active) setCandidateOptionsError('Candidate records could not be loaded. You can still screen resumes and link them later from each candidate report.');
+      }
+    })();
+    return () => { active = false; };
+  }, [session?.access_token]);
+
   async function loadScreeningResults(sessionId: string, accessToken: string, waitForCompletion: boolean, isCurrent: () => boolean = () => true, initialDetails?: ScreeningDetailsResponse) {
     let current = initialDetails;
     if (!current) {
@@ -72,12 +175,17 @@ export function ResumeScreeningPage() {
       if (!isCurrent()) return;
       setDetails(current);
     }
-    while (current.status === 'processing' && waitForCompletion) {
-      await waitForScreeningPoll();
-      if (!isCurrent()) return;
-      current = screeningDetailsResponseSchema.parse(await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}`, {}, accessToken));
-      if (!isCurrent()) return;
-      setDetails(current);
+    if (current.status === 'processing' && waitForCompletion) {
+      const latest = await pollScreeningUntilSettled(current, async () => screeningDetailsResponseSchema.parse(
+        await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}`, {}, accessToken),
+      ), {
+        wait: waitForScreeningPoll,
+        maxAttempts: SCREENING_MAX_POLL_ATTEMPTS,
+        isCurrent,
+        onUpdate: setDetails,
+      });
+      if (!latest || !isCurrent()) return;
+      current = latest;
     }
     if (!isCurrent()) return;
     const rankingResult = await apiRequest<unknown>(`/screenings/${encodeURIComponent(sessionId)}/ranking`, {}, accessToken);
@@ -89,7 +197,10 @@ export function ResumeScreeningPage() {
     let active = true;
     if (!session?.access_token || !isValidScreeningSessionId(storedSessionId)) return;
     if (cachedNavigation?.details.sessionId === storedSessionId) {
-      if (cachedNavigation.details.status === 'processing' || !cachedNavigation.rankingData) void loadScreeningResults(storedSessionId, session.access_token, cachedNavigation.details.status === 'processing', () => active, cachedNavigation.details);
+      if (cachedNavigation.details.status === 'processing' || !cachedNavigation.rankingData) {
+        void loadScreeningResults(storedSessionId, session.access_token, cachedNavigation.details.status === 'processing', () => active, cachedNavigation.details)
+          .catch((cause) => { if (active) setError(screeningErrorMessage(cause, 'Could not refresh screening results.')); });
+      }
       return () => { active = false; };
     }
     void (async () => {
@@ -105,7 +216,7 @@ export function ResumeScreeningPage() {
         if (!active) return;
         await loadScreeningResults(initial.sessionId, session.access_token, true, () => active, initial);
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : 'Could not restore screening progress.');
+        if (active) setError(screeningErrorMessage(cause, 'Could not restore screening progress.'));
       }
     })();
     return () => { active = false; };
@@ -141,6 +252,7 @@ export function ResumeScreeningPage() {
     try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ }
     setValidationMessages(messages);
     setError('');
+    setDuplicateCandidateIds([]);
     setSubmitted(null);
     setDetails(null);
     setRankingData(null);
@@ -165,6 +277,7 @@ export function ResumeScreeningPage() {
     event?.preventDefault();
     if (submitting) return;
     setError('');
+    setDuplicateCandidateIds([]);
     setSubmitted(null);
     if (!session?.access_token) {
       setError('Your secure session is unavailable. Sign in again before submitting resumes.');
@@ -184,35 +297,35 @@ export function ResumeScreeningPage() {
     }
 
     setSubmitting(true);
+    let submissionAccepted = false;
     try {
-      const body = new FormData();
-      body.set('jobTitle', jobTitle.trim());
-      body.set('jobDescription', jobDescription.trim());
-      resumes.forEach(({ file }) => body.append('resumes', file, file.name));
+      const body = buildScreeningRequest(jobTitle.trim(), jobDescription.trim(), resumes);
       idempotencyKey.current ??= crypto.randomUUID();
       const response = await apiRequest<unknown>('/screenings', {
         method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey.current },
       }, session.access_token);
       const parsed = screeningSubmissionResponseSchema.parse(response);
-      idempotencyKey.current = null;
-      try { sessionStorage.setItem(SCREENING_SESSION_STORAGE_KEY, parsed.sessionId); } catch { /* session persistence is optional when storage is unavailable */ }
       if (parsed.resumes.length !== resumes.length) {
         throw new Error('The screening service returned a different number of resumes than submitted.');
       }
+      idempotencyKey.current = null;
+      clearDraft(jobDraft);
+      try { sessionStorage.setItem(SCREENING_SESSION_STORAGE_KEY, parsed.sessionId); } catch { /* session persistence is optional when storage is unavailable */ }
       setSubmitted(parsed);
+      submissionAccepted = true;
       await loadScreeningResults(parsed.sessionId, session.access_token, true);
       setSelectedIds([]);
       setComparison(null);
       setReport(null);
       setExpandedDetailsId(null);
     } catch (cause) {
-      if (cause instanceof Error && cause.name === 'ApiNetworkError') {
-        setError(cause.message);
-      } else if (cause instanceof ApiRequestError) {
-        setError(cause.message);
-      } else {
-        setError(cause instanceof Error && cause.message ? cause.message : 'The screening response could not be verified. No results are shown.');
+      if (cause instanceof ApiRequestError && cause.code === 'CANDIDATE_RESUME_ALREADY_LINKED') {
+        const details = cause.details && typeof cause.details === 'object' ? cause.details as { candidateIds?: unknown } : {};
+        setDuplicateCandidateIds(Array.isArray(details.candidateIds) ? details.candidateIds.filter((id): id is string => typeof id === 'string') : []);
       }
+      setError(submissionAccepted
+        ? `Screening was accepted, but its results could not be loaded yet. Your session is saved. ${screeningErrorMessage(cause, 'Try loading the results again.')}`
+        : screeningErrorMessage(cause, 'The screening response could not be verified. No results are shown.'));
     } finally {
       setSubmitting(false);
     }
@@ -226,9 +339,9 @@ export function ResumeScreeningPage() {
     setSubmitting(true);
     setError('');
     try {
-      await loadScreeningResults(submitted.sessionId, session.access_token, true);
+      await loadScreeningResults(submitted.sessionId, session.access_token, false);
     } catch (cause) {
-      setError(cause instanceof ApiRequestError || cause instanceof Error ? cause.message : 'Could not load screening results.');
+      setError(screeningErrorMessage(cause, 'Could not load screening results.'));
     } finally {
       setSubmitting(false);
     }
@@ -263,7 +376,7 @@ export function ResumeScreeningPage() {
       }, session.access_token);
       setComparison(screeningComparisonResponseSchema.parse(value));
     } catch (cause) {
-      setReviewError(cause instanceof Error ? cause.message : 'Could not compare the saved screening results.');
+      setReviewError(screeningErrorMessage(cause, 'Could not compare the saved screening results.'));
       setComparison(null);
     } finally { setReviewBusy(false); }
   }
@@ -278,7 +391,7 @@ export function ResumeScreeningPage() {
       }, session.access_token);
       setReport(screeningReportResponseSchema.parse(value));
     } catch (cause) {
-      setReviewError(cause instanceof Error ? cause.message : 'Could not generate a report from saved screening results.');
+      setReviewError(screeningErrorMessage(cause, 'Could not generate a report from saved screening results.'));
       setReport(null);
     } finally { setReviewBusy(false); }
   }
@@ -292,7 +405,7 @@ export function ResumeScreeningPage() {
       screeningRetryResponseSchema.parse(result);
       await loadScreeningResults(submitted.sessionId, session.access_token, true);
     } catch (cause) {
-      setReviewError(cause instanceof Error ? cause.message : 'Could not retry this resume evaluation.');
+      setReviewError(screeningErrorMessage(cause, 'Could not retry this resume evaluation.'));
     } finally { setRetryingResumeId(null); }
   }
 
@@ -331,18 +444,19 @@ export function ResumeScreeningPage() {
       </header>
 
       <form className="screening-form" onSubmit={(event) => void startScreening(event)}>
+        <SessionDraftNotice status={draftStatus} persisted={persisted} onDiscard={() => { clearDraft(emptyScreeningDraft); setResumes([]); setValidationMessages([]); setError(''); if (inputRef.current) inputRef.current.value = ''; }} restoredMessage="Job details restored from this browser tab. Resume files are not stored and must be selected again."/>
         <section className="screening-panel" aria-labelledby="screening-job-title">
           <div className="screening-panel-heading">
             <span className="screening-step">01</span>
-            <div><h2 id="screening-job-title">Job details</h2><p>Set the role context shared by every resume in this screening session.</p></div>
+            <div><h2 id="screening-job-title">Job details</h2></div>
           </div>
           <div className="screening-job-layout">
             <div className="screening-job-fields">
               <label className="screening-field">Job title
-                <input value={jobTitle} onChange={(event) => { setJobTitle(event.target.value); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} maxLength={200} required placeholder="e.g. Senior Backend Engineer" />
+                <input value={jobTitle} onChange={(event) => { setJobDraft((current) => ({ ...current, jobTitle: event.target.value })); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} maxLength={200} required placeholder="e.g. Senior Backend Engineer" />
               </label>
               <label className="screening-field">Job description
-                <textarea value={jobDescription} onChange={(event) => { setJobDescription(event.target.value); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} minLength={50} maxLength={30000} required rows={7} placeholder="Describe the role responsibilities, required skills, experience, and qualifications." />
+                <textarea value={jobDescription} onChange={(event) => { setJobDraft((current) => ({ ...current, jobDescription: event.target.value })); setSubmitted(null); idempotencyKey.current = null; try { sessionStorage.removeItem(SCREENING_SESSION_STORAGE_KEY); } catch { /* optional browser storage */ } }} minLength={50} maxLength={30000} required rows={7} placeholder="Describe the role responsibilities, required skills, experience, and qualifications." />
                 <span className="screening-field-hint">{jobDescription.length.toLocaleString()} / 30,000 characters · minimum 50</span>
               </label>
             </div>
@@ -370,12 +484,25 @@ export function ResumeScreeningPage() {
             {resumes.map(({ id, file }) => <li key={id}>
               <span className="screening-file-icon" aria-hidden="true">{file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'DOC'}</span>
               <span className="screening-file-copy"><strong>{file.name}</strong><small>{formatSize(file.size)} · Ready to submit</small></span>
+              <label className="screening-candidate-assignment">Candidate
+                <select aria-label={`Candidate for ${file.name}`} value={resumes.find((item) => item.id === id)?.candidateId ?? ''} onChange={(event) => {
+                  const candidateId = event.target.value;
+                  setResumes((current) => current.map((item) => item.id === id ? { ...item, candidateId: candidateId || undefined } : item));
+                }}>
+                  <option value="">Leave unlinked</option>
+                  {candidateOptions.map((candidate) => <option key={candidate.id} value={candidate.id} disabled={resumes.some((item) => item.id !== id && item.candidateId === candidate.id)}>{candidate.name}</option>)}
+                </select>
+              </label>
               <button className="screening-remove-button" type="button" onClick={() => removeFile(id)} aria-label={`Remove ${file.name}`}>Remove</button>
             </li>)}
           </ul> : <p className="screening-empty-files">No resume files selected.</p>}
+          {candidateOptionsError && <p className="screening-field-hint" role="status">{candidateOptionsError}</p>}
+          {candidateOptions.length > 0 && <p className="screening-field-hint">Link resumes to existing candidates here to make their saved scores available to Insights. Unlinked results can be explicitly linked later from the candidate report.</p>}
         </section>
 
-        {error && <div className="screening-alert" role="alert"><p>{error}</p><button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Retrying…' : 'Try again'}</button></div>}
+        {error && <div className="screening-alert" role="alert"><p>{error}</p><ExistingCandidateResumeLinks candidateIds={duplicateCandidateIds} candidates={candidateOptions}/>{duplicateCandidateIds.length > 0
+          ? <p>The duplicate check stopped this batch before creating a screening session. To evaluate a new file, leave its candidate unlinked, submit it, then use Replace linked result from that candidate’s report after processing completes.</p>
+          : <button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Retrying…' : 'Try again'}</button>}</div>}
         <div className="screening-form-footer">
           <p>Resume job-match results will remain separate from existing GitHub, LeetCode, and developer evaluation scores.</p>
           <button className="primary-button" type="submit" disabled={submitting || !canStartScreening}>
@@ -387,17 +514,15 @@ export function ResumeScreeningPage() {
       <section className="screening-panel screening-results-panel" aria-labelledby="screening-results-title">
         <div className="screening-panel-heading">
           <span className="screening-step">03</span>
-          <div><h2 id="screening-results-title">Screening status and results</h2><p>Only server-returned, validated screening data is shown here.</p></div>
+          <div><h2 id="screening-results-title">Screening status and results</h2></div>
         </div>
           {submitted ? <>
-          <p className="screening-session-status" role="status">Session {submitted.sessionId} · {details?.status ?? submitted.status}</p>
-          {details?.status === 'processing' && <p className="screening-progress" role="status">{screeningProgressLabel(details.resumes)}</p>}
+          {details && <ScreeningProgressSummary status={details.status} resumes={details.resumes} />}
           <ScreeningResultList resumes={details?.resumes ?? submitted.resumes.map((resume) => ({ ...resume, candidate: null, evaluation: null, error: undefined }))} />
-          {!details && <button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Loading results…' : 'Retry loading results'}</button>}
+          {(!details || details.status === 'processing' || !rankingData) && <button type="button" className="secondary-button" onClick={() => void retryResults()} disabled={submitting}>{submitting ? 'Loading results…' : details?.status === 'processing' ? 'Refresh results' : 'Retry loading results'}</button>}
           {details && details.resumes.every((resume) => resume.status === 'failed') && <p className="screening-empty-results">No resumes produced a usable evaluation. Review each processing error and retry with supported text-based files.</p>}
           {details && <div className="screening-review-tools">
             <h3>Compare candidates and rank saved results</h3>
-            <p>Select at least two completed resumes from this job. Ranking uses saved deterministic scores; tied scores share a rank. This is decision support, not a hiring decision. Score colours are presentation-only guidance, not validated hiring criteria.</p>
             <div className="screening-review-actions">
               <button type="button" className="primary-button" onClick={() => void compareCandidates()} disabled={reviewBusy || selectedIds.length < 2}>{reviewBusy ? 'Comparing…' : 'Compare selected candidates'}</button>
               <button type="button" className="secondary-button" onClick={() => void generateReport()} disabled={reviewBusy || selectedIds.length < 2}>{reviewBusy ? 'Generating…' : 'Generate Report'}</button>
@@ -408,7 +533,7 @@ export function ResumeScreeningPage() {
           </div>}
           {rankingData && <section className="screening-comparison" aria-label="Candidate comparison">
             <h3>Candidate ranking · {rankingData.jobTitle}</h3>
-            <p>{rankingData.ranking.rankingCriteria} Preliminary document matches measure text overlap; unverified criteria mean no supporting wording was found, not that the candidate lacks the qualification.</p>
+            <ScreeningRankingGuidance />
             {details && (() => {
               const { scored, unscored, rankById } = filterAndSortScreeningResumes(details, rankingData.ranking, candidateSearch);
               const visibleEligibleIds = [...scored, ...unscored].filter((resume) => resume.status === 'completed').map((resume) => resume.id);
