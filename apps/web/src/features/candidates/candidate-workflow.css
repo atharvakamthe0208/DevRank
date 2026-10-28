@@ -77,10 +77,10 @@
 .candidate-management-primary-actions > button:hover:not(:disabled) { border-color: #b9c8ec; background: #f5f7ff; }
 .candidate-management-primary-actions > button:active:not(:disabled) { background: #eaf0ff; }
 .candidate-management-primary-actions > button:disabled { opacity: .6; cursor: wait; }
-.app-shell .candidate-management-primary-actions > .candidate-add-action { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #4058e8; border-radius: 6px; padding: 0 15px; color: #fff; background: #4058e8; box-shadow: 0 4px 11px #4058e820; font-size: var(--type-control); font-weight: 650; text-decoration: none; white-space: nowrap; }
-.app-shell .candidate-management-primary-actions > .candidate-add-action:hover { border-color: #334bd1; color: #fff; background: #334bd1; box-shadow: 0 7px 16px #4058e82b; }
-.app-shell .candidate-management-primary-actions > .candidate-add-action:active { border-color: #293fbe; background: #293fbe; }
-.candidate-management-primary-actions :is(button, a):focus-visible { outline: 3px solid #8190f2; outline-offset: 3px; }
+.app-shell .candidate-add-action { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #4058e8; border-radius: 6px; padding: 0 15px; color: #fff; background: #4058e8; box-shadow: 0 4px 11px #4058e820; font-size: var(--type-control); font-weight: 650; text-decoration: none; white-space: nowrap; }
+.app-shell .candidate-add-action:hover { border-color: #334bd1; color: #fff; background: #334bd1; box-shadow: 0 7px 16px #4058e82b; }
+.app-shell .candidate-add-action:active { border-color: #293fbe; background: #293fbe; }
+.candidate-management-primary-actions :is(button, a):focus-visible,.app-shell .candidate-list-state > .candidate-add-action:focus-visible { outline: 3px solid #8190f2; outline-offset: 3px; }
 .candidate-import-file-picker { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; }
 
 .candidate-import-dialog { width: min(1120px, calc(100vw - 28px)); max-width: none; max-height: min(92vh, 940px); overflow: auto; border: 1px solid #e8e9e4; border-radius: 10px; padding: 22px; color: #34362f; background: #fff; box-shadow: 0 18px 55px #2527202b; }
