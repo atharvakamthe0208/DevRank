@@ -108,6 +108,26 @@
 .refined-workspace .dashboard-hero > div { display: grid; gap: 5px; }
 .refined-workspace .dashboard-hero .page-subtitle { margin: 0; }
 .refined-workspace .dashboard-hero .primary-button { min-height: 42px; align-self: center; }
+.refined-workspace .dashboard-candidate-search { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 2px; }
+.refined-workspace .dashboard-candidate-search-input { display: flex; align-items: center; gap: 10px; flex: 1 1 420px; min-width: 0; min-height: 42px; padding: 0 13px; border: 1px solid var(--workspace-border, #dce4f1); border-radius: 10px; background: #fff; color: #6d7b93; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.refined-workspace .dashboard-candidate-search-input:focus-within { border-color: #7c95ed; box-shadow: 0 0 0 3px #466ce21c; }
+.refined-workspace .dashboard-candidate-search-input svg { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.refined-workspace .dashboard-candidate-search-input input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #26354f; font: inherit; font-size: 13px; }
+.refined-workspace .dashboard-candidate-search-input input::placeholder { color: #8390a5; opacity: 1; }
+.refined-workspace .dashboard-candidate-search-filter select { min-height: 42px; max-width: 190px; padding: 0 34px 0 12px; border: 1px solid var(--workspace-border, #dce4f1); border-radius: 10px; background: #fff; color: #34425b; font: inherit; font-size: 12px; }
+.refined-workspace .dashboard-candidate-search :is(input, select):focus-visible { outline: 2px solid #627ee8; outline-offset: 2px; }
+.refined-workspace .dashboard-candidate-search-count, .refined-workspace .dashboard-candidate-search-note { flex: 0 0 auto; color: var(--workspace-muted, #71809a); font-size: 11px; white-space: nowrap; }
+.refined-workspace .dashboard-candidate-search-results { position: absolute; z-index: 5; top: calc(100% + 7px); left: 2px; right: 2px; max-height: min(360px, 55vh); overflow-y: auto; border: 1px solid #dce4f1; border-radius: 11px; background: #fff; box-shadow: 0 10px 24px #243a6414; }
+.refined-workspace .dashboard-candidate-search-result { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 9px 12px; color: inherit; text-decoration: none; }
+.refined-workspace .dashboard-candidate-search-result + .dashboard-candidate-search-result { border-top: 1px solid #edf1f7; }
+.refined-workspace .dashboard-candidate-search-result:hover, .refined-workspace .dashboard-candidate-search-result:focus-visible { background: #f5f8ff; }
+.refined-workspace .dashboard-candidate-search-result > span:nth-child(2) { display: grid; min-width: 0; gap: 2px; }
+.refined-workspace .dashboard-candidate-search-result strong { overflow: hidden; color: #273650; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.refined-workspace .dashboard-candidate-search-result small { overflow: hidden; color: #78869c; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.refined-workspace .dashboard-search-status { margin-left: auto; color: #65748b; font-size: 10px; white-space: nowrap; }
+.refined-workspace .dashboard-search-status.is-evaluated { color: #405fc3; }
+.refined-workspace .dashboard-candidate-search-results > p { margin: 0; padding: 13px; color: #71809a; font-size: 12px; }
+@media (max-width: 700px) { .refined-workspace .dashboard-candidate-search { flex-wrap: wrap; gap: 8px; } .refined-workspace .dashboard-candidate-search-input { flex-basis: 100%; } .refined-workspace .dashboard-candidate-search-filter { flex: 1 1 150px; } .refined-workspace .dashboard-candidate-search-filter select { width: 100%; max-width: none; } .refined-workspace .dashboard-candidate-search-count, .refined-workspace .dashboard-candidate-search-note { margin-left: auto; } }
 .app-shell .nav-icon { width: 18px; height: 18px; display: inline-flex; flex: 0 0 18px; align-items: center; justify-content: center; }
 .app-shell .nav-icon svg { display: block; width: 18px; height: 18px; }
 .app-shell .nav-link.active .nav-icon { color: #8fc0ff; }

@@ -17,7 +17,7 @@ const evaluationB = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 describe('dashboard, comparison, and ranking routes', () => {
   it('validates shared request contracts and applies approved-recruiter authentication to all endpoints', async () => {
     const repository: InsightsRepository = {
-      dashboard: vi.fn(async () => ({ candidateCount: 0, evaluationCount: 0, statusCounts: { pending: 0, in_progress: 0, completed: 0, insufficient_evidence: 0, failed: 0 }, recentEvaluations: [] })),
+      dashboard: vi.fn(async () => ({ candidateCount: 0, evaluatedCandidateIds: [], evaluationCount: 0, statusCounts: { pending: 0, in_progress: 0, completed: 0, insufficient_evidence: 0, failed: 0 }, recentEvaluations: [] })),
       compare: vi.fn(async () => ({ roleId: 'software_developer', scoringVersion: '1.0.0', items: [] })),
       ranking: vi.fn(async () => ({ roleId: 'software_developer', scoringVersion: '1.0.0', items: [], candidateRows: [], page: 1, pageSize: 20, total: 0, excluded: { incomplete: 0, scoringVersionMismatch: 0, missingScore: 0, invalidSnapshot: 0 } })),
     };

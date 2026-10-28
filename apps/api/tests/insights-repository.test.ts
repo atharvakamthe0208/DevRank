@@ -97,6 +97,11 @@ function fakeClient({ evaluations = [], candidates = [] }: { evaluations?: Array
       in: (column: string, value: unknown[]) => { filters.set(column, value); return builder; },
       order: (column: string, options: { ascending: boolean }) => { ordering.push({ column, ascending: options.ascending }); return builder; },
       limit: (value: number) => { limit = value; return builder; },
+      range: (from: number, to: number) => { limit = to - from + 1; return { ...builder, then: (resolve: (value: unknown) => unknown, reject: (reason?: unknown) => unknown) => {
+        const source = table === 'evaluations' ? evaluations : candidates;
+        const rows = source.filter((row) => [...filters].every(([column, value]) => row[column] === value));
+        return Promise.resolve({ data: rows.slice(from, to + 1), error: null }).then(resolve, reject);
+      } }; },
       then: (resolve: (value: unknown) => unknown, reject: (reason?: unknown) => unknown) => {
         try {
           const source = table === 'evaluations' ? evaluations : candidates;
@@ -139,7 +144,7 @@ describe('insights repository', () => {
       { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', full_name: 'Other owner', owner_id: otherOwner, archived_at: null },
     ]);
     const dashboard = await repo.dashboard(auth);
-    expect(dashboard).toMatchObject({ candidateCount: 2, evaluationCount: 2, statusCounts: { completed: 1, insufficient_evidence: 1 } });
+    expect(dashboard).toMatchObject({ candidateCount: 2, evaluatedCandidateIds: [candidateA, candidateB], evaluationCount: 2, statusCounts: { completed: 1, insufficient_evidence: 1 } });
     expect(dashboard.recentEvaluations[0]).toMatchObject({ candidateId: candidateA, candidateName: 'Candidate A', score: 80 });
     expect(dashboard.recentEvaluations[1]).not.toHaveProperty('score');
     expect(dashboard.recentEvaluations.map(({ candidateName }) => candidateName)).not.toContain('Other owner');

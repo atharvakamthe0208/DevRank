@@ -91,11 +91,20 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
         const [candidateCountResult, evaluationTotalResult, recentResult, ...countResults] = await Promise.all([
           client.from('candidates').select('id', { count: 'exact', head: true }).eq('owner_id', auth.userId).is('archived_at', null),
           client.from('evaluations').select('id', { count: 'exact', head: true }).eq('owner_id', auth.userId),
-          client.from('evaluations').select('id,candidate_id,status,overall_score,scoring_version,created_at')
+          client.from('evaluations').select('id,candidate_id,status,overall_score,scoring_version,created_at,target_role')
             .eq('owner_id', auth.userId).order('created_at', { ascending: false }).order('id', { ascending: true }).limit(10),
           ...statuses.map((status) => client.from('evaluations').select('id', { count: 'exact', head: true }).eq('owner_id', auth.userId).eq('status', status)),
         ]);
         if (candidateCountResult.error || evaluationTotalResult.error || recentResult.error || countResults.some(({ error }) => error)) throw databaseUnavailable();
+        const evaluatedCandidateIds = new Set<string>();
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await client.from('evaluations').select('candidate_id')
+            .eq('owner_id', auth.userId).order('candidate_id', { ascending: true }).order('id', { ascending: true }).range(from, from + 999);
+          if (error) throw databaseUnavailable();
+          const rows = (data ?? []) as Array<{ candidate_id: string }>;
+          rows.forEach(({ candidate_id }) => evaluatedCandidateIds.add(candidate_id));
+          if (rows.length < 1000) break;
+        }
         const knownEvaluationCount = countResults.reduce((sum, result) => sum + (result.count ?? 0), 0);
         const evaluationCount = evaluationTotalResult.count ?? 0;
         if (knownEvaluationCount !== evaluationCount) throw new HttpError(409, 'EVALUATION_STATUS_UNSUPPORTED', 'Evaluation rows contain a status outside the supported dashboard contract');
@@ -116,6 +125,7 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
         const statusCounts = Object.fromEntries(statuses.map((status, index) => [status, countResults[index]?.count ?? 0]));
         const payload = {
           candidateCount: candidateCountResult.count ?? 0,
+          evaluatedCandidateIds: [...evaluatedCandidateIds],
           evaluationCount,
           statusCounts,
           recentEvaluations: rows.flatMap((row) => {
@@ -127,7 +137,7 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
             const savedResult = evaluationResponseSchema.safeParse(reportById.get(row.id));
             const finalReport = savedResult.success && savedResult.data.candidateId === row.candidate_id
               ? savedResult.data.finalReport : undefined;
-            return [{ id: row.id, candidateId: row.candidate_id, candidateName, status: status.data,
+            return [{ id: row.id, candidateId: row.candidate_id, candidateName, targetRole: row.target_role ?? null, status: status.data,
               createdAt: row.created_at, ...(status.data === 'completed' && score !== undefined && Number.isFinite(score) ? { score } : {}),
               scoringVersion: row.scoring_version,
               ...(finalReport ? { finalReport } : {}),
