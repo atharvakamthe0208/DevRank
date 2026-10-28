@@ -192,12 +192,28 @@ describe('evaluation run result', () => {
     expect(html).toContain('Areas to Improve');
     expect(html).toContain('Recommended Next Steps');
     expect(html).toContain('Strength 3 grounded in saved evidence.');
-    expect(html).not.toContain('Strength 4 grounded in saved evidence.');
+    expect(html).toContain('Strength 4 grounded in saved evidence.');
+    expect(html).toContain('Overall Score');
+    expect(html).toContain('>78</strong>');
+    expect(html).toContain('4</span>');
     expect(html).not.toContain('Supporting references');
     expect(html).not.toContain('evidence-project_portfolio');
     expect(html).not.toContain('Saved source evidence for Project Portfolio.');
-    expect(html).not.toContain('Improvement area 3 grounded in saved evidence.');
-    expect(html).not.toContain('Recommendation 4 grounded in saved evidence.');
+    expect(html).toContain('Improvement area 3 grounded in saved evidence.');
+    expect(html).toContain('Recommendation 4 grounded in saved evidence.');
+  });
+
+  it('uses the persisted overall score and handles a missing score without fabricating one', () => {
+    const response = completedAnalysis();
+    const { overallScore: _savedScore, ...scorelessResult } = response.evaluation.result;
+    const scorelessResponse = aiAnalysisResponseSchema.parse({
+      ...response,
+      evaluation: { ...response.evaluation, result: scorelessResult },
+    });
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AiAnalysisSummary, { response: scorelessResponse })));
+    expect(html).toContain('Overall score unavailable');
+    expect(html).toContain('Not available');
+    expect(html).not.toContain('>78</strong>');
   });
 
   it('keeps the insights actions and generating state visible with completed analysis data', () => {
@@ -213,6 +229,7 @@ describe('evaluation run result', () => {
       onAnalyze: () => undefined,
     });
     expect(html).toContain('AI Candidate Insights');
+    expect(html).toContain('Evidence-based');
     expect(html).toContain('Strengths and improvement opportunities from the available evaluation evidence.');
     expect(html).toContain('Regenerate Analysis');
     expect(html).toContain('View full analysis');
