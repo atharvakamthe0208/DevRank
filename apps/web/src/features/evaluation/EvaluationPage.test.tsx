@@ -97,7 +97,8 @@ describe('evaluation run result', () => {
     expect(html).toContain('aria-label="Evaluation report"');
     expect(html).not.toContain('Final GitHub + LeetCode evaluation report');
     for (const category of scoringCategories) expect(html).toContain(category.displayName.replaceAll('&', '&amp;'));
-    expect(html).toContain('100 / 100');
+    expect(html).toContain('aria-label="100"');
+    expect(html).toContain('<small> / 100</small>');
     expect(html).toContain('Overall score');
     expect(html).toContain('Score withheld');
     expect(html).toContain('An overall score is withheld because the available evidence is insufficient.');
@@ -113,7 +114,10 @@ describe('evaluation run result', () => {
     expect(html).not.toContain('Scoring notes and evidence limitations');
     expect(html).not.toContain('Technical source details');
     expect(html).not.toContain('Scored · evidence available · 1 supporting item');
-    expect(html).toContain('evaluation-category-grid');
+    expect(html).toContain('evaluation-report-grid');
+    expect(html.match(/class="evaluation-category-card"/g)).toHaveLength(6);
+    expect(html).toContain('<progress class="evaluation-score-progress"');
+    expect(html).toContain('Saved problem-solving evidence includes 100 easy, 92 medium, 16 hard problems.');
     expect(html).not.toContain('alfa_leetcode_api');
     expect(html).not.toContain('{&quot;statistics&quot;');
   });
@@ -128,6 +132,31 @@ describe('evaluation run result', () => {
     expect(html).toContain('Not scored');
     expect(html).toContain('Unavailable');
     expect(html).toContain('Insufficient evidence');
+  });
+
+  it('shows a concise unavailable reason for configured LeetCode with no saved snapshot', () => {
+    const base = runResult(false);
+    const evaluation = {
+      ...base.evaluation,
+      categoryScores: base.evaluation.categoryScores.map((category) => category.categoryId === 'technical_skills'
+        ? { ...category, explanation: 'Arithmetic mean of 1 available normalized evidence value(s), rounded to two decimal places.' }
+        : category),
+      finalReport: {
+        ...base.evaluation.finalReport!,
+        categories: base.evaluation.finalReport!.categories.map((category) => category.categoryId === 'problem_solving_dsa'
+          ? { ...category, status: 'unavailable' as const, metrics: { ...category.metrics, dataStatus: 'A LeetCode username is configured, but no saved statistics snapshot is available. No zero is inferred.' } }
+          : category),
+      },
+    };
+    const result = evaluationRunResponseSchema.parse({ ...base, evaluation });
+    const html = renderEvaluationRunResult({ result, analysis: null, analysisLoading: false, analysisError: '', onAnalyze: () => undefined });
+    const dsaCard = html.match(/<article class="evaluation-category-card"[^>]*data-category="problem_solving_dsa"[\s\S]*?<\/article>/)?.[0];
+    expect(dsaCard).toContain('Not scored');
+    expect(dsaCard).toContain('Unavailable');
+    expect(dsaCard).toContain('A LeetCode username is configured, but no saved statistics snapshot is available. No zero is inferred.');
+    expect(dsaCard).not.toContain('<progress');
+    expect(html).not.toContain('Arithmetic mean of 1 available normalized evidence value(s), rounded to two decimal places');
+    expect(html).not.toContain('Scored · evidence available · 1 supporting item');
   });
 
   it('shows real candidate profile details and available repository coverage in the compact header', () => {
