@@ -99,14 +99,14 @@ export function ProviderRankingTable({ ranking, onPageChange }: { ranking: Provi
           <td>{item.rank === undefined ? '—' : `#${item.rank}`}</td>
           <td><Link aria-label={`Open ${item.candidateName} profile`} to={`/candidates/${item.candidateId}`}>{item.candidateName}</Link></td>
           <td>{item.githubScore === undefined ? 'Unavailable' : <><strong>{displayScore(item.githubScore)}</strong> / 100<br/><small>{item.githubCoverage.availableCategories}/5 categories · {item.githubCoverage.status}</small></>}</td>
-          <td>{item.leetcodeScore === undefined ? 'Unavailable' : <><strong>{displayScore(item.leetcodeScore)}</strong> / 100</>}</td>
+          <td>{item.leetcodeScore === undefined ? <><strong>0.00</strong> / 100<br/><small>Data unavailable — scored as 0</small></> : <><strong>{displayScore(item.leetcodeScore)}</strong> / 100</>}</td>
           <td>{item.combinedScore === undefined ? '—' : <><strong>{displayScore(item.combinedScore)}</strong> / 100</>}</td>
-          <td>{item.status === 'ranked' ? 'Ranked' : `Incomplete · missing ${item.missingProviders.join(' and ')}`}</td>
+          <td>{item.status === 'ranked' ? item.leetcodeScore === undefined ? 'Ranked · LeetCode unavailable' : 'Ranked' : `Unranked · missing ${item.missingProviders.join(' and ')}`}</td>
           <td><time dateTime={item.evaluatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(item.evaluatedAt))}</time></td>
         </tr>)}
       </tbody>
     </table>
-    <p className="insights-footnote">{ranking.rankedTotal} ranked · {ranking.incompleteTotal} incomplete · GitHub and LeetCode weighted equally (50% each). Resume scores are excluded.</p>
+    <p className="insights-footnote">{ranking.rankedTotal} ranked · {ranking.incompleteTotal} unranked · GitHub 75%, LeetCode 25%. Missing LeetCode data contributes zero. Resume scores are excluded.</p>
     {pageCount > 1 && onPageChange && <nav className="provider-ranking-pagination" aria-label="Provider ranking pages">
       <button className="secondary-button" type="button" disabled={ranking.page <= 1} onClick={() => onPageChange(ranking.page - 1)}>Previous</button>
       <span>Page {ranking.page} of {pageCount}</span>
@@ -334,7 +334,7 @@ export function InsightsPage() {
               <div>
                 <h2 id="ranking-title">Candidate rankings</h2>
                 <p>{rankingMode === 'github_leetcode'
-                  ? 'GitHub and LeetCode scores are weighted equally; resume scores are excluded.'
+                  ? 'GitHub 75%, LeetCode 25%. Missing LeetCode data contributes zero. Resume scores are excluded.'
                   : 'Official six-category evaluation results for the selected role.'}</p>
               </div>
               <div className="insights-ranking-controls">
@@ -365,7 +365,7 @@ export function InsightsPage() {
                       : <div className="insights-state">
                           <h3>No candidates yet</h3>
                           <p>{rankingMode === 'github_leetcode'
-                            ? 'No GitHub and LeetCode ranking results are available for this role yet.'
+                            ? 'Candidates with a valid GitHub score can be ranked. Missing LeetCode data contributes zero; candidates without a valid GitHub score remain unranked.'
                             : 'Add candidates to this workspace to see saved evaluation evidence.'}</p>
                           <Link className="primary-button link-button" to="/dashboard/candidates">View candidates</Link>
                         </div>}

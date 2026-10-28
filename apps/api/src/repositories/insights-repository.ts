@@ -315,7 +315,7 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
           : { data: [], error: null };
         if (candidatesResult.error) throw databaseUnavailable();
         const names = new Map(((candidatesResult.data ?? []) as Array<{ id: string; full_name: string }>).map(({ id, full_name }) => [id, full_name]));
-        const ranked: Array<{ candidateId: string; candidateName: string; evaluationId: string; evaluatedAt: string; githubScore: number; githubCoverage: ReturnType<typeof providerScoresFromEvaluation>['githubCoverage']; leetcodeScore: number; combinedScore: number }> = [];
+        const ranked: Array<{ candidateId: string; candidateName: string; evaluationId: string; evaluatedAt: string; githubScore: number; githubCoverage: ReturnType<typeof providerScoresFromEvaluation>['githubCoverage']; leetcodeScore?: number; combinedScore: number }> = [];
         const incomplete: Array<{ candidateId: string; candidateName: string; evaluationId: string; evaluatedAt: string; githubScore?: number; githubCoverage: ReturnType<typeof providerScoresFromEvaluation>['githubCoverage']; leetcodeScore?: number }> = [];
         for (const row of latest.values()) {
           const candidateName = names.get(row.candidate_id);
@@ -327,8 +327,9 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
           const base = { candidateId: row.candidate_id, candidateName, evaluationId: row.id, evaluatedAt: row.created_at,
             githubCoverage: scores.githubCoverage };
           const combinedScore = combineProviderScores(scores.githubScore, scores.leetcodeScore);
-          if (combinedScore !== undefined && scores.githubScore !== undefined && scores.leetcodeScore !== undefined) {
-            ranked.push({ ...base, githubScore: scores.githubScore, leetcodeScore: scores.leetcodeScore, combinedScore });
+          if (combinedScore !== undefined && scores.githubScore !== undefined) {
+            ranked.push({ ...base, githubScore: scores.githubScore,
+              ...(scores.leetcodeScore !== undefined ? { leetcodeScore: scores.leetcodeScore } : {}), combinedScore });
           } else {
             incomplete.push({ ...base, ...(scores.githubScore !== undefined ? { githubScore: scores.githubScore } : {}),
               ...(scores.leetcodeScore !== undefined ? { leetcodeScore: scores.leetcodeScore } : {}) });
@@ -340,7 +341,8 @@ export function createInsightsRepository(getClient = getSupabaseClient): Insight
           || left.evaluationId.localeCompare(right.evaluationId));
         incomplete.sort((left, right) => left.candidateId.localeCompare(right.candidateId)
           || left.evaluationId.localeCompare(right.evaluationId));
-        const rankedItems = ranked.map((item, index) => ({ ...item, rank: index + 1, status: 'ranked' as const, missingProviders: [] as ('github' | 'leetcode')[] }));
+        const rankedItems = ranked.map((item, index) => ({ ...item, rank: index + 1, status: 'ranked' as const,
+          missingProviders: item.leetcodeScore === undefined ? ['leetcode' as const] : [] }));
         const incompleteItems = incomplete.map((item) => ({ ...item, status: 'incomplete' as const,
           missingProviders: [...(item.githubScore === undefined ? ['github' as const] : []), ...(item.leetcodeScore === undefined ? ['leetcode' as const] : [])] }));
         const items = [...rankedItems, ...incompleteItems];

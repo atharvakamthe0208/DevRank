@@ -18,14 +18,14 @@ Thus available GitHub category weights normalize to 100, and coverage reports th
 
 The LeetCode score is the existing v4 DSA & Problem-Solving index (weight 25 in the original rubric), directly from valid provider-synced solved statistics. Its existing normalization is preserved.
 
-When both source scores are available:
+When a valid GitHub score is available, the candidate is ranked. The combined score uses rounding to two decimal places:
 
-`Combined score = (GitHub score × 0.5) + (LeetCode score × 0.5)`
+`Combined score = roundToTwoDecimals((GitHub score × 0.75) + (LeetCode score × 0.25))`
 
-The combined score is kept at full numeric precision for ordering and serialized output; the UI formats it to two decimal places. Missing either provider score yields no combined score or rank. Resume scores and resume-processing status are not read by this endpoint.
+Unavailable or unscored LeetCode evidence contributes zero to this formula. Its score remains absent in response metadata (`missingProviders` includes `leetcode`), so the UI can distinguish missing data from a genuine provider score of zero even though both contribute zero numerically. A valid LeetCode score is preserved as supplied by the active v4 DSA index. Missing or invalid GitHub evidence still yields no combined score or rank. Resume scores and resume-processing status are not read by this endpoint.
 
 ## Ordering and interpretation
 
-Eligible candidates sort by combined score descending, then evaluation timestamp ascending, candidate ID ascending, and evaluation ID ascending. Incomplete candidates remain visible after ranked candidates and have no rank or combined score. GitHub partial coverage is eligible when at least one GitHub category is scored and a provider-synced LeetCode score is available; its coverage is shown explicitly.
+Eligible candidates sort by combined score descending, then evaluation timestamp ascending, candidate ID ascending, and evaluation ID ascending. Candidates without a valid GitHub score remain visible after ranked candidates as incomplete/unranked and have no rank or combined score. GitHub partial coverage is eligible when at least one GitHub category is scored; its coverage is shown explicitly. `incompleteTotal` counts these unranked candidates only, not candidates ranked with unavailable LeetCode data.
 
 These are deterministic indexes over saved public provider snapshots. Snapshot freshness and account identity are not independently verified; the ranking is decision support, not a measure of engineering competence or hiring suitability.
