@@ -57,8 +57,11 @@
 .screening-form-footer p { max-width: 600px; margin: 0; color: #777a70; font-size: 11px; line-height: 1.55; }
 .screening-form-footer .primary-button { white-space: nowrap; }
 .screening-form-footer .primary-button:disabled { opacity: .65; cursor: wait; }
-.screening-session-status { margin: 0; color: #000000; font-size: 12px; font-weight: 700; }
 .screening-progress { margin: 8px 0 12px; color: #000000; font-size: 11px; font-weight: 650; }
+.screening-ranking-help { margin-top: 8px; color: #777a70; font-size: 11px; line-height: 1.55; }
+.screening-ranking-help summary { width: fit-content; cursor: pointer; font-weight: 650; }
+.screening-ranking-help summary:focus-visible { outline: 2px solid #4058e8; outline-offset: 3px; border-radius: 2px; }
+.screening-ranking-help p { max-width: 760px; margin: 7px 0 0; }
 .screening-results-empty { min-height: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border-radius: 9px; background: #fafbf9; color: #7d8077; text-align: center; }
 .screening-results-empty > span { font-size: 22px; }
 .screening-results-empty strong { color: #44463f; font-size: 13px; }
@@ -204,7 +207,6 @@
 .app-shell .screening-form-footer .primary-button:hover:not(:disabled), .app-shell .screening-review-actions .primary-button:hover:not(:disabled), .app-shell .screening-report-actions .primary-button:hover { transform: translateY(-1px); border-color: #334bd1; background: #334bd1; box-shadow: 0 6px 14px #4058e82b; }
 .app-shell .screening-form-footer .primary-button:disabled { box-shadow: none; }
 .app-shell .screening-results-panel { padding-top: 21px; }
-.app-shell .screening-session-status { color: #4058a4; }
 .app-shell .screening-processing { display: grid; gap: 8px; margin: 9px 0 12px; color: #53627c; font-size: 11px; font-weight: 600; }
 .app-shell .screening-processing-track { height: 6px; overflow: hidden; border-radius: 99px; background: #edf0f7; }
 .app-shell .screening-processing-track > span { display: block; height: 100%; border-radius: inherit; background: #5267e7; transition: width 250ms ease; }

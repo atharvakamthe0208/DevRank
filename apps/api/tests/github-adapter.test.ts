@@ -32,6 +32,22 @@ function createTestGitHubAdapter(fetcher: typeof fetch, token?: string) {
 
 describe('official GitHub REST adapter', () => {
   afterEach(() => vi.useRealTimers());
+  it('verifies account existence using only the official public user endpoint', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ login: 'octocat' }));
+    await expect(createTestGitHubAdapter(fetcher).verifyUsername('octocat')).resolves.toBeUndefined();
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe('https://api.github.com/users/octocat');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('distinguishes missing users from rate limits and provider outages during verification', async () => {
+    await expect(createTestGitHubAdapter(vi.fn<typeof fetch>().mockResolvedValue(response({}, 404))).verifyUsername('nobody'))
+      .rejects.toMatchObject({ statusCode: 404, code: 'GITHUB_USER_NOT_FOUND' });
+    await expect(createTestGitHubAdapter(vi.fn<typeof fetch>().mockResolvedValue(response({}, 403, { 'x-ratelimit-remaining': '0' }))).verifyUsername('octocat'))
+      .rejects.toMatchObject({ statusCode: 429, code: 'GITHUB_RATE_LIMITED' });
+    await expect(createTestGitHubAdapter(vi.fn<typeof fetch>().mockRejectedValue(new TypeError('private detail'))).verifyUsername('octocat'))
+      .rejects.toMatchObject({ statusCode: 503, code: 'GITHUB_UNAVAILABLE' });
+  });
+
   it('normalizes usernames and profile URLs and rejects malformed values', () => {
     expect(normalizeGitHubUsername(' octocat ')).toBe('octocat');
     expect(normalizeGitHubUsername('https://github.com/octocat/')).toBe('octocat');

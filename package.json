@@ -19,6 +19,10 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run build --workspace @devrank/contracts && npm run typecheck --workspace @devrank/api && npm run typecheck --workspace @devrank/web",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
+    "test:visual": "playwright test e2e/visual-qa.spec.ts",
     "test:recruiter-approval:db": "node scripts/test-recruiter-approval-db.mjs",
     "test:admin-recruiter-details:db": "node scripts/test-admin-recruiter-details-db.mjs",
     "test:candidate-import:db": "node scripts/test-candidate-import-db.mjs",
@@ -28,6 +32,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.9",
+    "@playwright/test": "1.64.1",
     "concurrently": "^9.1.2",
     "supabase": "^2.121.0"
   }

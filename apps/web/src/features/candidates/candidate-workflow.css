@@ -21,6 +21,19 @@
   padding-left: 14px;
 }
 
+.candidate-select-heading,
+.candidate-select-cell { display: flex; align-items: center; gap: 10px; }
+.candidate-select-heading { min-width: 190px; }
+.candidate-select-heading input,
+.candidate-select-cell > input { width: 16px; height: 16px; flex: none; accent-color: #4058e8; cursor: pointer; }
+.candidate-select-heading input:focus-visible,
+.candidate-select-cell > input:focus-visible { outline: 3px solid #8190f2; outline-offset: 2px; }
+.candidate-select-heading input:disabled,
+.candidate-select-cell > input:disabled { cursor: wait; }
+.candidate-row-selected { background: #f5f6ff; }
+.candidate-management-primary-actions > .candidate-bulk-delete-action { border-color: #e6c6c0; color: #9b4940; }
+.candidate-management-primary-actions > .candidate-bulk-delete-action:hover:not(:disabled) { border-color: #c98b80; background: #fff5f3; }
+
 .candidate-delete-dialog {
   width: min(460px, calc(100vw - 32px));
   border: 1px solid #e8e9e4;
@@ -34,6 +47,7 @@
 .candidate-delete-dialog::backdrop { background: #25272070; }
 .candidate-delete-dialog h2 { margin: 0; font: 600 18px var(--font-family-base); }
 .candidate-delete-dialog p { margin: 11px 0 20px; color: #73766d; font-size: 12px; line-height: 1.65; }
+.candidate-delete-dialog #bulk-delete-selection { margin-bottom: 8px; color: #55574f; font-weight: 600; }
 .candidate-delete-dialog-actions { display: flex; justify-content: flex-end; gap: 9px; }
 .candidate-delete-dialog-actions button { min-height: 38px; padding: 0 14px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; }
 .candidate-delete-cancel { border: 1px solid #e8e9e4; background: #fff; color: #5f6259; }
@@ -61,6 +75,14 @@
 .candidate-api-detail .profile-links strong { font-size: var(--type-supporting); }
 .candidate-api-detail .profile-links small { font-size: var(--type-metadata); }
 .candidate-management-page .candidate-form-field > input { min-height: 42px; }
+.candidate-management-page .candidate-platform-verification-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; color: #77849a; font-size: var(--type-metadata); }
+.candidate-management-page .candidate-platform-verification-status.is-verified { color: #31745b; }
+.candidate-management-page .candidate-platform-verification-status.is-not-found { color: #a5483f; }
+.candidate-management-page .candidate-platform-verification-status.is-invalid { color: #a5483f; }
+.candidate-management-page .candidate-platform-verification-status.is-retryable-error { color: #95671f; }
+.candidate-management-page .candidate-platform-verification-status button { border: 0; padding: 3px 0; color: var(--workspace-blue); background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
+.candidate-management-page .candidate-platform-verification-status button:focus-visible { outline: 2px solid var(--workspace-blue); outline-offset: 2px; }
+.candidate-management-page .candidate-platform-verification-status button:disabled { color: #8792a6; cursor: wait; }
 .candidate-management-page .candidate-form-actions :is(button, a) { min-height: 42px; font-size: var(--type-control); }
 .candidate-management-page .candidate-management-table-wrap { scrollbar-width: thin; scrollbar-color: #aeb8ca #f2f4f8; overscroll-behavior-inline: contain; }
 .candidate-api-detail .detail-profile-card { gap: 18px; }

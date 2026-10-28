@@ -10,7 +10,6 @@ import {
   type LeetCodeSyncResponse,
 } from '@devrank/contracts';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
-import { platformSyncCapabilities } from './candidate-platform-form';
 import { LeetCodeProfileSyncError, saveAndSyncLeetCodeProfile } from './leetcode-profile-sync';
 import { useAuth } from '../auth/AuthProvider';
 import { PlatformLogo } from '../../components/platforms/PlatformLogo';
@@ -116,7 +115,7 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
 
   const latestLeetCode = saved.find((item): item is CandidatePlatformResponse => 'platform' in item && item.platform === 'leetcode' && 'submittedAt' in item);
   return <section className="detail-section platform-data-section" aria-labelledby="platform-data-heading">
-    <div className="section-heading"><div><h2 id="platform-data-heading">Platform data</h2><p>GitHub syncs through its public API. Coding profile links are saved to the candidate record; unsupported stats are never fabricated.</p></div></div>
+    <div className="section-heading"><div><h2 id="platform-data-heading">Platform data</h2></div></div>
     <article className="platform-data-card github-sync-card">
       <div className="platform-data-heading"><span className="platform-mark github-mark"><PlatformLogo platform="github" size="regular"/></span><div><h3>GitHub</h3><p>Public profile and repository summary</p></div><span className={`source-status ${githubState.status === 'synced' ? 'is-available' : githubState.status === 'syncing' || githubState.status === 'loading' ? 'is-pending' : githubState.status === 'error' ? 'is-error' : 'is-idle'}`} role="status">{githubState.status === 'synced' ? 'Synced' : githubState.status === 'syncing' ? 'Syncing…' : githubState.status === 'loading' ? 'Loading saved data…' : githubState.status === 'error' ? 'Needs attention' : 'Ready to sync'}</span></div>
       <SessionDraftNotice status={githubDraftStatus} persisted={githubDraftPersisted} onDiscard={() => clearGithubDraft(githubBaseline)}/>
@@ -132,7 +131,6 @@ export function CandidatePlatformDataPanel({ candidate, onCandidateUpdated }: { 
         <label>LeetCode username or profile URL<input value={leetcodeProfile} onChange={(event) => { setLeetCodeProfile(event.target.value); if (leetcodeState.status === 'error') setLeetCodeState({ status: 'idle' }); }} placeholder="username or https://leetcode.com/u/username" autoComplete="off" aria-invalid={leetcodeState.status === 'error'} aria-describedby={leetcodeState.status === 'error' ? 'leetcode-profile-feedback' : undefined} /></label>
         <button className="primary-button" type="submit" disabled={leetcodeState.status === 'syncing'}>{leetcodeState.status === 'syncing' ? 'Syncing…' : <><PlatformLogo platform="leetcode"/>Sync LeetCode</>}</button>
       </form>
-      <p className="platform-sync-explanation">{platformSyncCapabilities.leetcode.explanation}</p>
       {leetcodeState.status === 'error' && <div id="leetcode-profile-feedback" className="platform-feedback is-error" role="alert"><p>{leetcodeState.message}</p><button type="button" className="text-button" onClick={() => void syncLeetCode()}>Try again</button></div>}
       {leetcodeState.status === 'synced' && <div className="saved-platform-data" role="status"><p>Profile saved and synced {when(leetcodeState.result.syncedAt)} via {leetcodeState.result.provider}. Public profile data does not independently verify identity and is not used as an evaluation score.</p></div>}
       {latestLeetCode && <div className="saved-platform-data"><p>Last saved {when(latestLeetCode.submittedAt)} · {latestLeetCode.provenance.replaceAll('_', ' ')}</p>{latestLeetCode.statistics && <ul>{Object.entries(latestLeetCode.statistics).map(([name, value]) => <li key={name}><span>{name.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</span><strong>{value}</strong></li>)}</ul>}</div>}
