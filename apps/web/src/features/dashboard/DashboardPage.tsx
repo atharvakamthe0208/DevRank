@@ -10,6 +10,8 @@ import { WorkspaceIcon } from '../../components/icons/WorkspaceIcon';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { ActiveDashboardReports } from '../insights/ProposedDashboardReports';
 import { dashboardEvaluationReportPath, dashboardEvaluationStatusLabel, dashboardRoleLabel, dashboardScoreAvailabilityLabel, recentScoredEvaluationAverage } from './dashboard-presentation';
+import { searchDashboardCandidates, type CandidateEvaluationFilter } from './dashboard-candidate-search';
+import { parseCandidateListApiResponse } from '../candidates/candidate-response-validation';
 
 export function DashboardWelcome({ firstName }: { firstName?: string }) {
   return <section className="dashboard-hero">
