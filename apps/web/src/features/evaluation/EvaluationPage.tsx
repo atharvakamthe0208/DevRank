@@ -18,7 +18,7 @@ import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { WorkspaceSkeleton } from '../../components/WorkspaceSkeleton';
 import { useUnsavedChangesBlocker } from '../../app/useUnsavedChangesBlocker';
-import { aiAnalysisErrorMessage, analysisEmptyMessage, analysisReferenceDescriptions } from './ai-analysis-presentation';
+import { aiAnalysisErrorMessage, analysisEmptyMessage } from './ai-analysis-presentation';
 import { AiAnalysisRetryButton } from './AiAnalysisRetryButton';
 import { formatEvidenceDate, readableProvenance } from './evidence-presentation';
 import { acquireEvaluationRun, ALL_CANDIDATES_ID, bulkEvaluationStatusLabel, bulkEvaluationSummary, candidateOptions, runBulkEvaluations, type BulkEvaluationItem, type BulkEvaluationSnapshot } from './bulk-evaluation';
@@ -730,9 +730,8 @@ export function EvaluationRunResult({
       <section className="ai-analysis" aria-labelledby="ai-analysis-title">
         <div className="ai-analysis-heading">
           <div>
-            <span className="eyebrow"><span className="eyebrow-line" /> EVIDENCE-GROUNDED EXPLANATION</span>
             <h3 id="ai-analysis-title">AI Candidate Insights</h3>
-            <p>Key strengths and recommended next steps.</p>
+            <p>Strengths and improvement opportunities from the available evaluation evidence.</p>
             <p className="ai-analysis-authority-note">AI explanations are separate from the saved deterministic scores.</p>
           </div>
           <div className="ai-analysis-actions">
@@ -894,22 +893,6 @@ function CategoryGlyph({ category }: { category: CategoryScore }) {
   }
 }
 
-function AnalysisReferences({ evaluation, references }: { evaluation: AiAnalysisResponse['evaluation']; references: string[] }) {
-  const descriptions = analysisReferenceDescriptions(evaluation, references);
-  return (
-    <details className="ai-analysis-reference-disclosure">
-      <summary>Supporting references ({descriptions.length})</summary>
-      {descriptions.length > 0 ? (
-        <ul className="ai-analysis-references">
-          {descriptions.map((description) => <li key={description}>{description}</li>)}
-        </ul>
-      ) : (
-        <p className="ai-analysis-no-references">No supporting evidence references were returned for this item.</p>
-      )}
-    </details>
-  );
-}
-
 export function AiAnalysisSummary({ response }: { response: AiAnalysisResponse }) {
   const unavailable = analysisEmptyMessage(response);
   if (unavailable || !response.analysis) {
@@ -928,7 +911,6 @@ export function AiAnalysisSummary({ response }: { response: AiAnalysisResponse }
       <article className="ai-analysis-summary">
         <h4>Executive Summary</h4>
         <p>{analysis.summary}</p>
-        <AnalysisReferences evaluation={response.evaluation} references={analysis.summaryEvidenceReferences} />
       </article>
       <div className="ai-analysis-preview-grid">
         <article className="ai-insight-strengths">
