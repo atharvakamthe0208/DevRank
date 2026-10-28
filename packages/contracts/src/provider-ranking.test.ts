@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateGitHubReport, buildFinalEvaluationReport, combineProviderScores, evaluationResponseSchema, finalEvaluationReportSchema, finalRubric, providerScoresFromEvaluation, scoringCategories, schemaVersion, scoringVersion, type FinalEvaluationReport, type PlatformEvaluationEvidence } from './index.js';
+import { aggregateGitHubReport, buildFinalEvaluationReport, combineProviderScores, evaluationResponseSchema, finalEvaluationReportSchema, finalRubric, providerRankingResponseSchema, providerScoresFromEvaluation, scoringCategories, schemaVersion, scoringVersion, type FinalEvaluationReport, type PlatformEvaluationEvidence } from './index.js';
 
 const candidateId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const githubIds = finalRubric.categories.filter(({ source }) => source === 'github').map(({ id }) => id);
@@ -105,12 +105,28 @@ describe('GitHub + LeetCode provider ranking contract', () => {
     expect(withResume).toEqual(withoutResume);
   });
 
-  it('combines validated provider indexes equally and leaves partial provider data unrankable', () => {
-    expect(combineProviderScores(80, 100)).toBe(90);
-    expect(combineProviderScores(0, 80)).toBe(40);
+  it('combines validated provider indexes at 75/25, rounds to two decimals, and requires GitHub evidence', () => {
+    expect(combineProviderScores(80, 60)).toBe(75);
+    expect(combineProviderScores(0, 80)).toBe(20);
+    expect(combineProviderScores(80, 100)).toBe(85);
+    expect(combineProviderScores(80, undefined)).toBe(60);
+    expect(combineProviderScores(80.12, 60.34)).toBe(75.18);
     expect(combineProviderScores(undefined, 80)).toBeUndefined();
-    expect(combineProviderScores(80, undefined)).toBeUndefined();
     expect(combineProviderScores(undefined, undefined)).toBeUndefined();
     expect(combineProviderScores(101, 80)).toBeUndefined();
+  });
+
+  it('allows ranking by valid GitHub score while preserving unavailable LeetCode metadata', () => {
+    const response = providerRankingResponseSchema.parse({
+      mode: 'github_leetcode', roleId: 'software_developer', rubricId: 'github_leetcode_v4', scoringVersion,
+      providerWeights: { github: 75, leetcode: 25 },
+      items: [{ candidateId, candidateName: 'Candidate', evaluationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        evaluatedAt: '2026-10-27T10:00:00.000Z', rank: 1, githubScore: 80,
+        githubCoverage: { availableCategories: 5, totalCategories: 5, status: 'complete' },
+        combinedScore: 60, status: 'ranked', missingProviders: ['leetcode'] }],
+      page: 1, pageSize: 20, rankedTotal: 1, incompleteTotal: 0,
+    });
+    expect(response.items[0]).toMatchObject({ rank: 1, combinedScore: 60, status: 'ranked', missingProviders: ['leetcode'] });
+    expect(response.items[0]).not.toHaveProperty('leetcodeScore');
   });
 });

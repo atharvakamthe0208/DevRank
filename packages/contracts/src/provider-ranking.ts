@@ -7,7 +7,7 @@ import type { FinalReportCategory, FinalEvaluationReport } from './proposed-repo
 import type { PlatformEvaluationEvidence } from './platform-data.js';
 
 export const providerRankingMode = 'github_leetcode' as const;
-export const providerRankingWeights = { github: 50, leetcode: 50 } as const;
+export const providerRankingWeights = { github: 75, leetcode: 25 } as const;
 export const githubRankingCategories = finalRubric.categories.filter(({ source }) => source === 'github');
 
 const githubCategoryIds = new Set<string>(githubRankingCategories.map(({ id }) => id));
@@ -55,15 +55,16 @@ export const providerRankingItemSchema = z.object({
   if (item.missingProviders.join('|') !== expectedMissing.join('|')) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['missingProviders'], message: 'Missing providers must match unavailable provider scores.' });
   }
-  const bothAvailable = item.githubScore !== undefined && item.leetcodeScore !== undefined;
-  if ((item.status === 'ranked') !== bothAvailable
-    || (item.rank !== undefined) !== bothAvailable
-    || (item.combinedScore !== undefined) !== bothAvailable) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['status'], message: 'Only candidates with both provider scores receive a combined score and rank.' });
+  const githubAvailable = item.githubScore !== undefined;
+  const combinedScore = combineProviderScores(item.githubScore, item.leetcodeScore);
+  if ((item.status === 'ranked') !== githubAvailable
+    || (item.rank !== undefined) !== githubAvailable
+    || (item.combinedScore !== undefined) !== githubAvailable) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['status'], message: 'Candidates with a valid GitHub score receive a combined score and rank.' });
   }
-  if (bothAvailable && item.combinedScore !== undefined
-    && Math.abs(item.combinedScore - ((item.githubScore! + item.leetcodeScore!) / 2)) >= 1e-8) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['combinedScore'], message: 'Combined score must use equal 50/50 provider weights.' });
+  if (githubAvailable && item.combinedScore !== undefined && combinedScore !== undefined
+    && Math.abs(item.combinedScore - combinedScore) >= 1e-8) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['combinedScore'], message: 'Combined score must use 75/25 GitHub and LeetCode weights.' });
   }
 });
 
@@ -72,7 +73,7 @@ export const providerRankingResponseSchema = z.object({
   roleId: roleIdSchema,
   rubricId: z.literal(finalRubricId),
   scoringVersion: scoringVersionSchema,
-  providerWeights: z.object({ github: z.literal(50), leetcode: z.literal(50) }).strict(),
+  providerWeights: z.object({ github: z.literal(75), leetcode: z.literal(25) }).strict(),
   items: z.array(providerRankingItemSchema).max(100),
   page: z.number().int().positive(),
   pageSize: z.number().int().positive().max(100),
@@ -95,11 +96,12 @@ export type ProviderRankingResponse = z.infer<typeof providerRankingResponseSche
 export type ProviderScoreSummary = Pick<ProviderRankingItem, 'githubScore' | 'githubCoverage' | 'leetcodeScore'>;
 
 export function combineProviderScores(githubScore: number | undefined, leetcodeScore: number | undefined) {
-  if (githubScore === undefined || leetcodeScore === undefined) return undefined;
+  if (githubScore === undefined) return undefined;
   const github = scoreSchema.safeParse(githubScore);
-  const leetcode = scoreSchema.safeParse(leetcodeScore);
+  const leetcode = leetcodeScore === undefined ? { success: true as const, data: 0 } : scoreSchema.safeParse(leetcodeScore);
   if (!github.success || !leetcode.success) return undefined;
-  return (github.data * providerRankingWeights.github + leetcode.data * providerRankingWeights.leetcode) / 100;
+  const combined = (github.data * providerRankingWeights.github + leetcode.data * providerRankingWeights.leetcode) / 100;
+  return Math.round((combined + Number.EPSILON) * 100) / 100;
 }
 
 function githubAggregate(categories: FinalReportCategory[]) {

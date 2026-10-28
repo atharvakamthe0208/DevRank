@@ -20,6 +20,7 @@ describe('dashboard, comparison, and ranking routes', () => {
       dashboard: vi.fn(async () => ({ candidateCount: 0, evaluatedCandidateIds: [], evaluationCount: 0, statusCounts: { pending: 0, in_progress: 0, completed: 0, insufficient_evidence: 0, failed: 0 }, recentEvaluations: [] })),
       compare: vi.fn(async () => ({ roleId: 'software_developer', scoringVersion: '1.0.0', items: [] })),
       ranking: vi.fn(async () => ({ roleId: 'software_developer', scoringVersion: '1.0.0', items: [], candidateRows: [], page: 1, pageSize: 20, total: 0, excluded: { incomplete: 0, scoringVersionMismatch: 0, missingScore: 0, invalidSnapshot: 0 } })),
+      providerRanking: vi.fn(async () => ({ mode: 'github_leetcode', roleId: 'software_developer', rubricId: 'github_leetcode_v4', scoringVersion: '4.0.1', providerWeights: { github: 75, leetcode: 25 }, items: [], page: 1, pageSize: 20, rankedTotal: 0, incompleteTotal: 0 })),
     };
     const app = express(); app.use(express.json());
     const authMiddleware: express.RequestHandler = (req, _res, next) => {

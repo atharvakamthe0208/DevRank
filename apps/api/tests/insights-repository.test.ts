@@ -285,7 +285,7 @@ describe('insights repository', () => {
       .rejects.toMatchObject({ statusCode: 409, code: 'ROLE_CONFIGURATION_MISMATCH' });
   });
 
-  it('ranks provider indexes from saved validated snapshots, keeps incomplete candidates unranked, and preserves genuine zero scores', async () => {
+  it('ranks provider indexes from saved validated snapshots and distinguishes unavailable from genuine zero LeetCode data', async () => {
     const rows = [
       { ...evaluation({ id: evaluationA, candidate_id: candidateA, created_at: '2026-10-13T00:00:00.000Z' }), ...providerEvaluation(candidateA, 'high') },
       { ...evaluation({ id: evaluationB, candidate_id: candidateB, created_at: '2026-10-13T00:00:00.000Z' }), ...providerEvaluation(candidateB, 'zero') },
@@ -300,14 +300,16 @@ describe('insights repository', () => {
     ]);
     const response = await repo.providerRanking(auth, { roleId: role, page: 1, pageSize: 20 });
     expect(response.items[0]).toMatchObject({ candidateId: candidateA, rank: 1, status: 'ranked' });
-    expect(response.items[0]?.combinedScore).toBe((response.items[0]!.githubScore! + response.items[0]!.leetcodeScore!) / 2);
-    expect(response.items[1]).toMatchObject({ candidateId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', status: 'ranked', githubCoverage: { availableCategories: 1, status: 'partial' } });
-    expect(response.items[1]?.combinedScore).toBe((response.items[1]!.githubScore! + response.items[1]!.leetcodeScore!) / 2);
-    expect(response.items[2]).toMatchObject({ candidateId: candidateB, githubScore: 0, leetcodeScore: 0, combinedScore: 0, rank: 3 });
-    expect(response.items[3]).toMatchObject({ candidateId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', status: 'incomplete', githubCoverage: { status: 'partial' }, missingProviders: ['leetcode'] });
-    expect(response.items[3]).not.toHaveProperty('rank');
-    expect(response.items[3]).not.toHaveProperty('combinedScore');
-    expect(response).toMatchObject({ rankedTotal: 3, incompleteTotal: 1, providerWeights: { github: 50, leetcode: 50 } });
+    expect(response.items[0]?.combinedScore).toBe(Math.round(((response.items[0]!.githubScore! * 0.75) + (response.items[0]!.leetcodeScore! * 0.25)) * 100) / 100);
+    const unavailableLeetCode = response.items.find(({ candidateId }) => candidateId === 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+    expect(unavailableLeetCode).toMatchObject({ status: 'ranked', githubCoverage: { availableCategories: 1, status: 'partial' }, missingProviders: ['leetcode'] });
+    expect(unavailableLeetCode?.combinedScore).toBe(Math.round(unavailableLeetCode!.githubScore! * 0.75 * 100) / 100);
+    expect(unavailableLeetCode).not.toHaveProperty('leetcodeScore');
+    expect(unavailableLeetCode).toHaveProperty('rank');
+    const genuineZeroLeetCode = response.items.find(({ candidateId }) => candidateId === candidateB);
+    expect(genuineZeroLeetCode).toMatchObject({ githubScore: 0, leetcodeScore: 0, combinedScore: 0, status: 'ranked', missingProviders: [] });
+    expect(response.items.map(({ combinedScore }) => combinedScore)).toEqual([...response.items.map(({ combinedScore }) => combinedScore)].sort((a, b) => (b ?? -1) - (a ?? -1)));
+    expect(response).toMatchObject({ rankedTotal: 4, incompleteTotal: 0, providerWeights: { github: 75, leetcode: 25 } });
     expect(finalRubric.categories.filter(({ source }) => source === 'github')).toHaveLength(5);
   });
 
