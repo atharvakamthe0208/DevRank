@@ -35,6 +35,7 @@ describe('evaluation result view', () => {
     expect(setupCss).toContain('.evaluation-categories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
     expect(reportCss).toContain('.evaluation-report-panel { display: block; width: 100%; min-width: 0;');
     expect(reportCss).toContain('.evaluation-report-grid { display: grid; width: 100%; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr));');
+    expect(setupCss).toContain('.app-shell .ai-analysis .primary-button.evaluation-ai-primary-action { border-color: var(--workspace-blue); background: var(--workspace-blue); color: #fff; }');
   });
 
   it('renders all six active v4 categories, scores, progress indicators, and deterministic overall score', () => {
@@ -47,6 +48,8 @@ describe('evaluation result view', () => {
     expect(html).toContain('class="evaluation-report-panel"');
     expect(html).toContain('class="evaluation-report-grid"');
     expect(html).toContain('About scoring');
+    expect(html).not.toContain('Scoring version');
+    expect(html).not.toContain('· Evaluated ');
     expect(html).toContain('Weighted score calculated from all six categories.');
     expect(html).toContain('Optional missing LeetCode profiles use the rubric-defined DSA zero policy.');
     expect(html).not.toContain('Required evidence gaps remain unscored');
@@ -96,6 +99,7 @@ describe('evaluation result view', () => {
     })));
     expect(empty).toContain('AI Candidate Insights');
     expect(empty).toContain('Generate AI analysis');
+    expect(empty).toContain('evaluation-ai-primary-action');
     expect(empty).toContain('Generate insights when you are ready.');
     expect(empty).not.toContain('Executive Summary');
     const failed = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(EvaluationInsightsPanel, {
@@ -110,11 +114,12 @@ describe('evaluation result view', () => {
     const saved = evaluation(false);
     const html = renderToStaticMarkup(createElement(EvaluationResults, { candidate, evaluation: { ...saved, result: saved.result } }));
     expect(html).toContain('Insufficient Evidence');
-    expect(html).toContain('Evidence gaps · 4 categories');
+    expect(html).not.toContain('Evidence gaps');
+    expect(html).not.toContain('evaluation-missing-details');
     expect(html).toContain('Not calculated');
     expect(html.match(/<progress/g)).toHaveLength(2);
     expect(html).toContain('Not scored');
-    expect(html).toContain('No normalized evidence for DSA &amp; Problem-Solving.');
+    expect(html).toContain('No comparable evidence is available; this category is not scored.');
     expect(html).toContain('data-score-state="unscored"');
     const dsaCard = html.match(/<article class="evaluation-category-card"[^>]*data-category="problem_solving_dsa"[\s\S]*?<\/article>/)?.[0];
     expect(dsaCard).toContain('Not scored');

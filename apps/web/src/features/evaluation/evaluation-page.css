@@ -923,6 +923,9 @@
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
   transition: all 0.15s ease;
 }
+.app-shell .ai-analysis .primary-button.evaluation-ai-primary-action { border-color: var(--workspace-blue); background: var(--workspace-blue); color: #fff; }
+.app-shell .ai-analysis .primary-button.evaluation-ai-primary-action:hover:not(:disabled) { border-color: var(--workspace-blue-hover); background: var(--workspace-blue-hover); }
+.app-shell .ai-analysis .primary-button.evaluation-ai-primary-action:focus-visible { outline: 3px solid #8695ff; outline-offset: 3px; }
 .evaluation-ai-primary-action:hover {
   background: #1d4ed8;
   border-color: #1d4ed8;

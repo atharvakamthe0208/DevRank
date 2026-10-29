@@ -56,7 +56,7 @@
 .evaluation-category-card details summary { color: #344bbd; font-size: 12px; font-weight: 700; cursor: pointer; }
 .evaluation-category-card details ul { margin: 10px 0 0; padding-left: 18px; color: #4d5b73; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .evaluation-category-card details li + li { margin-top: 7px; }
-.evaluation-category-card details:focus-visible summary, .evaluation-missing-details summary:focus-visible { outline: 3px solid #8096ff; outline-offset: 3px; border-radius: 3px; }
+.evaluation-category-card details:focus-visible summary { outline: 3px solid #8096ff; outline-offset: 3px; border-radius: 3px; }
 .evaluation-summary-card{position:relative;grid-template-columns:42px minmax(0,1fr) minmax(160px,30%);gap:12px 18px;min-height:112px;padding:20px 24px;border-color:#dfe5f2;border-left:4px solid #4058e8;border-radius:13px;align-items:center}
 .evaluation-summary-icon,.evaluation-report-icon{display:grid;place-items:center;flex:none;width:38px;height:38px;border:1px solid #dfe5f2;border-radius:11px;background:#f1f4ff;color:#4058e8}
 .evaluation-summary-icon svg,.evaluation-report-icon svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}

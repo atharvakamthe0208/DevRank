@@ -5,10 +5,6 @@ import { PlatformLogo } from '../../components/platforms/PlatformLogo';
 import { AnimatedMetric } from '../../components/metrics/KpiCards';
 import './evaluation.css';
 
-function displayDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-}
-
 function conciseCategoryDescription(
   score: EvaluationResponse['categoryScores'][number],
   evidenceById: Map<string, EvaluationResponse['evidence'][number]>,
@@ -84,16 +80,14 @@ function conciseCategoryDescription(
 export function EvaluationResults({ candidate, evaluation }: { candidate: Candidate; evaluation: PersistedEvaluation & { result: EvaluationResponse } }) {
   const result = evaluation.result;
   const evidenceById = new Map(result.evidence.map((item) => [item.evidenceId, item]));
-  const missingCategories = scoringCategories.filter(({ id }) => result.missingEvidence.includes(id));
   return <main className="evaluation-page">
     <header className="evaluation-header"><div><span className="eyebrow"><span className="eyebrow-line"/> CANDIDATE EVALUATION</span><h1>{candidate.name}</h1><p>{candidate.email || 'Email not provided'} · {result.targetRole.replaceAll('_', ' ')}</p></div><span className={`evaluation-status ${result.evaluationStatus === 'completed' ? 'is-complete' : 'is-incomplete'}`}>{result.evaluationStatus === 'completed' ? 'Completed' : 'Insufficient Evidence'}</span></header>
     <section className="evaluation-summary-card" aria-label="Overall score">
       <span className="evaluation-summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
       <div className="evaluation-summary-value">{result.overallScore !== undefined ? <><span className="summary-label">OVERALL SCORE</span><strong className="evaluation-overall-score"><AnimatedMetric value={result.overallScore} decimals={String(result.overallScore).split('.')[1]?.length ?? 0}/><small>/100</small></strong></> : <><span className="summary-label">OVERALL SCORE</span><strong className="evaluation-overall-missing">Not calculated</strong><p>An overall score is withheld until all six categories have scoreable evidence.</p></>}</div>
       {result.overallScore !== undefined && <div className="overall-meter" role="img" aria-label={`Overall score ${result.overallScore} out of 100`}><span style={{ width: `${result.overallScore}%` }}/></div>}
-      <small className="evaluation-platform-summary"><span className="platform-heading"><PlatformLogo platform="github"/><PlatformLogo platform="leetcode"/></span><span>Active GitHub + LeetCode evaluation · Scoring version {result.scoringVersion ?? result.schemaVersion} · Evaluated {displayDate(evaluation.createdAt)}</span></small>
+      <small className="evaluation-platform-summary"><span className="platform-heading"><PlatformLogo platform="github"/><PlatformLogo platform="leetcode"/></span><span>Active GitHub + LeetCode evaluation</span></small>
     </section>
-    {missingCategories.length > 0 && <details className="evaluation-notice evaluation-missing-details"><summary>Evidence gaps · {missingCategories.length} categor{missingCategories.length === 1 ? 'y' : 'ies'}</summary><p>These categories do not have enough normalized evidence. They remain unscored; missing evidence is not zero.</p><ul>{missingCategories.map((category) => <li key={category.id}>{category.displayName}: {result.categoryScores.find((item) => item.categoryId === category.id)?.explanation}</li>)}</ul></details>}
     <section className="evaluation-report-panel" aria-labelledby="evaluation-categories-title"><div className="evaluation-report-header"><div className="evaluation-report-title"><span className="evaluation-report-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3.75h7l4 4v12.5H7a2 2 0 0 1-2-2v-12.5a2 2 0 0 1-2-2Z"/><path d="M14 4v4h4M8.5 12h7M8.5 15.5h7"/></svg></span><div><h2 id="evaluation-categories-title">Evaluation report</h2><p>Optional missing LeetCode profiles use the rubric-defined DSA zero policy.</p></div></div><details className="evaluation-about-scoring"><summary>About scoring</summary><p>{result.calculationExplanation}</p></details></div><div className="evaluation-report-grid">{scoringCategories.map((category) => {
       const score = result.categoryScores.find((item) => item.categoryId === category.id)!;
       const reportCategory = result.finalReport?.categories.find(({ categoryId }) => categoryId === category.id);
