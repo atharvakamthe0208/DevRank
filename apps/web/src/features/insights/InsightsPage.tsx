@@ -89,7 +89,6 @@ export function InsightsRankingSection({ roles, roleId, ranking, loading, error,
     <div className="insights-panel-heading">
       <div>
         <h2 id="ranking-title">Candidate rankings</h2>
-        <p>GitHub 75%, LeetCode 25%. Missing LeetCode data contributes zero. Resume scores are excluded.</p>
       </div>
       <label htmlFor="ranking-role">Role
         <select id="ranking-role" value={roleId} onChange={(event) => onRoleChange(event.target.value as EvaluationRole['id'])}>
