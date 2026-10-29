@@ -333,9 +333,7 @@ export function InsightsPage() {
             <div className="insights-panel-heading">
               <div>
                 <h2 id="ranking-title">Candidate rankings</h2>
-                <p>{rankingMode === 'github_leetcode'
-                  ? 'GitHub 75%, LeetCode 25%. Missing LeetCode data contributes zero. Resume scores are excluded.'
-                  : 'Official six-category evaluation results for the selected role.'}</p>
+                {rankingMode === 'github_leetcode' && <p>GitHub 75%, LeetCode 25%. Missing LeetCode data contributes zero. Resume scores are excluded.</p>}
               </div>
               <div className="insights-ranking-controls">
                 <label htmlFor="ranking-mode">Ranking mode
@@ -375,7 +373,6 @@ export function InsightsPage() {
             <div className="insights-panel-heading">
               <div>
                 <h2 id="comparison-title">Compare candidates</h2>
-                <p>Select 2–5 recent evaluation runs. The API checks that role and scoring configurations are compatible.</p>
               </div>
               <button className="primary-button" type="button" disabled={!canCompare} onClick={() => void compareSelected()}>
                 {comparing ? 'Comparing…' : `Compare selected (${selected.length})`}
@@ -412,7 +409,6 @@ export function InsightsPage() {
             <div className="insights-panel-heading">
               <div>
                 <h2 id="draft-evidence-title">Draft evidence indexes</h2>
-                <p>Saved GitHub and LeetCode evidence summaries; separate from official evaluations and rankings.</p>
               </div>
             </div>
             <DraftEvidenceIndexes evaluations={dashboard.recentEvaluations}/>

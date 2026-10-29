@@ -215,3 +215,13 @@
 .admin-page .admin-detail-activity li { font-size: var(--type-supporting); }
 .admin-page .admin-view-details,
 .admin-page .admin-actions button { min-height: 38px; font-size: var(--type-control); }
+.admin-page .admin-panel-head { margin-bottom: 12px; }
+.admin-page .admin-status-tabs { display: flex; align-items: center; gap: 5px; overflow-x: auto; margin-bottom: 12px; padding: 3px; border: 1px solid var(--admin-border); border-radius: 10px; background: #f7f9fd; scrollbar-width: thin; }
+.admin-page .admin-status-tabs [role="tab"] { flex: 0 0 auto; min-height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #63718a; font: 600 11px var(--font-family-base); white-space: nowrap; cursor: pointer; transition: color .16s ease, background-color .16s ease, border-color .16s ease, box-shadow .16s ease; }
+.admin-page .admin-status-tabs [role="tab"]:hover { background: #eef2ff; color: #344ba9; }
+.admin-page .admin-status-tabs [role="tab"].is-active { border-color: #dce4ff; background: #fff; color: #354fca; box-shadow: 0 1px 3px #172b5514; }
+.admin-page .admin-status-tabs [role="tab"]:focus-visible { outline: 2px solid #657ce5; outline-offset: 2px; }
+.admin-page .admin-panel-controls { justify-content: flex-start; margin-bottom: 13px; }
+@media(max-width:760px){.admin-page .admin-status-tabs{margin-bottom:11px}.admin-page .admin-panel-controls{grid-template-columns:minmax(0,1fr) auto}.admin-page .admin-panel-controls>.secondary-button{grid-column:2}.admin-page .admin-panel-controls .admin-search{grid-column:1/-1}}
+@media(max-width:520px){.admin-page .admin-status-tabs{gap:3px}.admin-page .admin-status-tabs [role="tab"]{min-height:34px;padding-inline:11px;font-size:10px}.admin-page .admin-panel-controls{grid-template-columns:minmax(0,1fr)}.admin-page .admin-panel-controls>.secondary-button{grid-column:1;width:100%}}
+@media(prefers-reduced-motion:reduce){.admin-page .admin-status-tabs [role="tab"]{transition:none}}

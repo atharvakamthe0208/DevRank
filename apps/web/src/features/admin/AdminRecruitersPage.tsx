@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import devrankMark from '../../assets/devrank-mark.svg';
 import type { AdminRecruiterDetails } from '@devrank/contracts';
@@ -22,7 +22,7 @@ type RecruiterDetailsState = 'loading' | 'error' | 'ready';
 export function AdminRecruitersPage() {
   const { session, profile, signOut } = useAuth();
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<RecruiterFilter>('pending');
+  const [filter, setFilter] = useState<RecruiterFilter>('all');
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState<RecruiterApplication[]>([]);
   const [selectedRecruiter, setSelectedRecruiter] = useState<RecruiterApplication | null>(null);
@@ -139,6 +139,23 @@ export function AdminRecruitersPage() {
   const counts = summarizeRecruiterApplications(rows);
   const visibleRows = searchRecruiterApplications(filterRecruiterApplications(rows, filter), search);
   const pendingName = pendingDecision?.row.display_name || pendingDecision?.row.email || 'this recruiter';
+  const recruiterFilters: Array<{ value: RecruiterFilter; label: string }> = [
+    { value: 'all', label: 'All Status' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'rejected', label: 'Rejected' },
+  ];
+  function handleFilterKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End'];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const tabs = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const currentIndex = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+      : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    const nextTab = tabs[nextIndex];
+    if (nextTab) { nextTab.focus(); nextTab.click(); }
+  }
 
   return <div className="admin-page">
     <header className="admin-topbar">
@@ -162,17 +179,19 @@ export function AdminRecruitersPage() {
       <section className="admin-panel" aria-labelledby="recruiter-accounts-heading">
         <div className="admin-panel-head">
           <div><h2 id="recruiter-accounts-heading">Recruiter accounts</h2><p>Approval decisions are recorded in the audit log.</p></div>
-          <div className="admin-panel-controls">
-            <label className="admin-search"><span aria-hidden="true">⌕</span><span className="sr-only">Search recruiter name or email</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search recruiters…"/></label>
-            <label className="admin-filter">Status <select value={filter} onChange={(event) => setFilter(event.target.value as RecruiterFilter)}>
-              <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="all">All statuses</option>
-            </select></label>
-            <button className="secondary-button" type="button" onClick={() => void load()} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
-          </div>
+        </div>
+        <div className="admin-status-tabs" role="tablist" aria-label="Recruiter application status" onKeyDown={handleFilterKeyDown}>
+          {recruiterFilters.map(({ value, label }) => <button key={value} id={`recruiter-status-${value}`} type="button" role="tab" aria-selected={filter === value} tabIndex={filter === value ? 0 : -1} className={filter === value ? 'is-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
+        </div>
+        <div className="admin-panel-controls">
+          <label className="admin-search"><span aria-hidden="true">⌕</span><span className="sr-only">Search recruiter name or email</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search recruiters…"/></label>
+          <button className="secondary-button" type="button" onClick={() => void load()} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
         </div>
         {notice && <p className="form-feedback" role="status">{notice}</p>}
         {logoutError && <p className="form-feedback form-feedback-error" role="alert">{logoutError}</p>}
-        <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} searchQuery={search} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onViewDetails={(row) => { detailsTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; void loadDetails(row); }} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
+        <div role="tabpanel" aria-labelledby={`recruiter-status-${filter}`}>
+          <RecruiterApplicationsList busy={busy} error={error} rows={visibleRows} filter={filter} searchQuery={search} activeId={activeId} activeDecision={activeDecision} onRetry={() => void load()} onViewDetails={(row) => { detailsTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; void loadDetails(row); }} onDecide={(row, decision) => setPendingDecision({ row, decision })}/>
+        </div>
       </section>
 
       {selectedRecruiter && <AdminRecruiterDetailsModal

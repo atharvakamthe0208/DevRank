@@ -26,4 +26,10 @@ describe('recruiter application presentation', () => {
     expect(filterRecruiterApplications(rows, 'rejected')).toEqual([rows[2]]);
     expect(filterRecruiterApplications(rows, 'all')).toEqual(rows);
   });
+
+  it('combines the selected status tab with the existing recruiter search', () => {
+    expect(searchRecruiterApplications(filterRecruiterApplications(rows, 'approved'), 'approved@example.com')).toEqual([]);
+    expect(searchRecruiterApplications(filterRecruiterApplications(rows, 'approved'), 'APPROVED RECRUITER')).toEqual([rows[1]]);
+    expect(searchRecruiterApplications(filterRecruiterApplications(rows, 'all'), 'example.com')).toEqual([rows[0], rows[2]]);
+  });
 });
