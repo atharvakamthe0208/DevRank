@@ -20,6 +20,24 @@ describe('proposed report dashboard section', () => {
     expect(html).toContain('All drafts');
     expect(html).toContain('No draft evidence indexes yet.');
     expect(html).not.toContain('No saved evaluation reports yet.');
+    expect(html).not.toContain('Draft evidence pages');
+  });
+
+  it('renders two unique drafts per page with accessible pagination and filtered result count', () => {
+    const evaluations = Array.from({ length: 7 }, (_, index) => ({ ...evaluation, id: `evaluation-${index + 1}`, candidateName: `Candidate ${index + 1}` }));
+    const duplicate = { ...evaluations[0]!, candidateName: 'Duplicate representation' };
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(DraftEvidenceIndexes, { evaluations: [...evaluations, duplicate] })));
+    expect(html).toContain('7 drafts');
+    expect(html.match(/class="proposed-dashboard-reports"/g)).toHaveLength(1);
+    expect(html.match(/<h3><a href="\/candidates\//g)).toHaveLength(2);
+    expect(html).toContain('aria-label="Draft evidence pages"');
+    expect(html).toContain('aria-label="Page 1" aria-current="page"');
+    expect(html).toContain('aria-label="Page 2"');
+    expect(html).toContain('Previous</button>');
+    expect(html).toContain('Next</button>');
+    expect(html).toContain('disabled=""');
+    for (const name of ['Candidate 1', 'Candidate 2']) expect(html).toContain(name);
+    for (const name of ['Candidate 3', 'Candidate 7', 'Duplicate representation']) expect(html).not.toContain(name);
   });
 
   it('renders recent evaluation proposal values while preserving the active scoring version label', () => {
