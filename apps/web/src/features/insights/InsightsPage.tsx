@@ -50,6 +50,7 @@ export function ProviderRankingTable({ ranking, onPageChange }: { ranking: Provi
           <th scope="col">Combined score</th>
           <th scope="col">Status</th>
           <th scope="col">Evaluated</th>
+          <th scope="col">Report</th>
         </tr>
       </thead>
       <tbody>
@@ -61,6 +62,7 @@ export function ProviderRankingTable({ ranking, onPageChange }: { ranking: Provi
           <td>{item.combinedScore === undefined ? '—' : <><strong>{displayScore(item.combinedScore)}</strong> / 100</>}</td>
           <td>{item.status === 'ranked' ? item.leetcodeScore === undefined ? 'Ranked · LeetCode unavailable' : 'Ranked' : `Unranked · missing ${item.missingProviders.join(' and ')}`}</td>
           <td><time dateTime={item.evaluatedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(item.evaluatedAt))}</time></td>
+          <td><Link className="insights-report-link" aria-label={`View evaluation report for ${item.candidateName}`} to={`/evaluations/${encodeURIComponent(item.evaluationId)}?roleId=${encodeURIComponent(ranking.roleId)}`} state={{ returnTo: '/dashboard/reports' }}>View report</Link></td>
         </tr>)}
       </tbody>
     </table>

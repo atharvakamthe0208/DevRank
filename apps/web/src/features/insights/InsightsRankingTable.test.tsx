@@ -68,9 +68,14 @@ describe('ProviderRankingTable', () => {
     });
     const markup = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ProviderRankingTable, { ranking: providerRanking })));
     expect(markup).toContain('GitHub and LeetCode rankings. Resume scores are not included.');
+    expect(markup).toContain('<th scope="col">Report</th>');
     expect(markup).toContain('80');
     expect(markup).toContain('3/5 categories');
     expect(markup).toContain('75');
+    expect(markup).toContain('aria-label="View evaluation report for LeetCode Unavailable"');
+    expect(markup).toContain('href="/evaluations/ac649201-886d-4c46-b99f-8aa2afc0cd6c?roleId=software_developer"');
+    expect(markup).toContain('href="/evaluations/9c649201-886d-4c46-b99f-8aa2afc0cd6c?roleId=software_developer"');
+    expect(markup).toContain('>View report</a>');
     expect(markup).toContain('0.00</strong> / 100<br/><small>Data unavailable — scored as 0</small>');
     expect(markup).toContain('Ranked · LeetCode unavailable');
     expect(markup).toContain('LeetCode Zero</a></td><td><strong>80.00</strong> / 100<br/><small>5/5 categories · complete</small></td><td><strong>0.00</strong> / 100</td><td><strong>60.00</strong> / 100</td><td>Ranked</td>');
