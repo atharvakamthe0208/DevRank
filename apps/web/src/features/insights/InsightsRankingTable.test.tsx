@@ -1,57 +1,55 @@
-import { createElement } from 'react';
+import { createElement, type ChangeEvent, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { providerRankingResponseSchema, rankingResponseSchema } from '@devrank/contracts';
-import { describe, expect, it } from 'vitest';
-import { InsightsRankingTable, ProviderRankingTable } from './InsightsPage';
+import { providerRankingResponseSchema, type EvaluationRole } from '@devrank/contracts';
+import { describe, expect, it, vi } from 'vitest';
+import { InsightsRankingSection, ProviderRankingTable } from './InsightsPage';
 
-const ranking = rankingResponseSchema.parse({
-  roleId: 'software_developer',
-  scoringVersion: '4.0.0',
-  items: [{ candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', rank: 1, score: 82.5, evaluationId: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', evaluatedAt: '2026-10-26T10:00:00.000Z' }],
-  candidateRows: [{ candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', candidateName: 'A Candidate', rank: 1, finalScore: 82.5, evaluatedAt: '2026-10-26T10:00:00.000Z', githubUsername: 'github-person', githubScore: 80, leetcodeUsername: 'leetcode-person', leetcodeScore: 90, evaluationStatus: 'completed', missingEvidence: [] }],
-  page: 1,
-  pageSize: 20,
-  total: 1,
-  excluded: { incomplete: 0, scoringVersionMismatch: 0, missingScore: 0, invalidSnapshot: 0 },
+const providerRanking = providerRankingResponseSchema.parse({
+  mode: 'github_leetcode', roleId: 'software_developer', rubricId: 'github_leetcode_v4', scoringVersion: '4.0.1',
+  providerWeights: { github: 75, leetcode: 25 },
+  items: [{ candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', candidateName: 'Ranked Candidate', evaluationId: '8c649201-886d-4c46-b99f-8aa2afc0cd6c', evaluatedAt: '2026-10-26T10:00:00.000Z', rank: 1, githubScore: 80, githubCoverage: { availableCategories: 3, totalCategories: 5, status: 'partial' }, leetcodeScore: 60, combinedScore: 75, status: 'ranked', missingProviders: [] }],
+  page: 1, pageSize: 20, rankedTotal: 1, incompleteTotal: 0,
 });
 
-describe('InsightsRankingTable', () => {
-  it('provides a named, keyboard-focusable scroll region and visible mobile cue', () => {
-    const markup = renderToStaticMarkup(createElement(MemoryRouter, null,
-      createElement(InsightsRankingTable, { ranking, roleDisplayName: 'Software Developer' }),
-    ));
+const roles: EvaluationRole[] = [{
+  id: 'software_developer', displayName: 'Software Developer',
+  weights: { project_portfolio: 20, technical_skills: 20, development_activity: 15, collaboration: 10, current_year_contributions: 10, problem_solving_dsa: 25 },
+}];
 
-    expect(markup).toContain('role="region"');
-    expect(markup).toContain('aria-label="Candidate rankings"');
-    expect(markup).toContain('tabindex="0"');
-    expect(markup).toContain('On small screens, scroll horizontally');
-    expect(markup).toContain('Candidate platform scores and saved evaluation results for Software Developer');
-    expect(markup).toContain('A Candidate');
-    expect(markup).toContain('82.5');
-    expect(markup).toContain('github-person');
-    expect(markup).toContain('leetcode-person');
-    expect(markup).toContain('GitHub Score');
-    expect(markup).toContain('LeetCode Score');
-    expect(markup).toContain('href="/candidates/bb235ee8-a6cf-407b-b8b6-66e4e540f14c/report?roleId=software_developer"');
-    expect(markup).not.toContain('<th scope="col">Resume Score</th>');
-    expect(markup).not.toContain('<th scope="col">Status</th>');
+describe('InsightsRankingSection', () => {
+  it('shows GitHub + LeetCode rankings by default, keeps Role selection, and has no ranking mode selector', () => {
+    const markup = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(InsightsRankingSection, {
+      roles, roleId: roles[0]!.id, ranking: providerRanking, loading: false, error: '',
+      onRoleChange: vi.fn(), onRetry: vi.fn(), onPageChange: vi.fn(),
+    })));
+
+    expect(markup).toContain('Candidate rankings');
+    expect(markup).toContain('GitHub 75%, LeetCode 25%. Missing LeetCode data contributes zero.');
+    expect(markup).toContain('id="ranking-role"');
+    expect(markup).toContain('Software Developer');
+    expect(markup).not.toContain('Ranking mode');
+    expect(markup).not.toContain('id="ranking-mode"');
+    expect(markup).toContain('Ranked Candidate');
+    expect(markup).toContain('75.00');
   });
 
-  it('keeps incomplete candidates visible without a final score or rank', () => {
-    const incomplete = rankingResponseSchema.parse({ ...ranking, items: [], total: 0, candidateRows: [{
-      candidateId: 'bb235ee8-a6cf-407b-b8b6-66e4e540f14c', candidateName: 'A Candidate', rank: null, finalScore: null, evaluatedAt: null,
-      githubUsername: null, githubScore: 80, leetcodeUsername: null, leetcodeScore: null,
-      evaluationStatus: 'insufficient_evidence', missingEvidence: ['DSA & Problem-Solving'],
-    }] });
-    const markup = renderToStaticMarkup(createElement(MemoryRouter, null,
-      createElement(InsightsRankingTable, { ranking: incomplete, roleDisplayName: 'Software Developer' }),
-    ));
-    expect(markup).toContain('A Candidate');
-    expect(markup).toContain('Not found');
-    expect(markup).toContain('Incomplete');
-    expect(markup).toContain('DSA &amp; Problem-Solving');
-    expect(markup).not.toContain('Final Score</strong>');
+  it('passes Role selector changes to the existing role filter callback', () => {
+    const onRoleChange = vi.fn();
+    const section = InsightsRankingSection({
+      roles: [...roles, { ...roles[0]!, id: 'ai_ml_engineer', displayName: 'AI / ML Engineer' }],
+      roleId: roles[0]!.id, ranking: providerRanking, loading: false, error: '',
+      onRoleChange, onRetry: vi.fn(), onPageChange: vi.fn(),
+    });
+    const sectionChildren = (section.props as { children: ReactNode }).children as ReactElement<{ children: ReactNode }>[];
+    const headingChildren = sectionChildren[0]!.props.children as ReactElement<{ children: ReactNode }>[];
+    const roleLabel = headingChildren[1]!;
+    const roleChildren = roleLabel.props.children as ReactNode[];
+    const roleControl = roleChildren[1] as ReactElement<{ onChange?: (event: ChangeEvent<HTMLSelectElement>) => void }>;
+    const selectProps = roleControl.props as { onChange: (event: ChangeEvent<HTMLSelectElement>) => void };
+
+    selectProps.onChange({ target: { value: 'ai_ml_engineer' } } as ChangeEvent<HTMLSelectElement>);
+    expect(onRoleChange).toHaveBeenCalledWith('ai_ml_engineer');
   });
 });
 
