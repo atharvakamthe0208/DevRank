@@ -21,4 +21,16 @@ describe('admin recruiter dashboard loading metrics', () => {
     expect(html.match(/class="admin-summary-value-skeleton"/g)).toHaveLength(3);
     expect(html).not.toContain('aria-label="0"');
   });
+
+  it('shows all four recruiter status tabs with All Status selected by default above search and refresh', () => {
+    const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(AdminRecruitersPage)));
+    expect(html).toContain('role="tablist" aria-label="Recruiter application status"');
+    expect(html).toContain('role="tab" aria-selected="true" tabindex="0" class="is-active">All Status</button>');
+    expect(html).toContain('>Pending</button>');
+    expect(html).toContain('>Approved</button>');
+    expect(html).toContain('>Rejected</button>');
+    expect(html).not.toContain('class="admin-filter"');
+    expect(html.indexOf('All Status')).toBeLessThan(html.indexOf('Search recruiter name or email'));
+    expect(html.indexOf('Search recruiter name or email')).toBeLessThan(html.indexOf('Refreshing…</button>'));
+  });
 });
